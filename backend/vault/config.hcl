@@ -11,4 +11,6 @@ api_addr = "http://0.0.0.0:8201"
 cluster_addr = "https://0.0.0.0:8202"
 
 ui = true
-disable_mlock = true 
+disable_mlock = true
+
+log_level = "debug" 
