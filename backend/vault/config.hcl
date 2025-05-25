@@ -3,12 +3,12 @@ storage "file" {
 }
 
 listener "tcp" {
-  address     = "0.0.0.0:8200"
+  address     = "0.0.0.0:8201"
   tls_disable = 1  # В dev режиме отключаем TLS
 }
 
-api_addr = "http://0.0.0.0:8200"
-cluster_addr = "https://0.0.0.0:8201"
+api_addr = "http://0.0.0.0:8201"
+cluster_addr = "https://0.0.0.0:8202"
 
 ui = true
 disable_mlock = true 
