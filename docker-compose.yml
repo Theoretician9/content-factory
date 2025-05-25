@@ -291,6 +291,10 @@ services:
       - IPC_LOCK
     networks:
       - backend
+    volumes:
+      - vault_data:/vault/data
+      - ./backend/vault/config.hcl:/vault/config/config.hcl
+    command: server -config=/vault/config/config.hcl
     healthcheck:
       test: ["CMD", "vault", "status"]
       interval: 10s
@@ -305,6 +309,8 @@ volumes:
   redis_data:
   mysql_data:
   elasticsearch_data:
+  vault_data:
+    driver: local
 
 networks:
   app-network:
