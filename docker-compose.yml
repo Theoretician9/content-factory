@@ -28,6 +28,8 @@ services:
       - integration-service
       - redis
       - mysql
+    networks:
+      - backend
 
   # User Service
   user-service:
