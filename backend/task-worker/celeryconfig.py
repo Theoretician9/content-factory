@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Broker settings
-broker_url = os.getenv('RABBITMQ_URL', 'amqp://guest:guest@rabbitmq:5672//')
-result_backend = os.getenv('REDIS_URL', 'redis://redis:6379/0')
+broker_url = 'amqp://user:password@rabbitmq:5672//'
+result_backend = 'redis://redis:6379/0'
 
 # Task settings
 task_serializer = 'json'
@@ -19,8 +19,6 @@ enable_utc = True
 task_track_started = True
 task_time_limit = 3600  # 1 hour
 task_soft_time_limit = 3000  # 50 minutes
-worker_prefetch_multiplier = 1
-worker_max_tasks_per_child = 1000
 
 # Retry settings
 task_acks_late = True
@@ -28,31 +26,29 @@ task_reject_on_worker_lost = True
 task_default_retry_delay = 300  # 5 minutes
 task_max_retries = 3
 
-# Beat schedule for periodic tasks
+# Task priority
+task_queue_max_priority = {
+    'high_priority': 10,
+    'default': 5,
+    'low_priority': 1
+}
+
+# Worker settings
+worker_prefetch_multiplier = 1
+worker_max_tasks_per_child = 1000
+worker_max_memory_per_child = 200000  # 200MB
+
+# Beat schedule
 beat_schedule = {
-    'sync-integrations': {
-        'task': 'sync_integration',
-        'schedule': crontab(minute='*/30'),  # Every 30 minutes
-        'args': (),
-        'kwargs': {'force': True}
-    },
-    'cleanup-old-logs': {
-        'task': 'cleanup_data',
-        'schedule': crontab(hour=0, minute=0),  # Daily at midnight
-        'args': ('old_logs',),
-        'kwargs': {'days': 30}
-    },
-    'cleanup-expired-tokens': {
-        'task': 'cleanup_data',
-        'schedule': crontab(hour='*/4'),  # Every 4 hours
-        'args': ('expired_tokens',),
-        'kwargs': {}
-    },
     'check-integration-health': {
         'task': 'check_integration_health',
-        'schedule': crontab(minute='*/15'),  # Every 15 minutes
-        'args': (),
-        'kwargs': {}
+        'schedule': 300.0,  # every 5 minutes
+        'options': {'queue': 'low_priority'}
+    },
+    'cleanup-old-data': {
+        'task': 'cleanup_data',
+        'schedule': 3600.0,  # every hour
+        'options': {'queue': 'low_priority'}
     }
 }
 
