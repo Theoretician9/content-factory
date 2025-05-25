@@ -2,7 +2,7 @@ from celery import Celery
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, JSON, Enum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime
+from datetime import datetime, timedelta
 import enum
 import os
 from dotenv import load_dotenv
@@ -19,6 +19,7 @@ from slack_sdk import WebClient
 import discord
 from prometheus_client import Counter, Histogram
 import time
+import celeryconfig
 
 # Load environment variables
 load_dotenv()
@@ -28,11 +29,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Celery configuration
-celery_app = Celery(
-    'worker',
-    broker=os.getenv('REDIS_URL', 'redis://redis:6379/0'),
-    backend=os.getenv('REDIS_URL', 'redis://redis:6379/0')
-)
+celery_app = Celery('worker')
+celery_app.config_from_object(celeryconfig)
 
 # Database configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi")
@@ -52,6 +50,7 @@ class TaskType(str, enum.Enum):
     SEND_NOTIFICATION = "send_notification"
     PROCESS_WEBHOOK = "process_webhook"
     CLEANUP_DATA = "cleanup_data"
+    CHECK_HEALTH = "check_health"
 
 # Database Models
 class Task(Base):
@@ -70,6 +69,7 @@ class Task(Base):
 # Prometheus metrics
 task_counter = Counter('task_total', 'Total number of tasks processed', ['task_type', 'status'])
 task_duration = Histogram('task_duration_seconds', 'Task duration in seconds', ['task_type'])
+health_check_counter = Counter('health_check_total', 'Total number of health checks', ['integration_type', 'status'])
 
 # Helper functions
 def get_telegram_client(credentials: dict) -> Bot:
@@ -109,8 +109,8 @@ def get_discord_client(credentials: dict) -> discord.Client:
     return client
 
 # Celery tasks
-@celery_app.task(name="sync_integration")
-def sync_integration_task(integration_id: int, integration_type: str, credentials: dict):
+@celery_app.task(name="sync_integration", bind=True, max_retries=3)
+def sync_integration_task(self, integration_id: int, integration_type: str, credentials: dict, force: bool = False):
     start_time = time.time()
     task_counter.labels(task_type='sync_integration', status='started').inc()
     
@@ -155,10 +155,10 @@ def sync_integration_task(integration_id: int, integration_type: str, credential
     except Exception as e:
         logger.error(f"Integration sync failed: {str(e)}")
         task_counter.labels(task_type='sync_integration', status='failed').inc()
-        raise
+        self.retry(exc=e, countdown=300)  # Retry after 5 minutes
 
-@celery_app.task(name="send_notification")
-def send_notification_task(notification_type: str, recipient: str, content: dict):
+@celery_app.task(name="send_notification", bind=True, max_retries=3)
+def send_notification_task(self, notification_type: str, recipient: str, content: dict):
     start_time = time.time()
     task_counter.labels(task_type='send_notification', status='started').inc()
     
@@ -182,10 +182,10 @@ def send_notification_task(notification_type: str, recipient: str, content: dict
     except Exception as e:
         logger.error(f"Notification sending failed: {str(e)}")
         task_counter.labels(task_type='send_notification', status='failed').inc()
-        raise
+        self.retry(exc=e, countdown=300)
 
-@celery_app.task(name="process_webhook")
-def process_webhook_task(webhook_type: str, payload: dict):
+@celery_app.task(name="process_webhook", bind=True, max_retries=3)
+def process_webhook_task(self, webhook_type: str, payload: dict):
     start_time = time.time()
     task_counter.labels(task_type='process_webhook', status='started').inc()
     
@@ -206,10 +206,10 @@ def process_webhook_task(webhook_type: str, payload: dict):
     except Exception as e:
         logger.error(f"Webhook processing failed: {str(e)}")
         task_counter.labels(task_type='process_webhook', status='failed').inc()
-        raise
+        self.retry(exc=e, countdown=300)
 
-@celery_app.task(name="cleanup_data")
-def cleanup_data_task(data_type: str, criteria: dict):
+@celery_app.task(name="cleanup_data", bind=True, max_retries=3)
+def cleanup_data_task(self, data_type: str, criteria: dict):
     start_time = time.time()
     task_counter.labels(task_type='cleanup_data', status='started').inc()
     
@@ -230,7 +230,57 @@ def cleanup_data_task(data_type: str, criteria: dict):
     except Exception as e:
         logger.error(f"Data cleanup failed: {str(e)}")
         task_counter.labels(task_type='cleanup_data', status='failed').inc()
-        raise
+        self.retry(exc=e, countdown=300)
+
+@celery_app.task(name="check_integration_health", bind=True, max_retries=3)
+def check_integration_health_task(self):
+    start_time = time.time()
+    task_counter.labels(task_type='check_health', status='started').inc()
+    
+    try:
+        db = SessionLocal()
+        integrations = db.query(Integration).filter(
+            Integration.status == IntegrationStatus.ACTIVE
+        ).all()
+        
+        for integration in integrations:
+            try:
+                # Check integration health based on type
+                if integration.integration_type == "telegram":
+                    client = get_telegram_client(integration.credentials)
+                    client.get_me()
+                elif integration.integration_type == "twitter":
+                    client = get_twitter_client(integration.credentials)
+                    client.get_me()
+                # Add checks for other integration types
+                
+                health_check_counter.labels(
+                    integration_type=integration.integration_type,
+                    status='success'
+                ).inc()
+                
+            except Exception as e:
+                logger.error(f"Health check failed for integration {integration.id}: {str(e)}")
+                health_check_counter.labels(
+                    integration_type=integration.integration_type,
+                    status='failed'
+                ).inc()
+                
+                # Update integration status
+                integration.status = IntegrationStatus.ERROR
+                db.commit()
+        
+        task_counter.labels(task_type='check_health', status='success').inc()
+        task_duration.labels(task_type='check_health').observe(time.time() - start_time)
+        
+        return {"status": "success", "message": "Health check completed"}
+        
+    except Exception as e:
+        logger.error(f"Health check task failed: {str(e)}")
+        task_counter.labels(task_type='check_health', status='failed').inc()
+        self.retry(exc=e, countdown=300)
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     celery_app.start() 
