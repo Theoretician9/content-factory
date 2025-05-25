@@ -1,0 +1,122 @@
+version: '3.8'
+
+services:
+  api-gateway:
+    build: ./api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+    depends_on:
+      - user-service
+      - billing-service
+      - admin-service
+      - scenario-service
+      - content-service
+      - invite-service
+      - parsing-service
+      - integration-service
+
+  user-service:
+    build: ./user-service
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
+    depends_on:
+      - db
+      - redis
+
+  billing-service:
+    build: ./billing-service
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
+    depends_on:
+      - db
+      - redis
+
+  admin-service:
+    build: ./admin-service
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
+    depends_on:
+      - db
+      - redis
+
+  scenario-service:
+    build: ./scenario-service
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
+    depends_on:
+      - db
+      - redis
+
+  content-service:
+    build: ./content-service
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
+    depends_on:
+      - db
+      - redis
+
+  invite-service:
+    build: ./invite-service
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
+    depends_on:
+      - db
+      - redis
+
+  parsing-service:
+    build: ./parsing-service
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
+    depends_on:
+      - db
+      - redis
+
+  integration-service:
+    build: ./integration-service
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
+    depends_on:
+      - db
+      - redis
+
+  task-worker:
+    build: ./task-worker
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=Lfnm97HnPug8
+      - MYSQL_DATABASE=telegraminvi
+      - MYSQL_USER=telegraminvi
+      - MYSQL_PASSWORD=szkTgBhWh6XU
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+  redis:
+    image: redis:7.0
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  mysql_data:
+  redis_data: 
