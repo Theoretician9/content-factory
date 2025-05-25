@@ -28,8 +28,13 @@ xpack.security.session.lifespan: "24h"
 telemetry.enabled: false
 
 # Logging configuration
-logging.root.level: info
-logging.root.appender: console
-logging.appenders.console.type: console
-logging.appenders.console.layout.type: pattern
-logging.appenders.console.layout.pattern: "%[%d{ISO8601}][%-5p][%-25c{1.}] %m%n" 
+logging:
+  root:
+    level: info
+    appenders: [console]
+  appenders:
+    console:
+      type: console
+      layout:
+        type: pattern
+        pattern: "%[%d{ISO8601}][%-5p][%-25c{1.}] %m%n" 
