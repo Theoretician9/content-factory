@@ -4,7 +4,7 @@ elasticsearch.hosts: ["http://elasticsearch:9200"]
 
 # Security settings
 elasticsearch.username: "elastic"
-elasticsearch.password: "changeme"
+elasticsearch.password: "Z5mmVIWJA1lR2hOEx97w"
 
 # Elasticsearch connection settings
 elasticsearch.ssl.verificationMode: none
