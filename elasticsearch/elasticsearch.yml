@@ -10,6 +10,13 @@ xpack.security.authc:
     roles: superuser
     authz_exception: true
 
+# Memory settings
+bootstrap.memory_lock: true
+bootstrap.system_call_filter: false
+
+# JVM settings
+ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+
 # Set initial password for elastic user
 xpack.security.authc.basic.enabled: true
 xpack.security.authc.basic.internal_users.elastic.password: changeme 
