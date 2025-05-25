@@ -11,4 +11,7 @@ api_addr = "http://0.0.0.0:8200"
 cluster_addr = "https://0.0.0.0:8201"
 
 ui = true
-disable_mlock = true 
+disable_mlock = true
+
+# Включаем dev режим
+dev_mode = true 
