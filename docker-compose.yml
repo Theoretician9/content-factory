@@ -237,16 +237,19 @@ services:
 
   kibana:
     image: docker.elastic.co/kibana/kibana:7.17.0
-    volumes:
-      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml
+    container_name: kibana
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=${ELASTICSEARCH_USERNAME}
+      - ELASTICSEARCH_PASSWORD=${ELASTICSEARCH_PASSWORD}
     ports:
       - "5601:5601"
-    depends_on:
-      - elasticsearch
+    volumes:
+      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml
     networks:
       - app-network
+    depends_on:
+      - elasticsearch
 
   logstash:
     image: docker.elastic.co/logstash/logstash:7.17.0

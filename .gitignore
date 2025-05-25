@@ -1,0 +1,8 @@
+# Environment variables
+.env
+
+# Elasticsearch data
+elasticsearch_data/
+
+# Logs
+*.log 
