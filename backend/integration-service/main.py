@@ -30,6 +30,11 @@ from twilio.rest import Client
 from slack_sdk import WebClient
 import discord
 from telegram import Bot
+from bs4 import BeautifulSoup
+import pandas as pd
+import numpy as np
+from playwright.async_api import async_playwright
+from config.database import db_settings, encryption_settings, encrypt_data, decrypt_data
 
 load_dotenv()
 
@@ -55,6 +60,8 @@ class IntegrationType(str, enum.Enum):
     TELEGRAM = "telegram"
     TWITTER = "twitter"
     FACEBOOK = "facebook"
+    INSTAGRAM = "instagram"
+    LINKEDIN = "linkedin"
     GOOGLE = "google"
     STRIPE = "stripe"
     SENDGRID = "sendgrid"
@@ -66,6 +73,7 @@ class IntegrationStatus(str, enum.Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
     ERROR = "error"
+    PENDING = "pending"
 
 # Database Models
 class Integration(Base):
@@ -76,7 +84,7 @@ class Integration(Base):
     name = Column(String(255))
     description = Column(Text, nullable=True)
     integration_type = Column(Enum(IntegrationType))
-    credentials = Column(JSON)  # Зашифрованные учетные данные
+    _credentials = Column("credentials", JSON)  # Зашифрованные учетные данные
     config = Column(JSON)  # Дополнительная конфигурация
     status = Column(Enum(IntegrationStatus), default=IntegrationStatus.INACTIVE)
     last_sync = Column(DateTime, nullable=True)
@@ -84,6 +92,25 @@ class Integration(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     events = relationship("IntegrationEvent", back_populates="integration")
+
+    @property
+    def credentials(self) -> Dict[str, Any]:
+        """Получает расшифрованные учетные данные"""
+        if not self._credentials:
+            return {}
+        try:
+            return json.loads(decrypt_data(self._credentials))
+        except Exception as e:
+            logger.error(f"Error decrypting credentials: {e}")
+            return {}
+
+    @credentials.setter
+    def credentials(self, value: Dict[str, Any]):
+        """Шифрует и сохраняет учетные данные"""
+        if value:
+            self._credentials = encrypt_data(json.dumps(value))
+        else:
+            self._credentials = None
 
 class IntegrationEvent(Base):
     __tablename__ = "integration_events"
