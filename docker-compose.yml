@@ -291,6 +291,7 @@ services:
       - "8201:8201"
     environment:
       - VAULT_LOG_LEVEL=debug
+      - VAULT_DEV_ROOT_TOKEN_ID=root
       - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8201
     cap_add:
       - IPC_LOCK
@@ -298,7 +299,6 @@ services:
       - backend
     volumes:
       - vault_data:/vault/data
-      - ./backend/vault/config.hcl:/vault/config/config.hcl
     command: server -dev
     healthcheck:
       test: ["CMD", "vault", "status"]
