@@ -6,6 +6,15 @@ elasticsearch.hosts: ["http://elasticsearch:9200"]
 elasticsearch.username: "elastic"
 elasticsearch.password: "changeme"
 
+# Elasticsearch connection settings
+elasticsearch.ssl.verificationMode: none
+elasticsearch.requestTimeout: 90000
+elasticsearch.pingTimeout: 90000
+
+# Server settings
+server.shutdownTimeout: "5s"
+server.maxPayloadBytes: 1048576
+
 # Encryption keys
 xpack.security.encryptionKey: "something_at_least_32_characters_long"
 xpack.reporting.encryptionKey: "something_at_least_32_characters_long"
@@ -16,4 +25,11 @@ xpack.security.session.idleTimeout: "8h"
 xpack.security.session.lifespan: "30d"
 
 # Disable telemetry
-telemetry.enabled: false 
+telemetry.enabled: false
+
+# Logging settings
+logging.root.level: info
+logging.root.appender: console
+logging.appenders.console.type: console
+logging.appenders.console.layout.type: pattern
+logging.appenders.console.layout.pattern: "%[%d{ISO8601}][%-5p][%-25c{1.}] %m%n" 
