@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Numeric, Enum
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Numeric, Enum, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 from pydantic import BaseModel, EmailStr
@@ -9,14 +9,28 @@ from typing import Optional, List
 import enum
 import os
 from dotenv import load_dotenv
+from prometheus_client import Counter, Histogram, generate_latest
+from prometheus_fastapi_instrumentator import Instrumentator
+import time
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
 # Database configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi")
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=3600)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+# Rate limiter setup
+limiter = Limiter(key_func=get_remote_address)
 
 # Enums
 class SubscriptionStatus(str, enum.Enum):
@@ -138,12 +152,42 @@ class Payment(PaymentBase):
         from_attributes = True
 
 # Create database tables
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    logger.error(f"Failed to create database tables: {e}")
+    raise
 
 app = FastAPI(
     title="Billing Service",
     description="Subscription and payment management service for Content Factory",
     version="1.0.0"
+)
+
+# Add rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Prometheus metrics
+Instrumentator().instrument(app).expose(app)
+
+# Metrics
+REQUEST_COUNT = Counter(
+    'http_requests_total',
+    'Total HTTP requests',
+    ['method', 'endpoint', 'status']
+)
+
+REQUEST_LATENCY = Histogram(
+    'http_request_duration_seconds',
+    'HTTP request latency',
+    ['method', 'endpoint']
+)
+
+DB_OPERATION_LATENCY = Histogram(
+    'db_operation_duration_seconds',
+    'Database operation latency',
+    ['operation']
 )
 
 # Dependency
@@ -154,49 +198,115 @@ def get_db():
     finally:
         db.close()
 
+@app.middleware("http")
+async def add_metrics(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    duration = time.time() - start_time
+    
+    REQUEST_COUNT.labels(
+        method=request.method,
+        endpoint=request.url.path,
+        status=response.status_code
+    ).inc()
+    
+    REQUEST_LATENCY.labels(
+        method=request.method,
+        endpoint=request.url.path
+    ).observe(duration)
+    
+    return response
+
 # Endpoints
 @app.post("/plans/", response_model=Plan)
+@limiter.limit("3/minute")
 def create_plan(plan: PlanCreate, db: Session = Depends(get_db)):
-    db_plan = Plan(**plan.dict())
-    db.add(db_plan)
-    db.commit()
-    db.refresh(db_plan)
-    return db_plan
+    start_time = time.time()
+    try:
+        db_plan = Plan(**plan.dict())
+        db.add(db_plan)
+        db.commit()
+        db.refresh(db_plan)
+        return db_plan
+    finally:
+        duration = time.time() - start_time
+        DB_OPERATION_LATENCY.labels(operation="create_plan").observe(duration)
 
 @app.get("/plans/", response_model=List[Plan])
+@limiter.limit("10/minute")
 def get_plans(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    plans = db.query(Plan).filter(Plan.is_active == True).offset(skip).limit(limit).all()
-    return plans
+    start_time = time.time()
+    try:
+        plans = db.query(Plan).filter(Plan.is_active == True).offset(skip).limit(limit).all()
+        return plans
+    finally:
+        duration = time.time() - start_time
+        DB_OPERATION_LATENCY.labels(operation="get_plans").observe(duration)
 
 @app.post("/subscriptions/", response_model=Subscription)
+@limiter.limit("3/minute")
 def create_subscription(subscription: SubscriptionCreate, db: Session = Depends(get_db)):
-    db_subscription = Subscription(**subscription.dict())
-    db.add(db_subscription)
-    db.commit()
-    db.refresh(db_subscription)
-    return db_subscription
-
-@app.get("/subscriptions/{user_id}", response_model=List[Subscription])
-def get_user_subscriptions(user_id: int, db: Session = Depends(get_db)):
-    subscriptions = db.query(Subscription).filter(Subscription.user_id == user_id).all()
-    return subscriptions
+    start_time = time.time()
+    try:
+        db_subscription = Subscription(**subscription.dict())
+        db.add(db_subscription)
+        db.commit()
+        db.refresh(db_subscription)
+        return db_subscription
+    finally:
+        duration = time.time() - start_time
+        DB_OPERATION_LATENCY.labels(operation="create_subscription").observe(duration)
 
 @app.post("/payments/", response_model=Payment)
+@limiter.limit("3/minute")
 def create_payment(payment: PaymentCreate, db: Session = Depends(get_db)):
-    db_payment = Payment(**payment.dict())
-    db.add(db_payment)
-    db.commit()
-    db.refresh(db_payment)
-    return db_payment
+    start_time = time.time()
+    try:
+        db_payment = Payment(**payment.dict())
+        db.add(db_payment)
+        db.commit()
+        db.refresh(db_payment)
+        return db_payment
+    finally:
+        duration = time.time() - start_time
+        DB_OPERATION_LATENCY.labels(operation="create_payment").observe(duration)
 
 @app.get("/payments/{subscription_id}", response_model=List[Payment])
+@limiter.limit("10/minute")
 def get_subscription_payments(subscription_id: int, db: Session = Depends(get_db)):
-    payments = db.query(Payment).filter(Payment.subscription_id == subscription_id).all()
-    return payments
+    start_time = time.time()
+    try:
+        payments = db.query(Payment).filter(Payment.subscription_id == subscription_id).all()
+        return payments
+    finally:
+        duration = time.time() - start_time
+        DB_OPERATION_LATENCY.labels(operation="get_subscription_payments").observe(duration)
 
 @app.get("/health")
+@limiter.limit("5/minute")
 async def health_check():
-    return {"status": "healthy", "service": "billing-service"}
+    try:
+        # Check database connection
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {
+            "status": "healthy",
+            "service": "billing-service",
+            "database": "connected"
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service unhealthy"
+        )
+
+@app.get("/metrics")
+async def metrics():
+    """
+    Prometheus metrics endpoint
+    """
+    return generate_latest()
 
 if __name__ == "__main__":
     import uvicorn
