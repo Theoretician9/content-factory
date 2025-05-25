@@ -279,6 +279,27 @@ services:
     networks:
       - app-network
 
+  vault:
+    image: vault:1.15.2
+    container_name: vault
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: root
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    labels:
+      - "com.docker.compose.service=vault"
+      - "com.docker.compose.project=content-factory"
+
 volumes:
   rabbitmq_data:
   redis_data:
@@ -287,4 +308,6 @@ volumes:
 
 networks:
   app-network:
+    driver: bridge
+  backend:
     driver: bridge 
