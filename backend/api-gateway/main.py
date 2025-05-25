@@ -88,7 +88,7 @@ async def add_metrics(request: Request, call_next):
 
 @app.get("/health")
 @limiter.limit("5/minute")
-async def health_check() -> Dict[str, str]:
+async def health_check(request: Request) -> Dict[str, str]:
     """
     Health check endpoint for the API Gateway
     """
