@@ -1,0 +1,30 @@
+{
+    "server": {
+        "ip": "92.113.146.148",
+        "url": "http://92.113.146.148/",
+        "ports": {
+            "api_gateway": 8000,
+            "grafana": 3000,
+            "prometheus": 9090,
+            "kibana": 5601,
+            "elasticsearch": 9200,
+            "logstash": 5000,
+            "alertmanager": 9093
+        }
+    },
+    "mysql": {
+        "host": "mysql",
+        "port": 3306,
+        "root_user": "admin",
+        "root_password": "Lfnm97HnPug8",
+        "database": "telegraminvi",
+        "user": "telegraminvi",
+        "password": "szkTgBhWh6XU"
+    },
+    "services_status": {
+        "api_gateway": "healthy",
+        "grafana": "running",
+        "prometheus": "running",
+        "kibana": "not_responding"
+    }
+} 
