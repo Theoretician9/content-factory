@@ -31,9 +31,9 @@ telemetry.enabled: false
 logging:
   root:
     level: info
-    appenders: [console]
+    appenders: [default]
   appenders:
-    console:
+    default:
       type: console
       layout:
         type: pattern
