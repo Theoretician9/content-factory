@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Broker settings
-broker_url = 'amqp://user:password@rabbitmq:5672//'
-result_backend = 'redis://redis:6379/0'
+broker_url = f'amqp://{os.getenv("RABBITMQ_USER", "user")}:{os.getenv("RABBITMQ_PASSWORD", "password")}@{os.getenv("RABBITMQ_HOST", "rabbitmq")}:5672//'
+result_backend = f'redis://{os.getenv("REDIS_HOST", "redis")}:{os.getenv("REDIS_PORT", "6379")}/0'
 
 # Task settings
 task_serializer = 'json'
@@ -25,6 +25,7 @@ task_acks_late = True
 task_reject_on_worker_lost = True
 task_default_retry_delay = 300  # 5 minutes
 task_max_retries = 3
+broker_connection_retry_on_startup = True
 
 # Task priority
 task_queue_max_priority = {
