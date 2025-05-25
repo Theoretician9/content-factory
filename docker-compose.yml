@@ -289,9 +289,6 @@ services:
     container_name: vault
     ports:
       - "8200:8200"
-    environment:
-      VAULT_DEV_ROOT_TOKEN_ID: root
-      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
     cap_add:
       - IPC_LOCK
     networks:
@@ -299,7 +296,7 @@ services:
     volumes:
       - vault_data:/vault/data
       - ./backend/vault/config.hcl:/vault/config/config.hcl
-    command: server -config=/vault/config/config.hcl
+    command: server -dev -config=/vault/config/config.hcl
     healthcheck:
       test: ["CMD", "vault", "status"]
       interval: 10s
