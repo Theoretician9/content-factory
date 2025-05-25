@@ -224,7 +224,7 @@ services:
         hard: -1
     volumes:
       - ./elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
-      - elasticsearch-data:/usr/share/elasticsearch/data
+      - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
       - "9200:9200"
     networks:
