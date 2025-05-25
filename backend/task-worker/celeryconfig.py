@@ -58,14 +58,17 @@ task_queues = {
     'default': {
         'exchange': 'default',
         'routing_key': 'default',
+        'queue_arguments': {'x-max-priority': 5}
     },
     'high_priority': {
         'exchange': 'high_priority',
         'routing_key': 'high_priority',
+        'queue_arguments': {'x-max-priority': 10}
     },
     'low_priority': {
         'exchange': 'low_priority',
         'routing_key': 'low_priority',
+        'queue_arguments': {'x-max-priority': 1}
     }
 }
 
