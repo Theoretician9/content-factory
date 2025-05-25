@@ -14,23 +14,21 @@ from slowapi.errors import RateLimitExceeded
 
 load_dotenv()
 
-# Rate limiter setup
-limiter = Limiter(key_func=get_remote_address)
-
 app = FastAPI(
     title="Content Factory API Gateway",
     description="API Gateway for Content Factory SaaS Platform",
     version="1.0.0"
 )
 
-# Add rate limiter
+# Rate limiter setup
+limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(","),
+    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://92.113.146.148:3000").split(","),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -57,14 +55,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # Service URLs (in production, these should be environment variables)
 SERVICE_URLS = {
-    "user": os.getenv("USER_SERVICE_URL", "http://user-service:8000"),
-    "billing": os.getenv("BILLING_SERVICE_URL", "http://billing-service:8000"),
-    "admin": os.getenv("ADMIN_SERVICE_URL", "http://admin-service:8000"),
-    "scenario": os.getenv("SCENARIO_SERVICE_URL", "http://scenario-service:8000"),
-    "content": os.getenv("CONTENT_SERVICE_URL", "http://content-service:8000"),
-    "invite": os.getenv("INVITE_SERVICE_URL", "http://invite-service:8000"),
-    "parsing": os.getenv("PARSING_SERVICE_URL", "http://parsing-service:8000"),
-    "integration": os.getenv("INTEGRATION_SERVICE_URL", "http://integration-service:8000"),
+    "user": os.getenv("USER_SERVICE_URL", "http://92.113.146.148:8001"),
+    "billing": os.getenv("BILLING_SERVICE_URL", "http://92.113.146.148:8002"),
+    "admin": os.getenv("ADMIN_SERVICE_URL", "http://92.113.146.148:8003"),
+    "scenario": os.getenv("SCENARIO_SERVICE_URL", "http://92.113.146.148:8004"),
+    "content": os.getenv("CONTENT_SERVICE_URL", "http://92.113.146.148:8005"),
+    "invite": os.getenv("INVITE_SERVICE_URL", "http://92.113.146.148:8006"),
+    "parsing": os.getenv("PARSING_SERVICE_URL", "http://92.113.146.148:8007"),
+    "integration": os.getenv("INTEGRATION_SERVICE_URL", "http://92.113.146.148:8008"),
 }
 
 @app.middleware("http")
@@ -87,7 +85,6 @@ async def add_metrics(request: Request, call_next):
     return response
 
 @app.get("/health")
-@limiter.limit("5/minute")
 async def health_check(request: Request) -> Dict[str, str]:
     """
     Health check endpoint for the API Gateway
@@ -102,8 +99,7 @@ async def metrics():
     return generate_latest()
 
 @app.get("/services/health")
-@limiter.limit("10/minute")
-async def services_health_check() -> Dict[str, Dict[str, str]]:
+async def services_health_check(request: Request) -> Dict[str, Dict[str, str]]:
     """
     Health check for all microservices
     """
