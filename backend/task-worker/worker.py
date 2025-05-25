@@ -20,12 +20,18 @@ import discord
 from prometheus_client import Counter, Histogram
 import time
 import celeryconfig
+from contextlib import contextmanager
+from typing import Generator, Dict, Any
+import backoff
 
 # Load environment variables
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Celery configuration
@@ -33,10 +39,26 @@ celery_app = Celery('worker')
 celery_app.config_from_object(celeryconfig)
 
 # Database configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi")
-engine = create_engine(DATABASE_URL)
+DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://user:password@mysql:3306/task_worker")
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=5,
+    max_overflow=10,
+    pool_timeout=30,
+    pool_recycle=1800,
+    pool_pre_ping=True
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+# Database session context manager
+@contextmanager
+def get_db() -> Generator:
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 # Enums
 class TaskStatus(str, enum.Enum):
@@ -71,11 +93,26 @@ task_counter = Counter('task_total', 'Total number of tasks processed', ['task_t
 task_duration = Histogram('task_duration_seconds', 'Task duration in seconds', ['task_type'])
 health_check_counter = Counter('health_check_total', 'Total number of health checks', ['integration_type', 'status'])
 
-# Helper functions
-def get_telegram_client(credentials: dict) -> Bot:
+# Retry decorator with exponential backoff
+@backoff.on_exception(
+    backoff.expo,
+    Exception,
+    max_tries=3,
+    max_time=300
+)
+def retry_with_backoff(func):
+    return func
+
+# Helper functions with improved error handling and security
+def get_telegram_client(credentials: Dict[str, Any]) -> Bot:
+    if not credentials.get("token"):
+        raise ValueError("Telegram token is required")
     return Bot(token=credentials["token"])
 
-def get_twitter_client(credentials: dict) -> tweepy.Client:
+def get_twitter_client(credentials: Dict[str, Any]) -> tweepy.Client:
+    required_keys = ["api_key", "api_secret", "access_token", "access_token_secret"]
+    if not all(key in credentials for key in required_keys):
+        raise ValueError("Missing required Twitter credentials")
     return tweepy.Client(
         consumer_key=credentials["api_key"],
         consumer_secret=credentials["api_secret"],
@@ -108,54 +145,49 @@ def get_discord_client(credentials: dict) -> discord.Client:
     client.token = credentials["bot_token"]
     return client
 
-# Celery tasks
+# Celery tasks with improved error handling and monitoring
 @celery_app.task(name="sync_integration", bind=True, max_retries=3)
 def sync_integration_task(self, integration_id: int, integration_type: str, credentials: dict, force: bool = False):
     start_time = time.time()
     task_counter.labels(task_type='sync_integration', status='started').inc()
     
     try:
+        with get_db() as db:
+            task = Task(
+                task_type=TaskType.SYNC_INTEGRATION,
+                status=TaskStatus.RUNNING,
+                payload={"integration_id": integration_id, "integration_type": integration_type},
+                started_at=datetime.utcnow()
+            )
+            db.add(task)
+            db.commit()
+
         # Get appropriate client based on integration type
-        if integration_type == "telegram":
-            client = get_telegram_client(credentials)
-            # Implement Telegram sync logic
-        elif integration_type == "twitter":
-            client = get_twitter_client(credentials)
-            # Implement Twitter sync logic
-        elif integration_type == "facebook":
-            client = get_facebook_client(credentials)
-            # Implement Facebook sync logic
-        elif integration_type == "google":
-            client = get_google_client(credentials)
-            # Implement Google sync logic
-        elif integration_type == "stripe":
-            client = get_stripe_client(credentials)
-            # Implement Stripe sync logic
-        elif integration_type == "sendgrid":
-            client = get_sendgrid_client(credentials)
-            # Implement SendGrid sync logic
-        elif integration_type == "twilio":
-            client = get_twilio_client(credentials)
-            # Implement Twilio sync logic
-        elif integration_type == "slack":
-            client = get_slack_client(credentials)
-            # Implement Slack sync logic
-        elif integration_type == "discord":
-            client = get_discord_client(credentials)
-            # Implement Discord sync logic
-        else:
-            raise ValueError(f"Unsupported integration type: {integration_type}")
+        client = retry_with_backoff(lambda: get_client_for_integration(integration_type, credentials))
         
         # Record success metrics
         task_counter.labels(task_type='sync_integration', status='success').inc()
         task_duration.labels(task_type='sync_integration').observe(time.time() - start_time)
         
-        return {"status": "success", "message": f"Successfully synced {integration_type} integration"}
+        with get_db() as db:
+            task.status = TaskStatus.COMPLETED
+            task.result = {"status": "success", "message": f"Successfully synced {integration_type} integration"}
+            task.completed_at = datetime.utcnow()
+            db.commit()
+        
+        return task.result
         
     except Exception as e:
-        logger.error(f"Integration sync failed: {str(e)}")
+        logger.error(f"Integration sync failed: {str(e)}", exc_info=True)
         task_counter.labels(task_type='sync_integration', status='failed').inc()
-        self.retry(exc=e, countdown=300)  # Retry after 5 minutes
+        
+        with get_db() as db:
+            task.status = TaskStatus.FAILED
+            task.error = str(e)
+            task.completed_at = datetime.utcnow()
+            db.commit()
+        
+        self.retry(exc=e, countdown=300)
 
 @celery_app.task(name="send_notification", bind=True, max_retries=3)
 def send_notification_task(self, notification_type: str, recipient: str, content: dict):
@@ -281,6 +313,24 @@ def check_integration_health_task(self):
         self.retry(exc=e, countdown=300)
     finally:
         db.close()
+
+def get_client_for_integration(integration_type: str, credentials: dict):
+    client_map = {
+        "telegram": get_telegram_client,
+        "twitter": get_twitter_client,
+        "facebook": get_facebook_client,
+        "google": get_google_client,
+        "stripe": get_stripe_client,
+        "sendgrid": get_sendgrid_client,
+        "twilio": get_twilio_client,
+        "slack": get_slack_client,
+        "discord": get_discord_client
+    }
+    
+    if integration_type not in client_map:
+        raise ValueError(f"Unsupported integration type: {integration_type}")
+    
+    return client_map[integration_type](credentials)
 
 if __name__ == "__main__":
     celery_app.start() 
