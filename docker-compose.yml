@@ -130,7 +130,7 @@ services:
       - MYSQL_DATABASE=integration_service
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - VAULT_ADDR=http://vault:8200
+      - VAULT_ADDR=http://vault:8201
       - VAULT_TOKEN=root
     depends_on:
       - mysql
@@ -288,7 +288,7 @@ services:
     image: vault:1.13.3
     container_name: vault
     ports:
-      - "8200:8200"
+      - "8201:8201"
     cap_add:
       - IPC_LOCK
     networks:
