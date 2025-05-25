@@ -1,19 +1,25 @@
-from fastapi import FastAPI, HTTPException, Depends, status, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, status, Request, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, JSON, ForeignKey, Text, Enum
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, JSON, ForeignKey, Text, Enum, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
-from pydantic import BaseModel, HttpUrl, SecretStr
+from pydantic import BaseModel, HttpUrl, SecretStr, EmailStr
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 import enum
 import os
 from dotenv import load_dotenv
-import aiohttp
-import json
-import asyncio
+from prometheus_client import Counter, Histogram, generate_latest
+from prometheus_fastapi_instrumentator import Instrumentator
+import time
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import logging
-from telegram import Bot
+from cryptography.fernet import Fernet
+import json
+import aiohttp
+import asyncio
 import tweepy
 import facebook
 from google.oauth2.credentials import Credentials
@@ -23,6 +29,7 @@ from sendgrid import SendGridAPIClient
 from twilio.rest import Client
 from slack_sdk import WebClient
 import discord
+from telegram import Bot
 
 load_dotenv()
 
@@ -32,9 +39,16 @@ logger = logging.getLogger(__name__)
 
 # Конфигурация базы данных
 DATABASE_URL = os.getenv("DATABASE_URL", "mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi")
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=3600)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+# Rate limiter setup
+limiter = Limiter(key_func=get_remote_address)
+
+# Encryption setup
+ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", Fernet.generate_key())
+cipher_suite = Fernet(ENCRYPTION_KEY)
 
 # Enums
 class IntegrationType(str, enum.Enum):
@@ -121,12 +135,48 @@ class IntegrationEvent(IntegrationEventBase):
         from_attributes = True
 
 # Create database tables
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    logger.error(f"Failed to create database tables: {e}")
+    raise
 
 app = FastAPI(
     title="Integration Service",
     description="Service for managing external service integrations",
     version="1.0.0"
+)
+
+# Add rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Prometheus metrics
+Instrumentator().instrument(app).expose(app)
+
+# Metrics
+REQUEST_COUNT = Counter(
+    'http_requests_total',
+    'Total HTTP requests',
+    ['method', 'endpoint', 'status']
+)
+
+REQUEST_LATENCY = Histogram(
+    'http_request_duration_seconds',
+    'HTTP request latency',
+    ['method', 'endpoint']
+)
+
+DB_OPERATION_LATENCY = Histogram(
+    'db_operation_duration_seconds',
+    'Database operation latency',
+    ['operation']
+)
+
+INTEGRATION_SYNC_LATENCY = Histogram(
+    'integration_sync_duration_seconds',
+    'Integration sync latency',
+    ['integration_type']
 )
 
 # Dependency
@@ -138,6 +188,14 @@ def get_db():
         db.close()
 
 # Helper functions
+def encrypt_credentials(credentials: Dict[str, Any]) -> bytes:
+    """Encrypt integration credentials."""
+    return cipher_suite.encrypt(json.dumps(credentials).encode())
+
+def decrypt_credentials(encrypted_credentials: bytes) -> Dict[str, Any]:
+    """Decrypt integration credentials."""
+    return json.loads(cipher_suite.decrypt(encrypted_credentials).decode())
+
 def get_telegram_client(credentials: Dict[str, Any]) -> Bot:
     """Create Telegram bot client."""
     return Bot(token=credentials["token"])
@@ -183,41 +241,64 @@ def get_discord_client(credentials: Dict[str, Any]) -> discord.Client:
     client.token = credentials["bot_token"]
     return client
 
-# Background tasks
-async def sync_integration(integration_id: int, db: Session):
-    """Sync integration data in background."""
-    integration = db.query(Integration).filter(Integration.id == integration_id).first()
-    if not integration:
-        return
+@app.middleware("http")
+async def add_metrics(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    duration = time.time() - start_time
     
+    REQUEST_COUNT.labels(
+        method=request.method,
+        endpoint=request.url.path,
+        status=response.status_code
+    ).inc()
+    
+    REQUEST_LATENCY.labels(
+        method=request.method,
+        endpoint=request.url.path
+    ).observe(duration)
+    
+    return response
+
+async def sync_integration(integration_id: int, db: Session):
+    """Sync integration with external service."""
+    start_time = time.time()
     try:
-        # Get appropriate client based on integration type
+        integration = db.query(Integration).filter(Integration.id == integration_id).first()
+        if not integration:
+            logger.error(f"Integration {integration_id} not found")
+            return
+
+        # Decrypt credentials
+        credentials = decrypt_credentials(integration.credentials)
+        
+        # Get appropriate client
         if integration.integration_type == IntegrationType.TELEGRAM:
-            client = get_telegram_client(integration.credentials)
+            client = get_telegram_client(credentials)
             # Implement Telegram sync logic
         elif integration.integration_type == IntegrationType.TWITTER:
-            client = get_twitter_client(integration.credentials)
+            client = get_twitter_client(credentials)
             # Implement Twitter sync logic
         elif integration.integration_type == IntegrationType.FACEBOOK:
-            client = get_facebook_client(integration.credentials)
+            client = get_facebook_client(credentials)
             # Implement Facebook sync logic
         elif integration.integration_type == IntegrationType.GOOGLE:
-            client = get_google_client(integration.credentials)
+            client = get_google_client(credentials)
             # Implement Google sync logic
         elif integration.integration_type == IntegrationType.STRIPE:
-            client = get_stripe_client(integration.credentials)
+            client = get_stripe_client(credentials)
             # Implement Stripe sync logic
         elif integration.integration_type == IntegrationType.SENDGRID:
-            client = get_sendgrid_client(integration.credentials)
+            client = get_sendgrid_client(credentials)
             # Implement SendGrid sync logic
         elif integration.integration_type == IntegrationType.TWILIO:
-            client = get_twilio_client(integration.credentials)
+            client = get_twilio_client(credentials)
             # Implement Twilio sync logic
         elif integration.integration_type == IntegrationType.SLACK:
-            client = get_slack_client(integration.credentials)
+            client = get_slack_client(credentials)
             # Implement Slack sync logic
         elif integration.integration_type == IntegrationType.DISCORD:
-            client = get_discord_client(integration.credentials)
+            client = get_discord_client(credentials)
             # Implement Discord sync logic
         else:
             raise ValueError(f"Unsupported integration type: {integration.integration_type}")
@@ -247,26 +328,45 @@ async def sync_integration(integration_id: int, db: Session):
         
         integration.status = IntegrationStatus.ERROR
         db.commit()
+    finally:
+        duration = time.time() - start_time
+        INTEGRATION_SYNC_LATENCY.labels(
+            integration_type=integration.integration_type
+        ).observe(duration)
 
 # Endpoints
 @app.post("/integrations/", response_model=Integration)
+@limiter.limit("3/minute")
 async def create_integration(
     integration: IntegrationCreate,
     user_id: int,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    db_integration = Integration(**integration.dict(), user_id=user_id)
-    db.add(db_integration)
-    db.commit()
-    db.refresh(db_integration)
-    
-    # Sync integration in background
-    background_tasks.add_task(sync_integration, db_integration.id, db)
-    
-    return db_integration
+    start_time = time.time()
+    try:
+        # Encrypt credentials before storing
+        encrypted_credentials = encrypt_credentials(integration.credentials)
+        
+        db_integration = Integration(
+            **integration.dict(exclude={'credentials'}),
+            user_id=user_id,
+            credentials=encrypted_credentials
+        )
+        db.add(db_integration)
+        db.commit()
+        db.refresh(db_integration)
+        
+        # Sync integration in background
+        background_tasks.add_task(sync_integration, db_integration.id, db)
+        
+        return db_integration
+    finally:
+        duration = time.time() - start_time
+        DB_OPERATION_LATENCY.labels(operation="create_integration").observe(duration)
 
 @app.get("/integrations/", response_model=List[Integration])
+@limiter.limit("10/minute")
 def get_integrations(
     user_id: int,
     integration_type: Optional[IntegrationType] = None,
@@ -275,49 +375,76 @@ def get_integrations(
     limit: int = 100,
     db: Session = Depends(get_db)
 ):
-    query = db.query(Integration).filter(Integration.user_id == user_id)
-    if integration_type:
-        query = query.filter(Integration.integration_type == integration_type)
-    if status:
-        query = query.filter(Integration.status == status)
-    integrations = query.offset(skip).limit(limit).all()
-    return integrations
+    start_time = time.time()
+    try:
+        query = db.query(Integration).filter(Integration.user_id == user_id)
+        if integration_type:
+            query = query.filter(Integration.integration_type == integration_type)
+        if status:
+            query = query.filter(Integration.status == status)
+        integrations = query.offset(skip).limit(limit).all()
+        return integrations
+    finally:
+        duration = time.time() - start_time
+        DB_OPERATION_LATENCY.labels(operation="get_integrations").observe(duration)
 
 @app.get("/integrations/{integration_id}", response_model=Integration)
+@limiter.limit("10/minute")
 def get_integration(integration_id: int, db: Session = Depends(get_db)):
-    integration = db.query(Integration).filter(Integration.id == integration_id).first()
-    if not integration:
-        raise HTTPException(status_code=404, detail="Integration not found")
-    return integration
-
-@app.get("/integrations/{integration_id}/events", response_model=List[IntegrationEvent])
-def get_integration_events(
-    integration_id: int,
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
-    events = db.query(IntegrationEvent).filter(
-        IntegrationEvent.integration_id == integration_id
-    ).offset(skip).limit(limit).all()
-    return events
+    start_time = time.time()
+    try:
+        integration = db.query(Integration).filter(Integration.id == integration_id).first()
+        if not integration:
+            raise HTTPException(status_code=404, detail="Integration not found")
+        return integration
+    finally:
+        duration = time.time() - start_time
+        DB_OPERATION_LATENCY.labels(operation="get_integration").observe(duration)
 
 @app.post("/integrations/{integration_id}/sync")
+@limiter.limit("3/minute")
 async def sync_integration_endpoint(
     integration_id: int,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    integration = db.query(Integration).filter(Integration.id == integration_id).first()
-    if not integration:
-        raise HTTPException(status_code=404, detail="Integration not found")
-    
-    background_tasks.add_task(sync_integration, integration_id, db)
-    return {"status": "started"}
+    start_time = time.time()
+    try:
+        integration = db.query(Integration).filter(Integration.id == integration_id).first()
+        if not integration:
+            raise HTTPException(status_code=404, detail="Integration not found")
+        
+        background_tasks.add_task(sync_integration, integration_id, db)
+        return {"status": "started"}
+    finally:
+        duration = time.time() - start_time
+        DB_OPERATION_LATENCY.labels(operation="sync_integration").observe(duration)
 
 @app.get("/health")
+@limiter.limit("5/minute")
 async def health_check():
-    return {"status": "healthy", "service": "integration-service"}
+    try:
+        # Check database connection
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {
+            "status": "healthy",
+            "service": "integration-service",
+            "database": "connected"
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service unhealthy"
+        )
+
+@app.get("/metrics")
+async def metrics():
+    """
+    Prometheus metrics endpoint
+    """
+    return generate_latest()
 
 if __name__ == "__main__":
     import uvicorn
