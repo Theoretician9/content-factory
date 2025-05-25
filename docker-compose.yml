@@ -217,12 +217,15 @@ services:
       - discovery.type=single-node
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     volumes:
+      - ./elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
       - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
       - "9200:9200"
 
   kibana:
     image: docker.elastic.co/kibana/kibana:7.17.0
+    volumes:
+      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     ports:
