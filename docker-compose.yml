@@ -1,0 +1,176 @@
+version: '3.8'
+
+services:
+  # API Gateway
+  api-gateway:
+    build: ./backend/api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
+      - REDIS_URL=redis://redis:6379/0
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672//
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+
+  # User Service
+  user-service:
+    build: ./backend/user-service
+    environment:
+      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+  # Billing Service
+  billing-service:
+    build: ./backend/billing-service
+    environment:
+      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+  # Integration Service
+  integration-service:
+    build: ./backend/integration-service
+    environment:
+      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
+      - REDIS_URL=redis://redis:6379/0
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672//
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+
+  # Task Worker
+  task-worker:
+    build: ./backend/task-worker
+    environment:
+      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
+      - REDIS_URL=redis://redis:6379/0
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672//
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+
+  # Celery Beat
+  celery-beat:
+    build: ./backend/task-worker
+    command: celery -A worker beat --loglevel=info
+    environment:
+      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
+      - REDIS_URL=redis://redis:6379/0
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672//
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"   # AMQP protocol port
+      - "15672:15672" # Management UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  # Redis
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # MySQL
+  db:
+    image: mysql:8
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=telegraminvi
+      - MYSQL_USER=telegraminvi
+      - MYSQL_PASSWORD=szkTgBhWh6XU
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+
+  # Grafana
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+  # ELK Stack
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.0
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.0
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.17.0
+    volumes:
+      - ./logstash/config:/usr/share/logstash/config
+      - ./logstash/pipeline:/usr/share/logstash/pipeline
+    ports:
+      - "5044:5044"
+      - "5000:5000/tcp"
+      - "5000:5000/udp"
+      - "9600:9600"
+    environment:
+      LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+    depends_on:
+      - elasticsearch
+
+volumes:
+  rabbitmq_data:
+  redis_data:
+  mysql_data:
+  prometheus_data:
+  grafana_data:
+  elasticsearch_data: 

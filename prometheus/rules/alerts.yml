@@ -1,0 +1,69 @@
+groups:
+  - name: service_alerts
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Сервис {{ $labels.job }} недоступен"
+          description: "Сервис {{ $labels.job }} не отвечает более 1 минуты"
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокий уровень ошибок в {{ $labels.job }}"
+          description: "Более 10% запросов завершаются с ошибкой 5xx"
+
+      - alert: HighLatency
+        expr: http_request_duration_seconds{quantile="0.9"} > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокая задержка в {{ $labels.job }}"
+          description: "90-й перцентиль задержки превышает 1 секунду"
+
+  - name: task_worker_alerts
+    rules:
+      - alert: TaskWorkerQueueSize
+        expr: celery_queue_length > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Большая очередь задач в Task Worker"
+          description: "Размер очереди задач превышает 1000"
+
+      - alert: TaskWorkerErrors
+        expr: rate(celery_task_failures_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ошибки в Task Worker"
+          description: "Обнаружены ошибки при выполнении задач"
+
+  - name: integration_alerts
+    rules:
+      - alert: IntegrationSyncFailed
+        expr: integration_sync_failures_total > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ошибки синхронизации интеграций"
+          description: "Обнаружены ошибки при синхронизации интеграций"
+
+      - alert: IntegrationHealthCheckFailed
+        expr: integration_health_check_failures_total > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Проблемы с интеграциями"
+          description: "Обнаружены проблемы при проверке здоровья интеграций" 
