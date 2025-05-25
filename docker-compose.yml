@@ -7,163 +7,209 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
-      - REDIS_URL=redis://redis:6379/0
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672//
+      - USER_SERVICE_URL=http://user-service:8000
+      - BILLING_SERVICE_URL=http://billing-service:8000
+      - SCENARIO_SERVICE_URL=http://scenario-service:8000
+      - CONTENT_SERVICE_URL=http://content-service:8000
+      - INVITE_SERVICE_URL=http://invite-service:8000
+      - PARSING_SERVICE_URL=http://parsing-service:8000
+      - INTEGRATION_SERVICE_URL=http://integration-service:8000
     depends_on:
-      - db
-      - redis
-      - rabbitmq
+      - user-service
+      - billing-service
+      - scenario-service
+      - content-service
+      - invite-service
+      - parsing-service
+      - integration-service
 
   # User Service
   user-service:
     build: ./backend/user-service
     environment:
-      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
-      - REDIS_URL=redis://redis:6379/0
+      - MYSQL_HOST=mysql
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=user_service
+      - REDIS_HOST=redis
     depends_on:
-      - db
+      - mysql
       - redis
 
   # Billing Service
   billing-service:
     build: ./backend/billing-service
     environment:
-      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
-      - REDIS_URL=redis://redis:6379/0
+      - MYSQL_HOST=mysql
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=billing_service
+      - REDIS_HOST=redis
     depends_on:
-      - db
+      - mysql
+      - redis
+
+  # Scenario Service
+  scenario-service:
+    build: ./backend/scenario-service
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=scenario_service
+      - REDIS_HOST=redis
+    depends_on:
+      - mysql
+      - redis
+
+  # Content Service
+  content-service:
+    build: ./backend/content-service
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=content_service
+      - REDIS_HOST=redis
+    depends_on:
+      - mysql
+      - redis
+
+  # Invite Service
+  invite-service:
+    build: ./backend/invite-service
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=invite_service
+      - REDIS_HOST=redis
+    depends_on:
+      - mysql
+      - redis
+
+  # Parsing Service
+  parsing-service:
+    build: ./backend/parsing-service
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=parsing_service
+      - REDIS_HOST=redis
+    depends_on:
+      - mysql
       - redis
 
   # Integration Service
   integration-service:
     build: ./backend/integration-service
     environment:
-      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
-      - REDIS_URL=redis://redis:6379/0
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672//
+      - MYSQL_HOST=mysql
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=integration_service
+      - REDIS_HOST=redis
     depends_on:
-      - db
+      - mysql
       - redis
-      - rabbitmq
 
   # Task Worker
   task-worker:
     build: ./backend/task-worker
     environment:
-      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
-      - REDIS_URL=redis://redis:6379/0
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672//
+      - MYSQL_HOST=mysql
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=task_worker
+      - REDIS_HOST=redis
+      - RABBITMQ_HOST=rabbitmq
     depends_on:
-      - db
-      - redis
-      - rabbitmq
-
-  # Celery Beat
-  celery-beat:
-    build: ./backend/task-worker
-    command: celery -A worker beat --loglevel=info
-    environment:
-      - DATABASE_URL=mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi
-      - REDIS_URL=redis://redis:6379/0
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672//
-    depends_on:
-      - db
+      - mysql
       - redis
       - rabbitmq
 
   # RabbitMQ
   rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-      - "5672:5672"   # AMQP protocol port
-      - "15672:15672" # Management UI
+    image: rabbitmq:3.12-management
     environment:
-      - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
+      - RABBITMQ_DEFAULT_USER=user
+      - RABBITMQ_DEFAULT_PASS=password
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
 
   # Redis
   redis:
-    image: redis:7
-    ports:
-      - "6379:6379"
+    image: redis:7.0
     volumes:
       - redis_data:/data
 
   # MySQL
-  db:
-    image: mysql:8
-    ports:
-      - "3306:3306"
+  mysql:
+    image: mysql:8.0
     environment:
-      - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_DATABASE=telegraminvi
-      - MYSQL_USER=telegraminvi
-      - MYSQL_PASSWORD=szkTgBhWh6XU
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=content_factory
     volumes:
       - mysql_data:/var/lib/mysql
 
   # Prometheus
   prometheus:
-    image: prom/prometheus
+    image: prom/prometheus:v2.45.0
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/rules:/etc/prometheus/rules
     ports:
       - "9090:9090"
+
+  # Alertmanager
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
     volumes:
-      - ./prometheus:/etc/prometheus
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - ./alertmanager/templates:/etc/alertmanager/templates
+    ports:
+      - "9093:9093"
 
   # Grafana
   grafana:
-    image: grafana/grafana
+    image: grafana/grafana:10.0.0
+    volumes:
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
     ports:
       - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-    volumes:
-      - grafana_data:/var/lib/grafana
-    depends_on:
-      - prometheus
 
   # ELK Stack
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.0
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.0
     environment:
       - discovery.type=single-node
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
+      - xpack.security.enabled=false
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
 
   kibana:
-    image: docker.elastic.co/kibana/kibana:7.17.0
-    ports:
-      - "5601:5601"
+    image: docker.elastic.co/kibana/kibana:8.10.0
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
     depends_on:
       - elasticsearch
 
   logstash:
-    image: docker.elastic.co/logstash/logstash:7.17.0
+    image: docker.elastic.co/logstash/logstash:8.10.0
     volumes:
-      - ./logstash/config:/usr/share/logstash/config
       - ./logstash/pipeline:/usr/share/logstash/pipeline
     ports:
-      - "5044:5044"
-      - "5000:5000/tcp"
-      - "5000:5000/udp"
-      - "9600:9600"
-    environment:
-      LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+      - "5000:5000"
     depends_on:
       - elasticsearch
 
@@ -171,6 +217,4 @@ volumes:
   rabbitmq_data:
   redis_data:
   mysql_data:
-  prometheus_data:
-  grafana_data:
   elasticsearch_data: 
