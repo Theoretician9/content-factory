@@ -28,22 +28,6 @@ xpack.security.session.lifespan: "24h"
 telemetry.enabled: false
 
 # Logging configuration
-logging:
-  root:
-    appenders: [console, file]
-    level: info
-  appenders:
-    console:
-      type: console
-      layout:
-        type: pattern
-    file:
-      type: file
-      fileName: /usr/share/kibana/logs/kibana.log
-      layout:
-        type: pattern
-
-# Logging settings
 logging.root.level: info
 logging.root.appender: console
 logging.appenders.console.type: console
