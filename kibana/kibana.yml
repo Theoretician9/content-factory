@@ -13,7 +13,11 @@ elasticsearch.pingTimeout: 90000
 
 # Server settings
 server.shutdownTimeout: "5s"
-server.maxPayloadBytes: 1048576
+server.maxPayload: 1048576
+
+# SSL settings
+server.ssl.enabled: false
+xpack.security.secureCookies: false
 
 # Encryption keys
 xpack.security.encryptionKey: "something_at_least_32_characters_long"
