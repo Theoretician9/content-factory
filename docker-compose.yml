@@ -213,14 +213,27 @@ services:
   # ELK Stack
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.17.0
+    container_name: elasticsearch
     environment:
       - discovery.type=single-node
+      - bootstrap.memory_lock=true
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     volumes:
       - ./elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
-      - elasticsearch_data:/usr/share/elasticsearch/data
+      - elasticsearch-data:/usr/share/elasticsearch/data
     ports:
       - "9200:9200"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   kibana:
     image: docker.elastic.co/kibana/kibana:7.17.0
