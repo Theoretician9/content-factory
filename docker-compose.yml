@@ -245,6 +245,8 @@ services:
       - "5601:5601"
     depends_on:
       - elasticsearch
+    networks:
+      - app-network
 
   logstash:
     image: docker.elastic.co/logstash/logstash:7.17.0
@@ -254,9 +256,15 @@ services:
       - "5000:5000"
     depends_on:
       - elasticsearch
+    networks:
+      - app-network
 
 volumes:
   rabbitmq_data:
   redis_data:
   mysql_data:
-  elasticsearch_data: 
+  elasticsearch_data:
+
+networks:
+  app-network:
+    driver: bridge 
