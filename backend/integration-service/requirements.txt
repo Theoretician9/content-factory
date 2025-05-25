@@ -30,4 +30,4 @@ twilio==8.10.0
 slack-sdk==3.26.0
 discord.py==2.3.2
 bcrypt==4.0.1
-httpx==0.25.1 
+httpx==0.25.2 
