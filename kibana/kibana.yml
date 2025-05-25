@@ -1,7 +1,19 @@
 server.host: "0.0.0.0"
+server.publicBaseUrl: "http://92.113.146.148:5601"
 elasticsearch.hosts: ["http://elasticsearch:9200"]
+
+# Security settings
+elasticsearch.username: "elastic"
+elasticsearch.password: "changeme"
+
+# Encryption keys
 xpack.security.encryptionKey: "something_at_least_32_characters_long"
 xpack.reporting.encryptionKey: "something_at_least_32_characters_long"
 xpack.encryptedSavedObjects.encryptionKey: "something_at_least_32_characters_long"
+
+# Session settings
 xpack.security.session.idleTimeout: "8h"
-xpack.security.session.lifespan: "30d" 
+xpack.security.session.lifespan: "30d"
+
+# Disable telemetry
+telemetry.enabled: false 
