@@ -21,11 +21,27 @@ xpack.reporting.encryptionKey: "something_at_least_32_characters_long"
 xpack.encryptedSavedObjects.encryptionKey: "something_at_least_32_characters_long"
 
 # Session settings
-xpack.security.session.idleTimeout: "8h"
-xpack.security.session.lifespan: "30d"
+xpack.security.session.idleTimeout: "1h"
+xpack.security.session.lifespan: "24h"
 
 # Disable telemetry
 telemetry.enabled: false
+
+# Logging configuration
+logging:
+  root:
+    appenders: [console, file]
+    level: info
+  appenders:
+    console:
+      type: console
+      layout:
+        type: pattern
+    file:
+      type: file
+      fileName: /usr/share/kibana/logs/kibana.log
+      layout:
+        type: pattern
 
 # Logging settings
 logging.root.level: info
