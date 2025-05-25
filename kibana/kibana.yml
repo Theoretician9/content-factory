@@ -1,0 +1,7 @@
+server.host: "0.0.0.0"
+elasticsearch.hosts: ["http://elasticsearch:9200"]
+xpack.security.encryptionKey: "something_at_least_32_characters_long"
+xpack.reporting.encryptionKey: "something_at_least_32_characters_long"
+xpack.encryptedSavedObjects.encryptionKey: "something_at_least_32_characters_long"
+xpack.security.session.idleTimeout: "8h"
+xpack.security.session.lifespan: "30d" 
