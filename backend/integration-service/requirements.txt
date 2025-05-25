@@ -28,4 +28,6 @@ stripe==7.6.0
 sendgrid==6.10.0
 twilio==8.10.0
 slack-sdk==3.26.0
-discord.py==2.3.2 
+discord.py==2.3.2
+bcrypt==4.0.1
+httpx==0.25.1 
