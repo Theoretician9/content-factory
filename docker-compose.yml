@@ -14,6 +14,10 @@ services:
       - INVITE_SERVICE_URL=http://invite-service:8000
       - PARSING_SERVICE_URL=http://parsing-service:8000
       - INTEGRATION_SERVICE_URL=http://integration-service:8000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
     depends_on:
       - user-service
       - billing-service
@@ -22,16 +26,20 @@ services:
       - invite-service
       - parsing-service
       - integration-service
+      - redis
+      - mysql
 
   # User Service
   user-service:
     build: ./backend/user-service
     environment:
       - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
       - MYSQL_USER=user
       - MYSQL_PASSWORD=password
       - MYSQL_DATABASE=user_service
       - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       - mysql
       - redis
@@ -41,10 +49,12 @@ services:
     build: ./backend/billing-service
     environment:
       - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
       - MYSQL_USER=user
       - MYSQL_PASSWORD=password
       - MYSQL_DATABASE=billing_service
       - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       - mysql
       - redis
@@ -54,10 +64,12 @@ services:
     build: ./backend/scenario-service
     environment:
       - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
       - MYSQL_USER=user
       - MYSQL_PASSWORD=password
       - MYSQL_DATABASE=scenario_service
       - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       - mysql
       - redis
@@ -67,10 +79,12 @@ services:
     build: ./backend/content-service
     environment:
       - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
       - MYSQL_USER=user
       - MYSQL_PASSWORD=password
       - MYSQL_DATABASE=content_service
       - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       - mysql
       - redis
@@ -80,10 +94,12 @@ services:
     build: ./backend/invite-service
     environment:
       - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
       - MYSQL_USER=user
       - MYSQL_PASSWORD=password
       - MYSQL_DATABASE=invite_service
       - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       - mysql
       - redis
@@ -93,10 +109,12 @@ services:
     build: ./backend/parsing-service
     environment:
       - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
       - MYSQL_USER=user
       - MYSQL_PASSWORD=password
       - MYSQL_DATABASE=parsing_service
       - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       - mysql
       - redis
@@ -106,10 +124,12 @@ services:
     build: ./backend/integration-service
     environment:
       - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
       - MYSQL_USER=user
       - MYSQL_PASSWORD=password
       - MYSQL_DATABASE=integration_service
       - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       - mysql
       - redis
@@ -119,10 +139,12 @@ services:
     build: ./backend/task-worker
     environment:
       - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
       - MYSQL_USER=user
       - MYSQL_PASSWORD=password
       - MYSQL_DATABASE=task_worker
       - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - RABBITMQ_HOST=rabbitmq
     depends_on:
       - mysql
@@ -141,12 +163,16 @@ services:
   # Redis
   redis:
     image: redis:7.0
+    ports:
+      - "6380:6379"
     volumes:
       - redis_data:/data
 
   # MySQL
   mysql:
     image: mysql:8.0
+    ports:
+      - "3307:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=rootpassword
       - MYSQL_USER=user
