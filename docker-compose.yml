@@ -130,7 +130,7 @@ services:
       - MYSQL_DATABASE=integration_service
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - VAULT_ADDR=http://vault:8201
+      - VAULT_ADDR=http://vault:8202
       - VAULT_TOKEN=root
     depends_on:
       - mysql
@@ -296,7 +296,7 @@ services:
     volumes:
       - vault_data:/vault/data
       - ./backend/vault/config.hcl:/vault/config/config.hcl
-    command: server -dev -config=/vault/config/config.hcl
+    command: server -config=/vault/config/config.hcl
     healthcheck:
       test: ["CMD", "vault", "status"]
       interval: 10s
