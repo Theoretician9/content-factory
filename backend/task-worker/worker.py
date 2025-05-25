@@ -39,7 +39,7 @@ celery_app = Celery('worker')
 celery_app.config_from_object(celeryconfig)
 
 # Database configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://user:password@mysql:3306/task_worker")
+DATABASE_URL = os.getenv("DATABASE_URL", "mysql://user:password@mysql:3306/task_worker")
 engine = create_engine(
     DATABASE_URL,
     pool_size=5,
