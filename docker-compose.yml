@@ -298,8 +298,8 @@ services:
     image: docker.elastic.co/logstash/logstash:7.17.0
     volumes:
       - ./logstash/pipeline:/usr/share/logstash/pipeline
-      - ./logs/services:/usr/share/logstash/logs/services
-      - ./logs/api-gateway:/usr/share/logstash/logs/api-gateway
+      - /var/www/html/logs/services:/usr/share/logstash/logs/services
+      - /var/www/html/logs/api-gateway:/usr/share/logstash/logs/api-gateway
       - logstash_logs:/usr/share/logstash/logs
     ports:
       - "5000:5000"
