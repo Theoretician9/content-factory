@@ -212,10 +212,10 @@ services:
     ports:
       - "3307:3306"
     environment:
-      - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_USER=user
-      - MYSQL_PASSWORD=password
-      - MYSQL_DATABASE=user_service
+      - MYSQL_ROOT_PASSWORD=Lfnm97HnPug8
+      - MYSQL_USER=telegraminvi
+      - MYSQL_PASSWORD=szkTgBhWh6XU
+      - MYSQL_DATABASE=telegraminvi
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
