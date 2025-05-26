@@ -1,7 +1,8 @@
-FROM nginx:1.25
+FROM nginx:alpine
 
 COPY nginx.conf /etc/nginx/nginx.conf
+COPY cors.conf /etc/nginx/cors.conf
 
-EXPOSE 80
+EXPOSE 8000
 
 CMD ["nginx", "-g", "daemon off;"] 
