@@ -35,6 +35,7 @@ import pandas as pd
 import numpy as np
 from playwright.async_api import async_playwright
 from config.database import db_settings, encryption_settings, encrypt_data, decrypt_data
+from .models import IntegrationBase, IntegrationCreate, IntegrationResponse, IntegrationEventBase, IntegrationEventCreate, IntegrationEventResponse
 
 load_dotenv()
 
