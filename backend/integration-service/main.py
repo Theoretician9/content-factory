@@ -3,10 +3,8 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, JSON, ForeignKey, Text, Enum, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
-from pydantic import BaseModel, HttpUrl, SecretStr, EmailStr
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
-import enum
 import os
 from dotenv import load_dotenv
 from prometheus_client import Counter, Histogram, generate_latest
@@ -36,6 +34,7 @@ import numpy as np
 from playwright.async_api import async_playwright
 from config.database import db_settings, encryption_settings, encrypt_data, decrypt_data
 from .models import IntegrationBase, IntegrationCreate, IntegrationResponse, IntegrationEventBase, IntegrationEventCreate, IntegrationEventResponse
+from .enums import IntegrationType, IntegrationStatus
 
 load_dotenv()
 
@@ -55,26 +54,6 @@ limiter = Limiter(key_func=get_remote_address)
 # Encryption setup
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", Fernet.generate_key())
 cipher_suite = Fernet(ENCRYPTION_KEY)
-
-# Enums
-class IntegrationType(str, enum.Enum):
-    TELEGRAM = "telegram"
-    TWITTER = "twitter"
-    FACEBOOK = "facebook"
-    INSTAGRAM = "instagram"
-    LINKEDIN = "linkedin"
-    GOOGLE = "google"
-    STRIPE = "stripe"
-    SENDGRID = "sendgrid"
-    TWILIO = "twilio"
-    SLACK = "slack"
-    DISCORD = "discord"
-
-class IntegrationStatus(str, enum.Enum):
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    ERROR = "error"
-    PENDING = "pending"
 
 # Database Models
 class Integration(Base):
