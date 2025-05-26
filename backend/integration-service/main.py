@@ -153,14 +153,14 @@ class IntegrationEventBase(BaseModel):
 class IntegrationEventCreate(IntegrationEventBase):
     pass
 
-class IntegrationEvent(IntegrationEventBase):
-    id: int
-    integration_id: int
-    created_at: datetime
+class IntegrationEvent(BaseModel):
+    event_type: str
+    event_data: Dict[str, Any]
 
-    class Config:
-        from_attributes = True
-        arbitrary_types_allowed = True
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "from_attributes": True
+    }
 
 # Create database tables
 try:
