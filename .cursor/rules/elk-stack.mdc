@@ -1,5 +1,48 @@
 ---
-description:
-globs:
+description: 
+globs: 
 alwaysApply: false
 ---
+# ELK Stack Configuration Guide
+
+## Elasticsearch
+- Основная конфигурация: [docker-compose.yml](mdc:docker-compose.yml)
+- Порт: 9200
+- Безопасность: xpack.security.enabled=false
+- Память: -Xms512m -Xmx512m
+- Сеть: backend
+
+## Kibana
+- Основная конфигурация: [docker-compose.yml](mdc:docker-compose.yml)
+- Порт: 5601
+- Безопасность: XPACK_SECURITY_ENABLED=false
+- Подключение к Elasticsearch: http://elasticsearch:9200
+- Сеть: backend
+
+## Logstash
+- Основная конфигурация: [docker-compose.yml](mdc:docker-compose.yml)
+- Каталог pipeline: ./logstash/pipeline
+- Порт: 5000
+- Сеть: backend
+
+## Этапы настройки
+1. Убедитесь, что Elasticsearch запущен и доступен
+2. Настройте pipeline для Logstash (пример: [logstash/pipeline/logstash.conf](mdc:logstash/pipeline/logstash.conf))
+3. Проверьте, что Logstash подключается к Elasticsearch
+4. Настройте индексы и шаблоны в Elasticsearch (можно через Kibana)
+5. Настройте визуализации и дашборды в Kibana
+
+## Troubleshooting
+- Если Elasticsearch недоступен — проверьте сеть и порты
+- Если Kibana не видит Elasticsearch — убедитесь, что оба сервиса в одной сети и Elasticsearch работает
+- Если Logstash не пишет данные — проверьте pipeline и логи Logstash
+
+##
+Рабочая директория находится на локальном компьютере, ты с ней работаешь. Но запущен код на сервере. 
+Есть автоматический пуш на github и оттуда на сервер
+Адрес сервера 92.113.146.148
+
+Пиши на русском языке
+Не делай выполняемые команды - у тебя нет прямого доступа к серверу
+
+Команды пиши, чтобы я их выполнял и отправлял тебе результаты
