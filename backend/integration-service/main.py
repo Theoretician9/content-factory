@@ -131,29 +131,23 @@ class IntegrationBase(BaseModel):
     credentials: Dict[str, Any]
     config: Optional[Dict[str, Any]] = None
 
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "from_attributes": True
+    }
+
 class IntegrationCreate(IntegrationBase):
     pass
 
-class Integration(IntegrationBase):
+class IntegrationResponse(IntegrationBase):
     id: int
     user_id: int
     status: IntegrationStatus
     last_sync: Optional[datetime]
     created_at: datetime
     updated_at: datetime
-    events: List["IntegrationEvent"]
-
-    class Config:
-        from_attributes = True
 
 class IntegrationEventBase(BaseModel):
-    event_type: str
-    event_data: Dict[str, Any]
-
-class IntegrationEventCreate(IntegrationEventBase):
-    pass
-
-class IntegrationEvent(BaseModel):
     event_type: str
     event_data: Dict[str, Any]
 
@@ -161,6 +155,14 @@ class IntegrationEvent(BaseModel):
         "arbitrary_types_allowed": True,
         "from_attributes": True
     }
+
+class IntegrationEventCreate(IntegrationEventBase):
+    pass
+
+class IntegrationEventResponse(IntegrationEventBase):
+    id: int
+    integration_id: int
+    created_at: datetime
 
 # Create database tables
 try:
@@ -363,7 +365,7 @@ async def sync_integration(integration_id: int, db: Session):
         ).observe(duration)
 
 # Endpoints
-@app.post("/integrations/", response_model=Integration)
+@app.post("/integrations/", response_model=IntegrationResponse)
 @limiter.limit("3/minute")
 async def create_integration(
     integration: IntegrationCreate,
@@ -393,7 +395,7 @@ async def create_integration(
         duration = time.time() - start_time
         DB_OPERATION_LATENCY.labels(operation="create_integration").observe(duration)
 
-@app.get("/integrations/", response_model=List[Integration])
+@app.get("/integrations/", response_model=List[IntegrationResponse])
 @limiter.limit("10/minute")
 def get_integrations(
     user_id: int,
@@ -416,7 +418,7 @@ def get_integrations(
         duration = time.time() - start_time
         DB_OPERATION_LATENCY.labels(operation="get_integrations").observe(duration)
 
-@app.get("/integrations/{integration_id}", response_model=Integration)
+@app.get("/integrations/{integration_id}", response_model=IntegrationResponse)
 @limiter.limit("10/minute")
 def get_integration(integration_id: int, db: Session = Depends(get_db)):
     start_time = time.time()
