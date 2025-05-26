@@ -298,12 +298,14 @@ services:
     image: docker.elastic.co/logstash/logstash:7.17.0
     volumes:
       - ./logstash/pipeline:/usr/share/logstash/pipeline
+      - logstash_logs:/usr/share/logstash/logs
     ports:
       - "5000:5000"
+      - "5044:5044"
     depends_on:
       - elasticsearch
     networks:
-      - app-network
+      - backend
 
   vault:
     image: vault:1.13.3
@@ -336,6 +338,7 @@ volumes:
   mysql_data:
   elasticsearch_data:
   vault_data:
+  logstash_logs:
     driver: local
 
 networks:
