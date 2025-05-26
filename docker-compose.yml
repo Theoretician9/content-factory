@@ -288,6 +288,8 @@ services:
       - SERVER_HOST=0.0.0.0
       - SERVER_NAME=kibana
       - XPACK_SECURITY_ENABLED=false
+      - ELASTICSEARCH_SSL_VERIFICATIONMODE=none
+      - ELASTICSEARCH_REQUESTTIMEOUT=30000
     ports:
       - "5601:5601"
     volumes:
@@ -295,7 +297,8 @@ services:
     networks:
       - backend
     depends_on:
-      - elasticsearch
+      elasticsearch:
+        condition: service_healthy
 
   logstash:
     image: docker.elastic.co/logstash/logstash:7.17.0
