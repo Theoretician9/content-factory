@@ -1,0 +1,49 @@
+# 1. Текущий статус (максимально подробно)
+
+- Все основные сервисы (API Gateway, User, Billing, Scenario, Content, Invite, Parsing, Integration, Task Worker) успешно запускаются и доступны через backend-сеть Docker Compose.
+- Интеграция с MySQL работает, все сервисы используют свои базы данных и пользователей. Для Integration Service применён отдельный пользователь и база.
+- Redis, RabbitMQ, Prometheus, Alertmanager, Grafana, Vault работают и доступны на своих портах.
+- ELK Stack (Elasticsearch, Kibana, Logstash) полностью поднят, Kibana успешно подключается к Elasticsearch, xpack security отключён для упрощения.
+- Vault интегрирован, сервисы используют переменные окружения для доступа к секретам.
+- Все сервисы подключены к одной сети backend, что обеспечивает корректную маршрутизацию и взаимодействие.
+- Проблемы с правами MySQL и доступом Integration Service устранены через создание пользователя и базы с нужными правами.
+- Проблемы с запуском Kibana и ошибкой ContainerConfig устранены путём упрощения конфигурации и отказа от лишних volume.
+- CORS и проксирование в API Gateway настроены, все эндпоинты доступны через gateway.
+- Нет критических ошибок в логах, все сервисы проходят health-check.
+
+# 2. Следующие шаги
+
+1. Мониторинг производительности и логов всех сервисов через Grafana, Prometheus, Kibana.
+2. Настройка алертов и уведомлений в Alertmanager.
+3. Внедрение резервного копирования данных MySQL и Elasticsearch.
+4. Проведение тестирования отказоустойчивости и восстановления сервисов.
+5. Дальнейшее усиление безопасности (ограничение доступа к Vault, настройка firewall, HTTPS для gateway и Kibana).
+6. Документирование API и внутренних процессов.
+7. Подготовка к деплою на production (CI/CD, тесты, инфраструктурные скрипты).
+
+# 3. Информация о проекте
+
+- **Назначение:** SaaS-платформа для автоматизации маркетинга, генерации контента и мультиканальных воронок.
+- **Архитектура:** Микросервисная, каждый сервис в отдельном контейнере, взаимодействие через API Gateway и backend-сеть.
+- **Технологии:** Python (FastAPI), MySQL, Redis, RabbitMQ, Nginx, Prometheus, Grafana, Vault, Elasticsearch, Kibana, Logstash, Docker Compose.
+- **Доступы:**
+  - API Gateway: http://92.113.146.148:8000
+  - Grafana: http://92.113.146.148:3000 (admin/admin)
+  - Kibana: http://92.113.146.148:5601
+  - Prometheus: http://92.113.146.148:9090
+  - Alertmanager: http://92.113.146.148:9093
+  - RabbitMQ: http://92.113.146.148:15672 (user/password)
+  - MySQL root: root/Lfnm97HnPug8
+  - MySQL user: telegraminvi/szkTgBhWh6XU
+  - Vault: root token
+
+# 4. Хронология изменений
+
+- Проведён аудит docker-compose.yml, все сервисы переведены на единую сеть backend.
+- Исправлены переменные окружения для MySQL, создан отдельный пользователь и база для Integration Service.
+- Упрощена конфигурация Kibana, устранена ошибка ContainerConfig.
+- Отключён xpack security для Elasticsearch и Kibana.
+- Настроено корректное проксирование и CORS в API Gateway.
+- Удалены устаревшие и неиспользуемые файлы моделей и enum-ов.
+- Проведена чистка Docker-образов и volume для устранения конфликтов.
+- Все сервисы проходят health-check, логи чисты от критических ошибок. 
