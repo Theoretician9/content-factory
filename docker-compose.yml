@@ -298,14 +298,21 @@ services:
     image: docker.elastic.co/logstash/logstash:7.17.0
     volumes:
       - ./logstash/pipeline:/usr/share/logstash/pipeline
+      - ./logs/services:/usr/share/logstash/logs/services
+      - ./logs/api-gateway:/usr/share/logstash/logs/api-gateway
       - logstash_logs:/usr/share/logstash/logs
     ports:
       - "5000:5000"
       - "5044:5044"
-    depends_on:
-      - elasticsearch
     networks:
       - backend
+    environment:
+      - ELASTICSEARCH_HOSTS=http://92.113.146.148:9200
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9600"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   vault:
     image: vault:1.13.3
