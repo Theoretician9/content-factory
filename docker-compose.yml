@@ -283,17 +283,11 @@ services:
     container_name: kibana
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - ELASTICSEARCH_USERNAME=kibana_system
-      - ELASTICSEARCH_PASSWORD=changeme
       - SERVER_HOST=0.0.0.0
       - SERVER_NAME=kibana
       - XPACK_SECURITY_ENABLED=false
-      - ELASTICSEARCH_SSL_VERIFICATIONMODE=none
-      - ELASTICSEARCH_REQUESTTIMEOUT=30000
     ports:
       - "5601:5601"
-    volumes:
-      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml
     networks:
       - backend
     depends_on:
