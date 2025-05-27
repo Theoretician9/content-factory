@@ -250,8 +250,8 @@ services:
   # MySQL Exporter
   mysql-exporter:
     image: prom/mysqld-exporter
-    environment:
-      DATA_SOURCE_NAME: telegraminvi:szkTgBhWh6XU@(mysql:3306)/telegraminvi
+    volumes:
+      - ./my.cnf:/root/.my.cnf:ro
     ports:
       - "9104:9104"
     depends_on:
