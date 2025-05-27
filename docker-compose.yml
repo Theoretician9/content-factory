@@ -324,17 +324,15 @@ services:
       - "8201:8201"
     environment:
       - VAULT_LOG_LEVEL=debug
-      - VAULT_ADDR=http://0.0.0.0:8201
-      - VAULT_API_ADDR=http://vault:8201
-      - VAULT_CLUSTER_ADDR=http://vault:8201
+      - VAULT_DEV_ROOT_TOKEN_ID=root
+      - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8201
     cap_add:
       - IPC_LOCK
     networks:
       - backend
     volumes:
       - vault_data:/vault/data
-      - ./vault/config:/vault/config:rw
-    command: server -config=/vault/config/vault.hcl
+    command: server -dev
     healthcheck:
       test: ["CMD", "vault", "status"]
       interval: 10s
