@@ -108,4 +108,9 @@
 5. [ ] Миграция остальных секретов
 
 ### Следующий шаг:
-Интеграция Vault с остальными микросервисами (User Service, Billing Service и т.д.). 
+Интеграция Vault с остальными микросервисами (User Service, Billing Service и т.д.).
+
+## 2024-05-27
+- Все админские сервисы (Grafana, Prometheus, Alertmanager, Kibana, Vault, RabbitMQ Management, Logstash Monitoring, Elasticsearch) проброшены только на 127.0.0.1 сервера.
+- Доступ к ним возможен только через SSH-туннель.
+- Наружу порты не проброшены, безопасность усилена. 
