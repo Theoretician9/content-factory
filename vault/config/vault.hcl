@@ -5,7 +5,6 @@ storage "file" {
 listener "tcp" {
   address     = "0.0.0.0:8201"
   tls_disable = 1  # В production нужно включить TLS
-  tcp_keep_alive = true
 }
 
 api_addr = "http://vault:8201"
@@ -17,6 +16,10 @@ ui = true
 disable_mlock = false
 default_lease_ttl = "168h"
 max_lease_ttl = "720h"
+
+# Настройки для стабильности
+log_level = "debug"
+cluster_name = "vault-cluster"
 
 # В production нужно настроить seal
 # seal "transit" {
