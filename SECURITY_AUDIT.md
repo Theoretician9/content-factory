@@ -113,4 +113,10 @@
 ## 2024-05-27
 - Все админские сервисы (Grafana, Prometheus, Alertmanager, Kibana, Vault, RabbitMQ Management, Logstash Monitoring, Elasticsearch) проброшены только на 127.0.0.1 сервера.
 - Доступ к ним возможен только через SSH-туннель.
-- Наружу порты не проброшены, безопасность усилена. 
+- Наружу порты не проброшены, безопасность усилена.
+
+## 2024-05-28
+- Для домена content-factory.xyz настроен HTTPS (Let's Encrypt), сертификаты выпускаются и продлеваются через certbot.
+- nginx обслуживает и http, и https, реализован автоматический редирект на https.
+- Для автоматического продления сертификата используется команда: docker-compose run --rm certbot renew && docker-compose restart nginx (рекомендуется добавить в cron).
+- Безопасность внешнего трафика усилена. 
