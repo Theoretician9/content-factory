@@ -184,7 +184,7 @@ services:
       - RABBITMQ_DEFAULT_PASS=password
     ports:
       - "5672:5672"   # AMQP protocol port
-      - "15672:15672" # Management UI
+      - "127.0.0.1:15672:15672" # Management UI
       - "15692:15692" # Prometheus metrics
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
@@ -328,7 +328,7 @@ services:
       - ./elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
       - elasticsearch_data:/usr/share/elasticsearch/data
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     networks:
       - backend
     healthcheck:
@@ -347,6 +347,8 @@ services:
       - SERVER_HOST=0.0.0.0
       - SERVER_NAME=kibana
       - XPACK_SECURITY_ENABLED=true
+    ports:
+      - "127.0.0.1:5601:5601"
     networks:
       - backend
     depends_on:
@@ -361,6 +363,7 @@ services:
       - /var/www/html/logs/api-gateway:/usr/share/logstash/logs/api-gateway
       - logstash_logs:/usr/share/logstash/logs
     ports:
+      - "127.0.0.1:9600:9600"
       - "5000:5000"
       - "5044:5044"
     networks:
@@ -382,6 +385,8 @@ services:
       - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8201
     cap_add:
       - IPC_LOCK
+    ports:
+      - "127.0.0.1:8201:8201"
     networks:
       - backend
     volumes:
