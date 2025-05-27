@@ -209,6 +209,7 @@ services:
       - rabbitmq
     networks:
       - app-network
+      - backend
 
   # Redis
   redis:
@@ -250,7 +251,7 @@ services:
   mysql-exporter:
     image: prom/mysqld-exporter
     environment:
-      - DATA_SOURCE_NAME=telegraminvi:szkTgBhWh6XU@(mysql:3306)/telegraminvi
+      DATA_SOURCE_NAME: telegraminvi:szkTgBhWh6XU@(mysql:3306)/telegraminvi
     ports:
       - "9104:9104"
     depends_on:
@@ -266,6 +267,9 @@ services:
       - ./prometheus/rules:/etc/prometheus/rules
     ports:
       - "9090:9090"
+    networks:
+      - backend
+      - app-network
 
   # Alertmanager
   alertmanager:
