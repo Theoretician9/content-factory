@@ -252,6 +252,8 @@ services:
     image: prom/mysqld-exporter
     volumes:
       - ./my.cnf:/root/.my.cnf:ro
+      - ./my.cnf:/etc/mysql/my.cnf:ro
+      - ./my.cnf:/my.cnf:ro
     ports:
       - "9104:9104"
     depends_on:
