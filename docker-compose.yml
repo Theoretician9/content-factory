@@ -333,7 +333,7 @@ services:
       - backend
     volumes:
       - vault_data:/vault/data
-      - ./vault/config:/vault/config
+      - ./vault/config:/vault/config:rw
     command: server -config=/vault/config/vault.hcl
     healthcheck:
       test: ["CMD", "vault", "status"]
