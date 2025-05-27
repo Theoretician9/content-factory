@@ -279,6 +279,8 @@ services:
       - ./alertmanager/templates:/etc/alertmanager/templates
     ports:
       - "9093:9093"
+    networks:
+      - backend
 
   # Grafana
   grafana:
