@@ -265,8 +265,6 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./prometheus/rules:/etc/prometheus/rules
-    ports:
-      - "9090:9090"
     networks:
       - backend
       - app-network
@@ -277,8 +275,6 @@ services:
     volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
       - ./alertmanager/templates:/etc/alertmanager/templates
-    ports:
-      - "9093:9093"
     networks:
       - backend
 
@@ -290,8 +286,6 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
-    ports:
-      - "3000:3000"
     networks:
       - backend
 
@@ -334,8 +328,6 @@ services:
       - SERVER_HOST=0.0.0.0
       - SERVER_NAME=kibana
       - XPACK_SECURITY_ENABLED=true
-    ports:
-      - "5601:5601"
     networks:
       - backend
     depends_on:
@@ -365,23 +357,22 @@ services:
   vault:
     image: vault:1.13.3
     container_name: vault
-    ports:
-      - "8201:8201"
     environment:
+      - VAULT_LOG_LEVEL=debug
       - VAULT_DEV_ROOT_TOKEN_ID=root
       - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8201
     cap_add:
       - IPC_LOCK
     networks:
       - backend
+    volumes:
+      - vault_data:/vault/data
     command: server -dev
     healthcheck:
       test: ["CMD", "vault", "status"]
       interval: 10s
       timeout: 5s
       retries: 3
-    volumes:
-      - vault_data:/vault/data
     labels:
       - "com.docker.compose.service=vault"
       - "com.docker.compose.project=content-factory"
