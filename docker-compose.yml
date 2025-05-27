@@ -196,6 +196,20 @@ services:
       timeout: 10s
       retries: 5
 
+  # RabbitMQ Exporter
+  rabbitmq-exporter:
+    image: kbudde/rabbitmq-exporter
+    environment:
+      - RABBIT_URL=http://rabbitmq:15672
+      - RABBIT_USER=user
+      - RABBIT_PASSWORD=password
+    ports:
+      - "9419:9419"
+    depends_on:
+      - rabbitmq
+    networks:
+      - app-network
+
   # Redis
   redis:
     image: redis:7.0
@@ -203,6 +217,17 @@ services:
       - "6380:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - backend
+
+  # Redis Exporter
+  redis-exporter:
+    image: oliver006/redis_exporter
+    command: --redis.addr=redis://redis:6379
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis
     networks:
       - backend
 
@@ -218,6 +243,18 @@ services:
       - MYSQL_DATABASE=telegraminvi
     volumes:
       - mysql_data:/var/lib/mysql
+    networks:
+      - backend
+
+  # MySQL Exporter
+  mysql-exporter:
+    image: prom/mysqld-exporter
+    environment:
+      - DATA_SOURCE_NAME=telegraminvi:szkTgBhWh6XU@(mysql:3306)/
+    ports:
+      - "9104:9104"
+    depends_on:
+      - mysql
     networks:
       - backend
 
