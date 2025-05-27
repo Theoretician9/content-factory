@@ -116,6 +116,12 @@
 - Наружу порты не проброшены, безопасность усилена.
 
 ## 2024-05-28
+- Начат переход на централизованное хранение секретов в HashiCorp Vault.
+- Определена структура хранения: secret/<service>/<ключ> (например, secret/mysql/root_password, secret/user-service/secret_key).
+- Пример записи секрета: vault kv put secret/mysql root_password=... user=... user_password=...
+- Пример получения секрета в Python через hvac или vault_client.
+- Постепенно все сервисы будут получать секреты из Vault, а не из .env/docker-compose.
+- В docker-compose и .env останутся только VAULT_ADDR и VAULT_TOKEN.
 - Для домена content-factory.xyz настроен HTTPS (Let's Encrypt), сертификаты выпускаются и продлеваются через certbot.
 - nginx обслуживает и http, и https, реализован автоматический редирект на https.
 - Для автоматического продления сертификата используется команда: docker-compose run --rm certbot renew && docker-compose restart nginx (рекомендуется добавить в cron).

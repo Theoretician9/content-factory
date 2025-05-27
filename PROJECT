@@ -111,5 +111,18 @@ SaaS-платформа для автоматизации маркетинга, 
 - nginx автоматически редиректит все http-запросы на https.
 - Вся внешняя маршрутизация и SSL-терминация происходит на уровне nginx.
 
+### Централизованное хранение секретов (Vault)
+- Все чувствительные данные (пароли, токены, ключи) выносятся в HashiCorp Vault.
+- Структура хранения: secret/<service>/<ключ> (например, secret/mysql/root_password, secret/user-service/secret_key).
+- Пример записи секрета:
+  vault kv put secret/mysql root_password=Lfnm97HnPug8 user=telegraminvi user_password=szkTgBhWh6XU
+- Пример получения секрета в Python:
+  import hvac
+  client = hvac.Client(url='http://vault:8201', token='root')
+  secret = client.secrets.kv.v2.read_secret_version(path='mysql')
+  print(secret['data']['data']['root_password'])
+- Постепенно все сервисы будут получать секреты из Vault, а не из .env/docker-compose.
+- В docker-compose и .env останутся только VAULT_ADDR и VAULT_TOKEN.
+
 ---
 > **В этом файле не ведётся хронология изменений! Только актуальное состояние и описание. Для истории изменений используйте project-status.md** 
