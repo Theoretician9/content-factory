@@ -12,16 +12,16 @@ const FAQ = () => {
 
   const faqs: FAQItem[] = [
     {
-      question: t('faq1_question'),
-      answer: t('faq1_answer'),
+      question: t('faq1_q'),
+      answer: t('faq1_a'),
     },
     {
-      question: t('faq2_question'),
-      answer: t('faq2_answer'),
+      question: t('faq2_q'),
+      answer: t('faq2_a'),
     },
     {
-      question: t('faq3_question'),
-      answer: t('faq3_answer'),
+      question: t('faq3_q'),
+      answer: t('faq3_a'),
     },
     {
       question: t('faq4_question'),
