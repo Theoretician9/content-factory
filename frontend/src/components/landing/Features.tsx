@@ -39,7 +39,7 @@ const Features = () => {
               key={index}
               className="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-lg shadow-lg hover:shadow-2xl transition-shadow duration-300 border border-gray-100 dark:border-gray-700 hover:-translate-y-1 transform cursor-pointer"
             >
-              <div className="text-3xl md:text-5xl mb-4 drop-shadow-lg">{feature.icon}</div>
+              <div className="text-3xl md:text-5xl mb-4 drop-shadow-lg" aria-hidden="true">{feature.icon}</div>
               <h3 className="text-lg md:text-xl font-semibold mb-2 text-gray-900 dark:text-white">{feature.title}</h3>
               <p className="text-gray-600 dark:text-gray-300 text-sm md:text-base">{feature.description}</p>
             </div>
