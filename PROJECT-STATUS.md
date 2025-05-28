@@ -63,6 +63,7 @@
 - OpenAPI JSON остаётся доступен для интеграций.
 - Логирование (audit trail) теперь реализовано для login, logout, register, ошибок аутентификации. Все логи в формате JSON для Logstash/ELK.
 - Security схемы (JWT, CSRF) описаны в OpenAPI/Swagger.
+- Для /auth/login и /auth/register реализована строгая валидация входных данных по pydantic-схемам, ошибки валидации логируются, OpenAPI обновляется автоматически.
 
 ---
 
