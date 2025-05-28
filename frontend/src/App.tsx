@@ -10,16 +10,7 @@ import './App.css'
 
 const App = () => {
   return (
-    <I18nextProvider i18n={i18n}>
-      <Router>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-        </Routes>
-      </Router>
-    </I18nextProvider>
+    <div>test</div>
   );
 };
 
