@@ -112,7 +112,9 @@ SaaS-платформа для автоматизации маркетинга, 
 - Вся внешняя маршрутизация и SSL-терминация происходит на уровне nginx.
 
 ### Централизованное хранение секретов (Vault)
-- Все чувствительные данные (пароли, токены, ключи) выносятся в HashiCorp Vault.
+- Все чувствительные данные (пароли, токены, ключи, CSRF/JWT secret) выносятся в HashiCorp Vault.
+- API Gateway получает CSRF_SECRET_KEY и JWT_SECRET_KEY из Vault, .env не содержит секретов в открытом виде.
+- Интеграция с Vault реализована для API Gateway, Integration Service и постепенно внедряется для остальных сервисов.
 - Структура хранения: secret/<service>/<ключ> (например, secret/mysql/root_password, secret/user-service/secret_key).
 - Пример записи секрета:
   vault kv put secret/mysql root_password=Lfnm97HnPug8 user=telegraminvi user_password=szkTgBhWh6XU
