@@ -21,6 +21,7 @@ import logging
 import json
 from fastapi.openapi.utils import get_openapi
 from fastapi.security import APIKeyHeader
+from pydantic import BaseModel, EmailStr, constr
 
 load_dotenv()
 
@@ -220,14 +221,21 @@ async def refresh_token(request: Request):
     logger.info(json.dumps({"event": "refresh_token_success", "user_id": user_id.decode() if hasattr(user_id, 'decode') else str(user_id), "ip": request.client.host}))
     return {"access_token": new_token}
 
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: constr(min_length=8)
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: constr(min_length=8)
+    confirm_password: constr(min_length=8)
+    agree: bool
+
 @app.post("/auth/login")
 @slowapi_limiter("5/minute")
-async def login(request: Request):
-    """
-    Проксирует login на user-service, логирует все попытки (успех/ошибка)
-    """
+async def login(request: Request, body: LoginRequest):
     try:
-        data = await request.json()
+        data = body.dict()
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(f"{SERVICE_URLS['user']}/auth/login", json=data)
         if resp.status_code == 200:
@@ -258,12 +266,9 @@ async def logout(request: Request):
 
 @app.post("/auth/register")
 @slowapi_limiter("5/minute")
-async def register(request: Request):
-    """
-    Проксирует регистрацию на user-service, логирует все попытки
-    """
+async def register(request: Request, body: RegisterRequest):
     try:
-        data = await request.json()
+        data = body.dict()
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(f"{SERVICE_URLS['user']}/auth/register", json=data)
         if resp.status_code == 200:
@@ -315,6 +320,19 @@ def custom_openapi():
     return app.openapi_schema
 
 app.openapi = custom_openapi
+
+# Глобальный обработчик ошибок валидации
+from fastapi.exception_handlers import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError as FastAPIRequestValidationError
+
+@app.exception_handler(FastAPIRequestValidationError)
+async def validation_exception_handler(request: Request, exc: FastAPIRequestValidationError):
+    logger.warning(json.dumps({"event": "validation_error", "ip": request.client.host, "errors": exc.errors()}))
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()}
+    )
 
 if __name__ == "__main__":
     import uvicorn
