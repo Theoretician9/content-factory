@@ -11,6 +11,7 @@ import time
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from slowapi.decorator import limiter as slowapi_limiter
 from redis import Redis
 from middleware import CSRFMiddleware, RefreshTokenMiddleware
 from itsdangerous import URLSafeTimedSerializer
@@ -192,6 +193,7 @@ async def get_csrf_token():
     return {"csrf_token": token}
 
 @app.post("/auth/refresh")
+@slowapi_limiter("5/minute")
 async def refresh_token(request: Request):
     """
     Refresh JWT token using refresh token
@@ -219,6 +221,7 @@ async def refresh_token(request: Request):
     return {"access_token": new_token}
 
 @app.post("/auth/login")
+@slowapi_limiter("5/minute")
 async def login(request: Request):
     """
     Проксирует login на user-service, логирует все попытки (успех/ошибка)
@@ -254,6 +257,7 @@ async def logout(request: Request):
         raise HTTPException(status_code=500, detail="Internal error")
 
 @app.post("/auth/register")
+@slowapi_limiter("5/minute")
 async def register(request: Request):
     """
     Проксирует регистрацию на user-service, логирует все попытки
