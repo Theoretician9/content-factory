@@ -1,15 +1,12 @@
 import React from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
 const App = () => (
-  <HashRouter>
+  <BrowserRouter>
     <Routes>
-      <Route path="/" element={<div>Landing route</div>} />
-      <Route path="/login" element={<div>Login route</div>} />
-      <Route path="/register" element={<div>Register route</div>} />
-      <Route path="/dashboard" element={<div>Dashboard route</div>} />
+      <Route path="/" element={<div>Test route</div>} />
     </Routes>
-  </HashRouter>
+  </BrowserRouter>
 );
 
 export default App;
