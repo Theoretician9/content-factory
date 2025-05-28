@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    restart: unless-stopped
+    networks:
+      - frontend-network
+    volumes:
+      - frontend-static:/usr/share/nginx/html
+    environment:
+      - NODE_ENV=production
+    expose:
+      - 80
+
+networks:
+  frontend-network:
+    driver: bridge
+
+volumes:
+  frontend-static: 
