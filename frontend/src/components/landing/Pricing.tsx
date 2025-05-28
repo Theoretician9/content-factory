@@ -43,7 +43,7 @@ const Pricing = () => {
 
   return (
     <section className="py-20 bg-gray-900 dark:bg-black">
-      <div className="container mx-auto px-4">
+      <div className="container max-w-screen-xl mx-auto px-2">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4 text-white drop-shadow-lg">
             {t('pricing_title')}
@@ -52,7 +52,7 @@ const Pricing = () => {
             {t('pricing_subtitle')}
           </p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 overflow-x-auto">
           {plans.map((plan, index) => (
             <div
               key={index}
