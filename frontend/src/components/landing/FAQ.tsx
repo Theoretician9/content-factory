@@ -23,10 +23,6 @@ const FAQ = () => {
       question: t('faq3_q'),
       answer: t('faq3_a'),
     },
-    {
-      question: t('faq4_question'),
-      answer: t('faq4_answer'),
-    },
   ];
 
   const toggleFAQ = (index: number) => {
