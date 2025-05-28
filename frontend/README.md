@@ -52,3 +52,26 @@ export default tseslint.config({
   },
 })
 ```
+
+# Content Factory Frontend
+
+## Старт
+
+```bash
+npm install
+npm run dev
+```
+
+## Сборка
+
+```bash
+npm run build
+```
+
+## Переменные окружения
+
+- VITE_API_URL — адрес backend API (например, https://content-factory.xyz/api)
+
+## Docker
+
+- Для production-сборки используйте Dockerfile и копируйте содержимое dist в volume ./frontend-static

@@ -64,6 +64,7 @@
 - Логирование (audit trail) теперь реализовано для login, logout, register, ошибок аутентификации. Все логи в формате JSON для Logstash/ELK.
 - Security схемы (JWT, CSRF) описаны в OpenAPI/Swagger.
 - Для /auth/login и /auth/register реализована строгая валидация входных данных по pydantic-схемам, ошибки валидации логируются, OpenAPI обновляется автоматически.
+- Volume frontend-static для фронта теперь не анонимный, а локальная папка (./frontend-static:/usr/share/nginx/html:ro). Всё содержимое этой папки автоматически доступно nginx и на https://content-factory.xyz/.
 
 ---
 

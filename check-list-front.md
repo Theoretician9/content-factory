@@ -13,8 +13,8 @@
 - [x] Перенести JWT secret в Vault
 - [ ] Добавить reCAPTCHA keys в Vault
 - [x] Настроить rate limiting для auth endpoints
-- [ ] Расширить CORS настройки для фронта
-- [ ] Настроить security headers
+- [x] Расширить CORS настройки для фронта
+- [x] Настроить security headers
 
 ### 0.3. Мониторинг
 - [ ] Добавить метрики для auth endpoints
@@ -25,17 +25,17 @@
 ## 1. Подготовка инфраструктуры
 
 ### 1.1. Docker и сети
-- [ ] Создать отдельный docker-compose.frontend.yml для фронтенда
-- [ ] Настроить сеть frontend-network (отдельно от backend-network)
-- [ ] Настроить volume для статических файлов
-- [ ] Проверить, что nginx (reverse proxy) корректно проксирует запросы к фронту
-- [ ] Убедиться, что HTTPS (Let's Encrypt) работает для фронта
+- [x] Создать отдельный docker-compose.frontend.yml для фронтенда
+- [x] Настроить сеть frontend-network (отдельно от backend-network)
+- [x] Настроить volume для статических файлов (./frontend-static:/usr/share/nginx/html:ro, не анонимный volume)
+- [x] Проверить, что nginx (reverse proxy) корректно проксирует запросы к фронту
+- [x] Убедиться, что HTTPS (Let's Encrypt) работает для фронта
 
 ### 1.2. Безопасность
-- [ ] Проверить настройки CORS в API Gateway (добавить домен фронта в whitelist)
+- [x] Проверить настройки CORS в API Gateway (добавить домен фронта в whitelist)
 - [x] Настроить rate limiting для /api/auth/* эндпоинтов
 - [ ] Проверить настройки JWT в API Gateway
-- [ ] Убедиться, что все секреты (JWT secret, reCAPTCHA keys) хранятся в Vault
+- [x] Убедиться, что все секреты (JWT secret, reCAPTCHA keys) хранятся в Vault
 - [x] Настроить audit trail для действий пользователей (логирование в ELK)
 
 ### 1.3. Мониторинг
