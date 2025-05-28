@@ -16,6 +16,8 @@ from middleware import CSRFMiddleware, RefreshTokenMiddleware
 from itsdangerous import URLSafeTimedSerializer
 import jwt
 from datetime import datetime, timedelta
+import logging
+import json
 
 load_dotenv()
 
@@ -89,6 +91,25 @@ SERVICE_URLS = {
     "parsing": os.getenv("PARSING_SERVICE_URL", "http://92.113.146.148:8007"),
     "integration": os.getenv("INTEGRATION_SERVICE_URL", "http://92.113.146.148:8008"),
 }
+
+# Настройка логирования (JSON в stdout)
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        log_record = {
+            'timestamp': self.formatTime(record, self.datefmt),
+            'level': record.levelname,
+            'message': record.getMessage(),
+            'logger': record.name,
+        }
+        if record.exc_info:
+            log_record['exc_info'] = self.formatException(record.exc_info)
+        return json.dumps(log_record, ensure_ascii=False)
+
+logger = logging.getLogger("audit")
+handler = logging.StreamHandler()
+handler.setFormatter(JsonFormatter())
+logger.setLevel(logging.INFO)
+logger.addHandler(handler)
 
 @app.middleware("http")
 async def add_metrics(request: Request, call_next):
@@ -170,10 +191,12 @@ async def refresh_token(request: Request):
     """
     refresh_token = request.cookies.get("refresh_token")
     if not refresh_token:
+        logger.warning(json.dumps({"event": "refresh_token_missing", "ip": request.client.host}))
         raise HTTPException(status_code=401, detail="Refresh token missing")
         
     user_id = redis_client.get(f"refresh_token:{refresh_token}")
     if not user_id:
+        logger.warning(json.dumps({"event": "invalid_refresh_token", "ip": request.client.host}))
         raise HTTPException(status_code=401, detail="Invalid refresh token")
         
     # Generate new JWT token
@@ -185,7 +208,7 @@ async def refresh_token(request: Request):
         os.getenv("JWT_SECRET_KEY", "your-jwt-secret"),
         algorithm="HS256"
     )
-    
+    logger.info(json.dumps({"event": "refresh_token_success", "user_id": user_id.decode() if hasattr(user_id, 'decode') else str(user_id), "ip": request.client.host}))
     return {"access_token": new_token}
 
 if __name__ == "__main__":
