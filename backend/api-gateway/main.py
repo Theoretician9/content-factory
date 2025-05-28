@@ -218,6 +218,59 @@ async def refresh_token(request: Request):
     logger.info(json.dumps({"event": "refresh_token_success", "user_id": user_id.decode() if hasattr(user_id, 'decode') else str(user_id), "ip": request.client.host}))
     return {"access_token": new_token}
 
+@app.post("/auth/login")
+async def login(request: Request):
+    """
+    Проксирует login на user-service, логирует все попытки (успех/ошибка)
+    """
+    try:
+        data = await request.json()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(f"{SERVICE_URLS['user']}/auth/login", json=data)
+        if resp.status_code == 200:
+            logger.info(json.dumps({"event": "login_success", "email": data.get("email"), "ip": request.client.host}))
+        else:
+            logger.warning(json.dumps({"event": "login_failed", "email": data.get("email"), "ip": request.client.host, "status": resp.status_code, "error": resp.text}))
+        return resp.json(), resp.status_code
+    except Exception as e:
+        logger.error(json.dumps({"event": "login_error", "ip": request.client.host, "error": str(e)}))
+        raise HTTPException(status_code=500, detail="Internal error")
+
+@app.post("/auth/logout")
+async def logout(request: Request):
+    """
+    Проксирует logout на user-service, логирует все попытки
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(f"{SERVICE_URLS['user']}/auth/logout", cookies=request.cookies)
+        if resp.status_code == 200:
+            logger.info(json.dumps({"event": "logout_success", "ip": request.client.host}))
+        else:
+            logger.warning(json.dumps({"event": "logout_failed", "ip": request.client.host, "status": resp.status_code, "error": resp.text}))
+        return resp.json(), resp.status_code
+    except Exception as e:
+        logger.error(json.dumps({"event": "logout_error", "ip": request.client.host, "error": str(e)}))
+        raise HTTPException(status_code=500, detail="Internal error")
+
+@app.post("/auth/register")
+async def register(request: Request):
+    """
+    Проксирует регистрацию на user-service, логирует все попытки
+    """
+    try:
+        data = await request.json()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(f"{SERVICE_URLS['user']}/auth/register", json=data)
+        if resp.status_code == 200:
+            logger.info(json.dumps({"event": "register_success", "email": data.get("email"), "ip": request.client.host}))
+        else:
+            logger.warning(json.dumps({"event": "register_failed", "email": data.get("email"), "ip": request.client.host, "status": resp.status_code, "error": resp.text}))
+        return resp.json(), resp.status_code
+    except Exception as e:
+        logger.error(json.dumps({"event": "register_error", "ip": request.client.host, "error": str(e)}))
+        raise HTTPException(status_code=500, detail="Internal error")
+
 # Security schemes
 jwt_scheme = APIKeyHeader(name="Authorization", auto_error=False)
 csrf_scheme = APIKeyHeader(name="X-CSRF-Token", auto_error=False)
