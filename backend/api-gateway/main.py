@@ -23,10 +23,15 @@ from fastapi.security import APIKeyHeader
 
 load_dotenv()
 
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+
 app = FastAPI(
     title="Content Factory API Gateway",
     description="API Gateway for Content Factory SaaS Platform",
-    version="1.0.0"
+    version="1.0.0",
+    docs_url="/docs" if DEBUG else None,
+    redoc_url="/redoc" if DEBUG else None,
+    openapi_url="/openapi.json"
 )
 
 # Redis client
