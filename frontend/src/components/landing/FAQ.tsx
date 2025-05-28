@@ -41,41 +41,53 @@ const FAQ = () => {
           </p>
         </div>
         <div className="max-w-3xl mx-auto">
-          {faqs.map((faq, index) => (
-            <div
-              key={index}
-              className="mb-4 bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden border border-gray-100 dark:border-gray-700"
-            >
-              <button
-                className="w-full px-4 md:px-6 py-3 md:py-4 text-left focus:outline-none flex justify-between items-center group"
-                onClick={() => toggleFAQ(index)}
-              >
-                <h3 className="text-base md:text-lg font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors">
-                  {faq.question}
-                </h3>
-                <svg
-                  className={`w-6 h-6 ml-2 transform transition-transform duration-300 ${openIndex === index ? 'rotate-180 text-blue-600' : 'text-gray-400 group-hover:text-blue-600'}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </button>
+          {faqs.map((faq, index) => {
+            const contentId = `faq-content-${index}`;
+            return (
               <div
-                className={`transition-all duration-300 ease-in-out overflow-hidden ${openIndex === index ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'}`}
+                key={index}
+                className="mb-4 bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden border border-gray-100 dark:border-gray-700"
               >
-                <div className="px-4 md:px-6 py-3 md:py-4 bg-gray-50 dark:bg-gray-900">
-                  <p className="text-gray-600 dark:text-gray-300 text-sm md:text-base">{faq.answer}</p>
+                <button
+                  className="w-full px-4 md:px-6 py-3 md:py-4 text-left focus:outline-none flex justify-between items-center group"
+                  onClick={() => toggleFAQ(index)}
+                  aria-expanded={openIndex === index}
+                  aria-controls={contentId}
+                  id={`faq-header-${index}`}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <h3 className="text-base md:text-lg font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors">
+                    {faq.question}
+                  </h3>
+                  <svg
+                    className={`w-6 h-6 ml-2 transform transition-transform duration-300 ${openIndex === index ? 'rotate-180 text-blue-600' : 'text-gray-400 group-hover:text-blue-600'}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
+                <div
+                  id={contentId}
+                  role="region"
+                  aria-labelledby={`faq-header-${index}`}
+                  className={`transition-all duration-300 ease-in-out overflow-hidden ${openIndex === index ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'}`}
+                >
+                  <div className="px-4 md:px-6 py-3 md:py-4 bg-gray-50 dark:bg-gray-900">
+                    <p className="text-gray-600 dark:text-gray-300 text-sm md:text-base">{faq.answer}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>

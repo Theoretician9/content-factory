@@ -92,6 +92,7 @@ const Pricing = () => {
                     ? 'bg-blue-500 text-white hover:bg-blue-600 shadow-lg'
                     : 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600'
                 }`}
+                aria-label={`Начать регистрацию на тарифе ${plan.name}`}
               >
                 {plan.buttonText}
               </Link>
