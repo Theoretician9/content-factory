@@ -18,6 +18,8 @@ import jwt
 from datetime import datetime, timedelta
 import logging
 import json
+from fastapi.openapi.utils import get_openapi
+from fastapi.security import APIKeyHeader
 
 load_dotenv()
 
@@ -210,6 +212,47 @@ async def refresh_token(request: Request):
     )
     logger.info(json.dumps({"event": "refresh_token_success", "user_id": user_id.decode() if hasattr(user_id, 'decode') else str(user_id), "ip": request.client.host}))
     return {"access_token": new_token}
+
+# Security schemes
+jwt_scheme = APIKeyHeader(name="Authorization", auto_error=False)
+csrf_scheme = APIKeyHeader(name="X-CSRF-Token", auto_error=False)
+
+# Кастомизация OpenAPI схемы
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    openapi_schema["components"]["securitySchemes"] = {
+        "JWT": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "Authorization",
+            "description": "JWT access token в формате 'Bearer <token>'"
+        },
+        "CSRF": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "description": "CSRF-токен, получаемый с /csrf-token"
+        }
+    }
+    # Применяем схемы по умолчанию для защищённых эндпоинтов
+    for path, methods in openapi_schema["paths"].items():
+        for method, details in methods.items():
+            if path.startswith("/auth") or path.startswith("/user"):
+                details.setdefault("security", []).append({"JWT": []})
+                if method in ["post", "put", "delete"]:
+                    details["security"].append({"CSRF": []})
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 if __name__ == "__main__":
     import uvicorn
