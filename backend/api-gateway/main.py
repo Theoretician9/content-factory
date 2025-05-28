@@ -22,6 +22,8 @@ import json
 from fastapi.openapi.utils import get_openapi
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, EmailStr, constr
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 load_dotenv()
 
@@ -49,9 +51,10 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS configuration
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "https://content-factory.xyz,https://admin.content-factory.xyz,http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://92.113.146.148:3000").split(","),
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -333,6 +336,19 @@ async def validation_exception_handler(request: Request, exc: FastAPIRequestVali
         status_code=422,
         content={"detail": exc.errors()}
     )
+
+# Security headers middleware
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response: Response = await call_next(request)
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; frame-ancestors 'none'; base-uri 'self';"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 if __name__ == "__main__":
     import uvicorn
