@@ -1,7 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import Button from '../Button';
 
 const Hero = () => {
   const { t } = useTranslation();
@@ -18,14 +17,10 @@ const Hero = () => {
           </p>
           <div className="space-x-4">
             <Link to="/register">
-              <Button variant="primary" className="bg-white text-blue-600 hover:bg-blue-50">
-                {t('hero_cta')}
-              </Button>
+              <button className="bg-white text-blue-600 px-4 py-2 rounded font-semibold">{t('hero_cta')}</button>
             </Link>
             <Link to="/login">
-              <Button variant="secondary" className="bg-transparent border-2 border-white hover:bg-white/10">
-                {t('login')}
-              </Button>
+              <button className="bg-transparent border-2 border-white px-4 py-2 rounded font-semibold text-white">{t('login')}</button>
             </Link>
           </div>
         </div>
