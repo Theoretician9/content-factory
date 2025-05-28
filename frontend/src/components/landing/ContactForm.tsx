@@ -60,7 +60,7 @@ const ContactForm = () => {
                 htmlFor="name"
                 className="block text-sm font-medium text-gray-700 mb-1"
               >
-                {t('contact_name_label')}
+                {t('contact_name')}
               </label>
               <input
                 type="text"
@@ -77,7 +77,7 @@ const ContactForm = () => {
                 htmlFor="email"
                 className="block text-sm font-medium text-gray-700 mb-1"
               >
-                {t('contact_email_label')}
+                {t('contact_email')}
               </label>
               <input
                 type="email"
@@ -94,7 +94,7 @@ const ContactForm = () => {
                 htmlFor="message"
                 className="block text-sm font-medium text-gray-700 mb-1"
               >
-                {t('contact_message_label')}
+                {t('contact_message')}
               </label>
               <textarea
                 id="message"
@@ -112,8 +112,8 @@ const ContactForm = () => {
               className="w-full bg-blue-500 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
             >
               {status === 'loading'
-                ? t('contact_submitting')
-                : t('contact_submit')}
+                ? t('contact_send')
+                : t('contact_send')}
             </button>
             {status === 'success' && (
               <p className="text-green-600 text-center">
