@@ -1,15 +1,18 @@
 import React from 'react';
-import { useTranslation } from 'react-i18next';
+import Hero from '../components/landing/Hero';
+import Features from '../components/landing/Features';
+import Pricing from '../components/landing/Pricing';
+import FAQ from '../components/landing/FAQ';
+import ContactForm from '../components/landing/ContactForm';
 
 const Landing = () => {
-  const { t } = useTranslation();
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen">
-      <h1 className="text-3xl font-bold mb-4">{t('welcome')}</h1>
-      <div className="space-x-4">
-        <a href="/login" className="btn btn-primary">{t('login')}</a>
-        <a href="/register" className="btn btn-secondary">{t('register')}</a>
-      </div>
+    <div>
+      <Hero />
+      <Features />
+      <Pricing />
+      <FAQ />
+      <ContactForm />
     </div>
   );
 };
