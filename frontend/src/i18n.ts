@@ -34,6 +34,7 @@ const resources = {
       pricing_month: '/month',
       pricing_features: 'Features',
       pricing_cta: 'Get Started',
+      popular_plan: 'Most Popular',
       
       // FAQ
       faq_title: 'Frequently Asked Questions',
@@ -88,6 +89,7 @@ const resources = {
       pricing_month: '/месяц',
       pricing_features: 'Возможности',
       pricing_cta: 'Начать',
+      popular_plan: 'Самый популярный',
       
       // FAQ
       faq_title: 'Часто Задаваемые Вопросы',
