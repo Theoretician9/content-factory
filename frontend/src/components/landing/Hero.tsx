@@ -1,6 +1,5 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
 
 const Hero = () => {
   const { t } = useTranslation();
@@ -16,12 +15,8 @@ const Hero = () => {
             {t('hero_subtitle')}
           </p>
           <div className="space-x-4">
-            <Link to="/register">
-              <button className="bg-white text-blue-600 px-4 py-2 rounded font-semibold">{t('hero_cta')}</button>
-            </Link>
-            <Link to="/login">
-              <button className="bg-transparent border-2 border-white px-4 py-2 rounded font-semibold text-white">{t('login')}</button>
-            </Link>
+            <span>{t('hero_cta')}</span>
+            <span>{t('login')}</span>
           </div>
         </div>
       </div>
