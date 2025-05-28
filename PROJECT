@@ -155,7 +155,7 @@ SaaS-платформа для автоматизации маркетинга, 
 
 - Swagger UI и ReDoc отключены во внешней среде (docs_url, redoc_url = None), доступны только при DEBUG=true.
 - OpenAPI JSON (/openapi.json) остаётся доступен для интеграций.
-- Логирование (audit trail) реализовано для refresh, все логи в формате JSON для Logstash/ELK.
+- Логирование (audit trail) теперь реализовано для login, logout, register, ошибок аутентификации. Все логи в формате JSON для Logstash/ELK.
 - Security схемы (JWT, CSRF) описаны в OpenAPI/Swagger.
 
 ---
