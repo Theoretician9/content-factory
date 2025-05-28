@@ -1,17 +1,11 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { I18nextProvider } from 'react-i18next';
+import i18n from './i18n';
 
-const App = () => {
-  return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<div>Landing route</div>} />
-        <Route path="/login" element={<div>Login route</div>} />
-        <Route path="/register" element={<div>Register route</div>} />
-        <Route path="/dashboard" element={<div>Dashboard route</div>} />
-      </Routes>
-    </Router>
-  );
-};
+const App = () => (
+  <I18nextProvider i18n={i18n}>
+    <div>i18n test</div>
+  </I18nextProvider>
+);
 
 export default App;
