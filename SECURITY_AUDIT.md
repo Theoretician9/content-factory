@@ -127,4 +127,8 @@
 - Для автоматического продления сертификата используется команда: docker-compose run --rm certbot renew && docker-compose restart nginx (рекомендуется добавить в cron).
 - Безопасность внешнего трафика усилена.
 - CSRF_SECRET_KEY и JWT_SECRET_KEY для API Gateway вынесены в Vault, .env не содержит этих секретов в открытом виде.
-- Интеграция с Vault реализована для API Gateway, продолжается для остальных сервисов. 
+- Интеграция с Vault реализована для API Gateway, продолжается для остальных сервисов.
+- Swagger UI и ReDoc отключены во внешней среде, доступны только при DEBUG=true.
+- OpenAPI JSON остаётся доступен для интеграций.
+- Логирование (audit trail) реализовано для refresh, все логи в формате JSON для Logstash/ELK.
+- Security схемы (JWT, CSRF) описаны в OpenAPI/Swagger. 
