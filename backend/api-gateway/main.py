@@ -11,6 +11,11 @@ import time
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from redis import Redis
+from middleware import CSRFMiddleware, RefreshTokenMiddleware
+from itsdangerous import URLSafeTimedSerializer
+import jwt
+from datetime import datetime, timedelta
 
 load_dotenv()
 
@@ -18,6 +23,13 @@ app = FastAPI(
     title="Content Factory API Gateway",
     description="API Gateway for Content Factory SaaS Platform",
     version="1.0.0"
+)
+
+# Redis client
+redis_client = Redis(
+    host=os.getenv("REDIS_HOST", "localhost"),
+    port=int(os.getenv("REDIS_PORT", 6379)),
+    db=int(os.getenv("REDIS_DB", 0))
 )
 
 # Rate limiter setup
@@ -32,6 +44,19 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+)
+
+# CSRF middleware
+app.add_middleware(
+    CSRFMiddleware,
+    secret_key=os.getenv("CSRF_SECRET_KEY", "your-secret-key")
+)
+
+# Refresh token middleware
+app.add_middleware(
+    RefreshTokenMiddleware,
+    redis_client=redis_client,
+    jwt_secret=os.getenv("JWT_SECRET_KEY", "your-jwt-secret")
 )
 
 # Prometheus metrics
@@ -128,6 +153,40 @@ async def services_health_check(request: Request) -> Dict[str, Dict[str, str]]:
                     "error": str(e)
                 }
     return health_status
+
+@app.get("/csrf-token")
+async def get_csrf_token():
+    """
+    Generate CSRF token for the frontend
+    """
+    serializer = URLSafeTimedSerializer(os.getenv("CSRF_SECRET_KEY", "your-secret-key"))
+    token = serializer.dumps("csrf-token")
+    return {"csrf_token": token}
+
+@app.post("/auth/refresh")
+async def refresh_token(request: Request):
+    """
+    Refresh JWT token using refresh token
+    """
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Refresh token missing")
+        
+    user_id = redis_client.get(f"refresh_token:{refresh_token}")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+        
+    # Generate new JWT token
+    new_token = jwt.encode(
+        {
+            "sub": user_id,
+            "exp": datetime.utcnow() + timedelta(minutes=15)
+        },
+        os.getenv("JWT_SECRET_KEY", "your-jwt-secret"),
+        algorithm="HS256"
+    )
+    
+    return {"access_token": new_token}
 
 if __name__ == "__main__":
     import uvicorn
