@@ -42,13 +42,13 @@ const Pricing = () => {
   ];
 
   return (
-    <section className="py-20">
+    <section className="py-20 bg-gray-900 dark:bg-black">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold mb-4 text-white drop-shadow-lg">
             {t('pricing_title')}
           </h2>
-          <p className="text-xl text-gray-600">
+          <p className="text-xl text-gray-300">
             {t('pricing_subtitle')}
           </p>
         </div>
@@ -56,17 +56,15 @@ const Pricing = () => {
           {plans.map((plan, index) => (
             <div
               key={index}
-              className={`bg-white p-8 rounded-lg shadow-lg ${
-                plan.popular ? 'border-2 border-blue-500' : ''
-              }`}
+              className={`relative bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg hover:shadow-2xl transition-shadow duration-300 border border-gray-100 dark:border-gray-700 hover:-translate-y-1 transform cursor-pointer ${plan.popular ? 'ring-2 ring-blue-500 scale-105 z-10' : ''}`}
             >
               {plan.popular && (
-                <div className="bg-blue-500 text-white text-center py-1 rounded-t-lg -mt-8 -mx-8 mb-4">
+                <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-xs font-bold px-4 py-1 rounded-full shadow-lg">
                   {t('popular_plan')}
                 </div>
               )}
-              <h3 className="text-2xl font-bold mb-4">{plan.name}</h3>
-              <div className="text-4xl font-bold mb-6">{plan.price}</div>
+              <h3 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">{plan.name}</h3>
+              <div className="text-4xl font-bold mb-6 text-blue-700 dark:text-blue-400">{plan.price}</div>
               <ul className="mb-8">
                 {plan.features.map((feature, idx) => (
                   <li key={idx} className="mb-2 flex items-center">
@@ -83,16 +81,16 @@ const Pricing = () => {
                         d="M5 13l4 4L19 7"
                       />
                     </svg>
-                    {feature}
+                    <span className="text-gray-700 dark:text-gray-200">{feature}</span>
                   </li>
                 ))}
               </ul>
               <Link
                 to="/register"
-                className={`block text-center py-3 px-6 rounded-lg font-semibold ${
+                className={`block text-center py-3 px-6 rounded-lg font-semibold transition-all duration-200 ${
                   plan.popular
-                    ? 'bg-blue-500 text-white hover:bg-blue-600'
-                    : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                    ? 'bg-blue-500 text-white hover:bg-blue-600 shadow-lg'
+                    : 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600'
                 }`}
               >
                 {plan.buttonText}
