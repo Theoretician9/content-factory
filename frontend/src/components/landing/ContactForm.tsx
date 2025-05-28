@@ -48,18 +48,18 @@ const ContactForm = () => {
   };
 
   return (
-    <section className="py-20 bg-gray-900 dark:bg-black">
+    <section className="py-10 md:py-20 bg-gray-900 dark:bg-black">
       <div className="container mx-auto px-4">
         <div className="max-w-2xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-white drop-shadow-lg">
+          <div className="text-center mb-8 md:mb-12">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 text-white drop-shadow-lg">
               {t('contact_title')}
             </h2>
-            <p className="text-xl text-gray-300">
+            <p className="text-base sm:text-lg md:text-xl text-gray-300">
               {t('contact_subtitle')}
             </p>
           </div>
-          <form onSubmit={handleSubmit} className="space-y-6 bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg">
+          <form onSubmit={handleSubmit} className="space-y-6 bg-white dark:bg-gray-800 p-4 md:p-8 rounded-lg shadow-lg">
             <div>
               <label
                 htmlFor="name"
