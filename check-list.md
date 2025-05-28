@@ -61,7 +61,7 @@
 - [ ] Обеспечить безопасность фронта (HTTPS, JWT, секреты только через Vault, audit trail)
 - [x] Swagger UI и ReDoc отключены во внешней среде, доступны только при DEBUG=true
 - [x] OpenAPI JSON остаётся доступен для интеграций
-- [x] Логирование (audit trail) реализовано для refresh, все логи в формате JSON для Logstash/ELK
+- [x] Логирование (audit trail) теперь реализовано для login, logout, register, ошибок аутентификации. Все логи в формате JSON для Logstash/ELK
 - [x] Security схемы (JWT, CSRF) описаны в OpenAPI/Swagger
 
 ---
