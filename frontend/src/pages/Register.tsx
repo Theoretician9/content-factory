@@ -64,9 +64,16 @@ const Register = () => {
         setLoading(false);
         return;
       }
+      if (res.status === 502) {
+        setError('Сервис пользователей временно недоступен. Попробуйте позже.');
+        setLoading(false);
+        return;
+      }
       const data = await res.json();
       if (!res.ok) {
         setError(data.detail || 'Ошибка регистрации');
+      } else if (!data.access_token || !data.refresh_token) {
+        setError('Ошибка регистрации: не получены токены.');
       } else {
         localStorage.setItem('access_token', data.access_token);
         localStorage.setItem('refresh_token', data.refresh_token);
