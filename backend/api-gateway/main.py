@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from typing import Dict
@@ -142,21 +142,23 @@ async def add_metrics(request: Request, call_next):
     
     return response
 
-@app.get("/health")
+api_router = APIRouter(prefix="/api")
+
+@api_router.get("/health")
 async def health_check(request: Request) -> Dict[str, str]:
     """
     Health check endpoint for the API Gateway
     """
     return {"status": "healthy", "service": "api-gateway"}
 
-@app.get("/metrics")
+@api_router.get("/metrics")
 async def metrics():
     """
     Prometheus metrics endpoint
     """
     return generate_latest()
 
-@app.get("/services/health")
+@api_router.get("/services/health")
 async def services_health_check(request: Request) -> Dict[str, Dict[str, str]]:
     """
     Health check for all microservices
@@ -187,7 +189,7 @@ async def services_health_check(request: Request) -> Dict[str, Dict[str, str]]:
                 }
     return health_status
 
-@app.get("/csrf-token")
+@api_router.get("/csrf-token")
 async def get_csrf_token():
     """
     Generate CSRF token for the frontend
@@ -196,7 +198,7 @@ async def get_csrf_token():
     token = serializer.dumps("csrf-token")
     return {"csrf_token": token}
 
-@app.post("/auth/refresh")
+@api_router.post("/auth/refresh")
 @slowapi_limiter("5/minute")
 async def refresh_token(request: Request):
     """
@@ -234,7 +236,7 @@ class RegisterRequest(BaseModel):
     confirm_password: constr(min_length=8)
     agree: bool
 
-@app.post("/auth/login")
+@api_router.post("/auth/login")
 @slowapi_limiter("5/minute")
 async def login(request: Request, body: LoginRequest):
     try:
@@ -250,7 +252,7 @@ async def login(request: Request, body: LoginRequest):
         logger.error(json.dumps({"event": "login_error", "ip": request.client.host, "error": str(e)}))
         raise HTTPException(status_code=500, detail="Internal error")
 
-@app.post("/auth/logout")
+@api_router.post("/auth/logout")
 async def logout(request: Request):
     """
     Проксирует logout на user-service, логирует все попытки
@@ -267,7 +269,7 @@ async def logout(request: Request):
         logger.error(json.dumps({"event": "logout_error", "ip": request.client.host, "error": str(e)}))
         raise HTTPException(status_code=500, detail="Internal error")
 
-@app.post("/auth/register")
+@api_router.post("/auth/register")
 @slowapi_limiter("5/minute")
 async def register(request: Request, body: RegisterRequest):
     try:
@@ -283,7 +285,7 @@ async def register(request: Request, body: RegisterRequest):
         logger.error(json.dumps({"event": "register_error", "ip": request.client.host, "error": str(e)}))
         raise HTTPException(status_code=500, detail="Internal error")
 
-@app.get("/auth/me")
+@api_router.get("/auth/me")
 async def get_profile(request: Request):
     headers = {}
     if "authorization" in request.headers:
@@ -358,6 +360,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+app.include_router(api_router)
 
 if __name__ == "__main__":
     import uvicorn
