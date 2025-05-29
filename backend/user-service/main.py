@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Database configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi")
+DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://telegraminvi:szkTgBhWh6XU@mysql:3306/user_service")
 engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=3600)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
