@@ -288,18 +288,25 @@ async def register(request: Request, body: RegisterRequest):
         else:
             logger.warning(json.dumps({"event": "register_failed", "email": data.get("email"), "ip": request.client.host, "status": resp.status_code, "error": resp.text}))
         return resp.json(), resp.status_code
+    except httpx.ConnectError:
+        raise HTTPException(status_code=502, detail="User service unavailable")
     except Exception as e:
         logger.error(json.dumps({"event": "register_error", "ip": request.client.host, "error": str(e)}))
-        raise HTTPException(status_code=500, detail="Internal error")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/auth/me")
 async def get_profile(request: Request):
     headers = {}
     if "authorization" in request.headers:
-        headers["authorization"] = request.headers["authorization"]
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(f"{SERVICE_URLS['user']}/users/me", headers=headers)
-    return resp.json(), resp.status_code
+        headers["authorization"] = str(request.headers["authorization"])
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{SERVICE_URLS['user']}/users/me", headers=headers)
+        return resp.json(), resp.status_code
+    except httpx.ConnectError:
+        raise HTTPException(status_code=502, detail="User service unavailable")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Security schemes
 jwt_scheme = APIKeyHeader(name="Authorization", auto_error=False)
