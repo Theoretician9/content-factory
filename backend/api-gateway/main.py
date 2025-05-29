@@ -11,7 +11,7 @@ import time
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from slowapi.decorator import limiter as slowapi_limiter
+from slowapi.middleware import SlowAPIMiddleware
 from redis import Redis
 from middleware import CSRFMiddleware, RefreshTokenMiddleware
 from itsdangerous import URLSafeTimedSerializer
@@ -49,6 +49,7 @@ redis_client = Redis(
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # CORS configuration
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "https://content-factory.xyz,https://admin.content-factory.xyz,http://localhost:3000").split(",")
@@ -199,10 +200,10 @@ async def get_csrf_token():
     return {"csrf_token": token}
 
 @api_router.post("/auth/refresh")
-@slowapi_limiter("5/minute")
+@limiter.limit("5/minute")
 async def refresh_token(request: Request):
     """
-    Refresh JWT token using refresh token
+    Refresh access token using refresh token
     """
     refresh_token = request.cookies.get("refresh_token")
     if not refresh_token:
@@ -237,8 +238,11 @@ class RegisterRequest(BaseModel):
     agree: bool
 
 @api_router.post("/auth/login")
-@slowapi_limiter("5/minute")
+@limiter.limit("5/minute")
 async def login(request: Request, body: LoginRequest):
+    """
+    Login user and return access token
+    """
     try:
         data = body.dict()
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -270,8 +274,11 @@ async def logout(request: Request):
         raise HTTPException(status_code=500, detail="Internal error")
 
 @api_router.post("/auth/register")
-@slowapi_limiter("5/minute")
+@limiter.limit("5/minute")
 async def register(request: Request, body: RegisterRequest):
+    """
+    Register new user
+    """
     try:
         data = body.dict()
         async with httpx.AsyncClient(timeout=10.0) as client:
