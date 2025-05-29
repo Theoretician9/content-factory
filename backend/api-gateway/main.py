@@ -62,10 +62,10 @@ app.add_middleware(
 )
 
 # CSRF middleware
-app.add_middleware(
-    CSRFMiddleware,
-    secret_key=os.getenv("CSRF_SECRET_KEY", "your-secret-key")
-)
+# app.add_middleware(
+#     CSRFMiddleware,
+#     secret_key=os.getenv("CSRF_SECRET_KEY", "your-secret-key")
+# )
 
 # Refresh token middleware
 app.add_middleware(
