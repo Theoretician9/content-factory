@@ -228,11 +228,13 @@ async def refresh_token(request: Request):
     return {"access_token": new_token}
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    username: str = None
+    email: EmailStr = None
     password: constr(min_length=8)
 
 class RegisterRequest(BaseModel):
     email: EmailStr
+    username: constr(min_length=3) = None
     password: constr(min_length=8)
     confirm_password: constr(min_length=8)
     agree: bool
@@ -245,7 +247,11 @@ async def login(request: Request, body: LoginRequest):
     """
     try:
         data = body.dict()
-        # Для user-service логин нужен в формате form-urlencoded
+        # Если username не передан, используем email как username
+        if not data.get("username") and data.get("email"):
+            data["username"] = data["email"]
+        # Удаляем email, если он не нужен user-service
+        data.pop("email", None)
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
                 f"{SERVICE_URLS['user']}/token",
@@ -253,9 +259,9 @@ async def login(request: Request, body: LoginRequest):
                 headers={"Content-Type": "application/x-www-form-urlencoded"}
             )
         if resp.status_code == 200:
-            logger.info(json.dumps({"event": "login_success", "email": data.get("email"), "ip": request.client.host}))
+            logger.info(json.dumps({"event": "login_success", "email": data.get("username"), "ip": request.client.host}))
         else:
-            logger.warning(json.dumps({"event": "login_failed", "email": data.get("email"), "ip": request.client.host, "status": resp.status_code, "error": resp.text}))
+            logger.warning(json.dumps({"event": "login_failed", "email": data.get("username"), "ip": request.client.host, "status": resp.status_code, "error": resp.text}))
         return resp.json(), resp.status_code
     except Exception as e:
         logger.error(json.dumps({"event": "login_error", "ip": request.client.host, "error": str(e)}))
@@ -286,6 +292,9 @@ async def register(request: Request, body: RegisterRequest):
     """
     try:
         data = body.dict()
+        # Если username не передан, используем email как username
+        if not data.get("username") and data.get("email"):
+            data["username"] = data["email"]
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(f"{SERVICE_URLS['user']}/users/", json=data)
         if resp.status_code == 200:
