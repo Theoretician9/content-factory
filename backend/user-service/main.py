@@ -62,7 +62,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str
 
-class User(UserBase):
+class UserResponse(UserBase):
     id: int
     is_active: bool
     is_superuser: bool
@@ -204,7 +204,7 @@ async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequ
         duration = time.time() - start_time
         DB_OPERATION_LATENCY.labels(operation="login").observe(duration)
 
-@app.post("/users/", response_model=User)
+@app.post("/users/", response_model=UserResponse)
 @limiter.limit("3/minute")
 def create_user(request: Request, user: UserCreate, db: Session = Depends(get_db)):
     start_time = time.time()
@@ -230,7 +230,7 @@ def create_user(request: Request, user: UserCreate, db: Session = Depends(get_db
         duration = time.time() - start_time
         DB_OPERATION_LATENCY.labels(operation="create_user").observe(duration)
 
-@app.get("/users/me", response_model=User)
+@app.get("/users/me", response_model=UserResponse)
 @limiter.limit("10/minute")
 async def read_users_me(request: Request, current_user: User = Depends(get_current_user)):
     return current_user
