@@ -165,7 +165,7 @@ async def add_metrics(request: Request, call_next):
 # Endpoints
 @app.post("/token", response_model=Token)
 @limiter.limit("5/minute")
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     start_time = time.time()
     try:
         user = db.query(User).filter(User.username == form_data.username).first()
@@ -186,7 +186,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 @app.post("/users/", response_model=User)
 @limiter.limit("3/minute")
-def create_user(user: UserCreate, db: Session = Depends(get_db)):
+def create_user(request: Request, user: UserCreate, db: Session = Depends(get_db)):
     start_time = time.time()
     try:
         db_user = db.query(User).filter(User.email == user.email).first()
@@ -212,12 +212,12 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
 
 @app.get("/users/me", response_model=User)
 @limiter.limit("10/minute")
-async def read_users_me(current_user: User = Depends(get_current_user)):
+async def read_users_me(request: Request, current_user: User = Depends(get_current_user)):
     return current_user
 
 @app.get("/health")
 @limiter.limit("5/minute")
-async def health_check():
+async def health_check(request: Request):
     try:
         # Check database connection
         with engine.connect() as conn:
