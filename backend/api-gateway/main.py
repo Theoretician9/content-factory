@@ -283,6 +283,15 @@ async def register(request: Request, body: RegisterRequest):
         logger.error(json.dumps({"event": "register_error", "ip": request.client.host, "error": str(e)}))
         raise HTTPException(status_code=500, detail="Internal error")
 
+@app.get("/auth/me")
+async def get_profile(request: Request):
+    headers = {}
+    if "authorization" in request.headers:
+        headers["authorization"] = request.headers["authorization"]
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(f"{SERVICE_URLS['user']}/users/me", headers=headers)
+    return resp.json(), resp.status_code
+
 # Security schemes
 jwt_scheme = APIKeyHeader(name="Authorization", auto_error=False)
 csrf_scheme = APIKeyHeader(name="X-CSRF-Token", auto_error=False)
