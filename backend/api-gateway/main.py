@@ -245,8 +245,13 @@ async def login(request: Request, body: LoginRequest):
     """
     try:
         data = body.dict()
+        # Для user-service логин нужен в формате form-urlencoded
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(f"{SERVICE_URLS['user']}/auth/login", json=data)
+            resp = await client.post(
+                f"{SERVICE_URLS['user']}/token",
+                data=data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"}
+            )
         if resp.status_code == 200:
             logger.info(json.dumps({"event": "login_success", "email": data.get("email"), "ip": request.client.host}))
         else:
@@ -282,7 +287,7 @@ async def register(request: Request, body: RegisterRequest):
     try:
         data = body.dict()
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(f"{SERVICE_URLS['user']}/auth/register", json=data)
+            resp = await client.post(f"{SERVICE_URLS['user']}/users/", json=data)
         if resp.status_code == 200:
             logger.info(json.dumps({"event": "register_success", "email": data.get("email"), "ip": request.client.host}))
         else:
