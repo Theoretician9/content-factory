@@ -8,7 +8,7 @@ const Register = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const [form, setForm] = useState({ email: '', password: '', confirm: '' });
+  const [form, setForm] = useState({ email: '', password: '', confirm: '', agree: false });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,7 +20,11 @@ const Register = () => {
   }, [location.state]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value, type, checked } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,20 +42,35 @@ const Register = () => {
       setError('Пароли не совпадают');
       return;
     }
+    if (!form.agree) {
+      setError('Необходимо согласиться с условиями');
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: form.email, password: form.password })
+        body: JSON.stringify({
+          email: form.email,
+          password: form.password,
+          confirm_password: form.confirm,
+          agree: form.agree,
+        })
       });
+      if (res.status === 422) {
+        const data = await res.json();
+        setError('Ошибка валидации: ' + (data.detail?.map((d: any) => d.msg).join(', ') || '')); 
+        setLoading(false);
+        return;
+      }
       const data = await res.json();
       if (!res.ok) {
         setError(data.detail || 'Ошибка регистрации');
       } else {
         localStorage.setItem('access_token', data.access_token);
         localStorage.setItem('refresh_token', data.refresh_token);
-        setForm({ email: '', password: '', confirm: '' });
+        setForm({ email: '', password: '', confirm: '', agree: false });
         navigate('/dashboard');
       }
     } catch (e) {
@@ -114,6 +133,17 @@ const Register = () => {
             required
             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-900 dark:text-white"
           />
+        </div>
+        <div className="flex items-center">
+          <input
+            type="checkbox"
+            id="agree"
+            name="agree"
+            checked={form.agree}
+            onChange={handleChange}
+            className="mr-2"
+          />
+          <label htmlFor="agree" className="text-sm text-gray-700 dark:text-gray-200">Я соглашаюсь с условиями</label>
         </div>
         {error && <div className="text-red-600 text-center text-sm">{error}</div>}
         <button
