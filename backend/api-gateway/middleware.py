@@ -5,13 +5,16 @@ import os
 from datetime import datetime, timedelta
 import jwt
 from typing import Optional
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 # CSRF middleware
-class CSRFMiddleware:
-    def __init__(self, secret_key: str):
+class CSRFMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, secret_key: str):
+        super().__init__(app)
         self.serializer = URLSafeTimedSerializer(secret_key)
         
-    async def __call__(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next):
         # Пропускаем CSRF проверку для GET запросов
         if request.method == "GET":
             return await call_next(request)
@@ -30,12 +33,13 @@ class CSRFMiddleware:
         return await call_next(request)
 
 # Refresh token middleware
-class RefreshTokenMiddleware:
-    def __init__(self, redis_client: Redis, jwt_secret: str):
+class RefreshTokenMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, redis_client: Redis, jwt_secret: str):
+        super().__init__(app)
         self.redis = redis_client
         self.jwt_secret = jwt_secret
         
-    async def __call__(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next):
         # Проверяем наличие refresh token в cookie
         refresh_token = request.cookies.get("refresh_token")
         if not refresh_token:
