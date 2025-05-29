@@ -8,7 +8,7 @@ const Register = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const [form, setForm] = useState({ email: '', password: '', confirm: '', agree: false });
+  const [form, setForm] = useState({ email: '', password: '', confirm_password: '', agree: false });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -38,7 +38,7 @@ const Register = () => {
       setError('Пароль должен быть не менее 6 символов');
       return;
     }
-    if (form.password !== form.confirm) {
+    if (form.password !== form.confirm_password) {
       setError('Пароли не совпадают');
       return;
     }
@@ -54,13 +54,20 @@ const Register = () => {
         body: JSON.stringify({
           email: form.email,
           password: form.password,
-          confirm_password: form.confirm,
+          confirm_password: form.confirm_password,
           agree: form.agree,
         })
       });
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        setError('Ошибка регистрации: невалидный ответ сервера');
+        setLoading(false);
+        return;
+      }
       if (res.status === 422) {
-        const data = await res.json();
-        setError('Ошибка валидации: ' + (data.detail?.map((d: any) => d.msg).join(', ') || '')); 
+        setError('Ошибка валидации: ' + (data.detail?.map((d: any) => d.msg).join(', ') || ''));
         setLoading(false);
         return;
       }
@@ -69,7 +76,6 @@ const Register = () => {
         setLoading(false);
         return;
       }
-      const data = await res.json();
       if (!res.ok) {
         setError(data.detail || 'Ошибка регистрации');
       } else if (!data.access_token || !data.refresh_token) {
@@ -77,7 +83,7 @@ const Register = () => {
       } else {
         localStorage.setItem('access_token', data.access_token);
         localStorage.setItem('refresh_token', data.refresh_token);
-        setForm({ email: '', password: '', confirm: '', agree: false });
+        setForm({ email: '', password: '', confirm_password: '', agree: false });
         navigate('/dashboard');
       }
     } catch (e) {
@@ -129,12 +135,12 @@ const Register = () => {
           </div>
         </div>
         <div>
-          <label htmlFor="confirm" className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-200">Подтвердите пароль</label>
+          <label htmlFor="confirm_password" className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-200">Подтвердите пароль</label>
           <input
             type={showPassword ? 'text' : 'password'}
-            id="confirm"
-            name="confirm"
-            value={form.confirm}
+            id="confirm_password"
+            name="confirm_password"
+            value={form.confirm_password}
             onChange={handleChange}
             autoComplete="new-password"
             required
