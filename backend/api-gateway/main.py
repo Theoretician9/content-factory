@@ -262,7 +262,8 @@ async def login(request: Request, body: LoginRequest):
             logger.info(json.dumps({"event": "login_success", "email": data.get("username"), "ip": request.client.host}))
         else:
             logger.warning(json.dumps({"event": "login_failed", "email": data.get("username"), "ip": request.client.host, "status": resp.status_code, "error": resp.text}))
-        return resp.json(), resp.status_code
+        # Возвращаем только объект токена, а не массив
+        return resp.json()
     except Exception as e:
         logger.error(json.dumps({"event": "login_error", "ip": request.client.host, "error": str(e)}))
         raise HTTPException(status_code=500, detail="Internal error")
