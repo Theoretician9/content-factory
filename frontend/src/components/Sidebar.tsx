@@ -32,6 +32,16 @@ const Sidebar: React.FC<{ isOpen?: boolean; onClose?: () => void }> = ({ isOpen 
         `}
         style={{ minHeight: '100vh' }}
       >
+        {/* Крестик для закрытия на мобильных */}
+        {onClose && (
+          <button
+            className="md:hidden absolute top-4 right-4 p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-800 text-2xl text-gray-500"
+            onClick={onClose}
+            aria-label="Закрыть меню"
+          >
+            ✕
+          </button>
+        )}
         <div>
           <div className="flex items-center mb-8">
             <span className="text-2xl font-bold text-blue-600 mr-2">C</span>

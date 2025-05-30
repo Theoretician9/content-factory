@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUser } from '../UserContext';
 
-const Header: React.FC<{ title?: string }> = ({ title = 'Главная' }) => {
+const Header: React.FC<{ title?: string; onMenuClick?: () => void }> = ({ title = 'Главная', onMenuClick }) => {
   const { t, i18n } = useTranslation();
   const { logout } = useUser();
 
@@ -11,8 +11,22 @@ const Header: React.FC<{ title?: string }> = ({ title = 'Главная' }) => {
   };
 
   return (
-    <header className="flex items-center justify-between px-8 py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-      <h1 className="text-xl font-bold">{title}</h1>
+    <header className="flex items-center justify-between px-4 md:px-8 py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+      <div className="flex items-center gap-3">
+        {/* Гамбургер только на мобильных */}
+        {onMenuClick && (
+          <button
+            className="md:hidden p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-800 focus:outline-none"
+            onClick={onMenuClick}
+            aria-label="Открыть меню"
+          >
+            <span className="block w-6 h-0.5 bg-gray-700 dark:bg-gray-200 mb-1"></span>
+            <span className="block w-6 h-0.5 bg-gray-700 dark:bg-gray-200 mb-1"></span>
+            <span className="block w-6 h-0.5 bg-gray-700 dark:bg-gray-200"></span>
+          </button>
+        )}
+        <h1 className="text-xl font-bold">{title}</h1>
+      </div>
       <div className="flex items-center gap-4">
         <button
           onClick={logout}
