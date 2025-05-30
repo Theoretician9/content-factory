@@ -170,4 +170,184 @@ SaaS-платформа для автоматизации маркетинга, 
 - ⏳ Следующий шаг: добавить капчу на регистрацию и email-валидацию
 
 ---
+
+## Текущие сервисы и контейнеры
+
+### 1. Prometheus
+- **Назначение:** Сбор метрик со всех сервисов, инфраструктуры, экспортёров.
+- **Внутренний адрес:** prometheus:9090 (docker-сеть backend)
+- **Внешний адрес:** Только через SSH-туннель: http://localhost:9090
+- **Данные:** ./prometheus:/etc/prometheus (volume)
+- **Команды:**
+  - Перезапуск: `docker-compose restart prometheus`
+  - Логи: `docker-compose logs prometheus --tail 100`
+  - Войти в контейнер: `docker-compose exec prometheus sh`
+- **Особенности:**
+  - Конфиг prometheus.yml настраивает источники метрик
+  - Метрики доступны только из внутренней сети
+
+### 2. Grafana
+- **Назначение:** Визуализация метрик, дашборды, алерты
+- **Внутренний адрес:** grafana:3000
+- **Внешний адрес:** Только через SSH-туннель: http://localhost:3000
+- **Данные:** ./grafana:/var/lib/grafana (volume)
+- **Команды:**
+  - Перезапуск: `docker-compose restart grafana`
+  - Логи: `docker-compose logs grafana --tail 100`
+  - Войти в контейнер: `docker-compose exec grafana sh`
+- **Особенности:**
+  - Дефолтный логин: admin/admin (сменить после первого входа)
+  - Дашборды и источники данных сохраняются в volume
+
+### 3. Kibana
+- **Назначение:** Визуализация логов из Elasticsearch
+- **Внутренний адрес:** kibana:5601
+- **Внешний адрес:** Только через SSH-туннель: http://localhost:5601
+- **Команды:**
+  - Перезапуск: `docker-compose restart kibana`
+  - Логи: `docker-compose logs kibana --tail 100`
+  - Войти в контейнер: `docker-compose exec kibana sh`
+- **Особенности:**
+  - Требует индекс logs-* в Elasticsearch
+
+### 4. Elasticsearch
+- **Назначение:** Хранение логов, поиск, аналитика
+- **Внутренний адрес:** elasticsearch:9200
+- **Внешний адрес:** Только через SSH-туннель: http://localhost:9200
+- **Данные:** ./elasticsearch:/usr/share/elasticsearch/data (volume)
+- **Команды:**
+  - Перезапуск: `docker-compose restart elasticsearch`
+  - Логи: `docker-compose logs elasticsearch --tail 100`
+  - Войти в контейнер: `docker-compose exec elasticsearch sh`
+- **Особенности:**
+  - Требует много памяти (рекомендуется 2ГБ+)
+
+### 5. Logstash
+- **Назначение:** Парсинг и обработка логов, отправка в Elasticsearch
+- **Внутренний адрес:** logstash:5044
+- **Данные:** ./logstash:/usr/share/logstash/pipeline (volume)
+- **Команды:**
+  - Перезапуск: `docker-compose restart logstash`
+  - Логи: `docker-compose logs logstash --tail 100`
+  - Войти в контейнер: `docker-compose exec logstash sh`
+- **Особенности:**
+  - Конфиг logstash.conf настраивает парсинг логов
+
+### 6. Alertmanager
+- **Назначение:** Алерты по метрикам Prometheus
+- **Внутренний адрес:** alertmanager:9093
+- **Внешний адрес:** Только через SSH-туннель: http://localhost:9093
+- **Команды:**
+  - Перезапуск: `docker-compose restart alertmanager`
+  - Логи: `docker-compose logs alertmanager --tail 100`
+  - Войти в контейнер: `docker-compose exec alertmanager sh`
+
+### 7. MySQL
+- **Назначение:** Основная база данных для сервисов
+- **Внутренний адрес:** mysql:3306
+- **Внешний адрес:** Только через SSH-туннель: localhost:3307
+- **Данные:** ./mysql:/var/lib/mysql (volume)
+- **Пользователи:**
+  - root/Lfnm97HnPug8
+  - telegraminvi/szkTgBhWh6XU
+- **Команды:**
+  - Перезапуск: `docker-compose restart mysql`
+  - Логи: `docker-compose logs mysql --tail 100`
+  - Войти в контейнер: `docker-compose exec mysql bash`
+  - MySQL shell: `docker-compose exec mysql mysql -u root -p`
+
+### 8. Redis
+- **Назначение:** Кэш, очереди, хранение refresh token
+- **Внутренний адрес:** redis:6379
+- **Внешний адрес:** Только через SSH-туннель: localhost:6380
+- **Данные:** ./redis:/data (volume)
+- **Команды:**
+  - Перезапуск: `docker-compose restart redis`
+  - Логи: `docker-compose logs redis --tail 100`
+  - Войти в контейнер: `docker-compose exec redis sh`
+  - Redis CLI: `docker-compose exec redis redis-cli`
+
+### 9. RabbitMQ
+- **Назначение:** Очереди задач между сервисами
+- **Внутренний адрес:** rabbitmq:5672
+- **Внешний адрес:** Только через SSH-туннель: http://localhost:15672 (UI)
+- **Данные:** ./rabbitmq:/var/lib/rabbitmq (volume)
+- **Команды:**
+  - Перезапуск: `docker-compose restart rabbitmq`
+  - Логи: `docker-compose logs rabbitmq --tail 100`
+  - Войти в контейнер: `docker-compose exec rabbitmq bash`
+- **Особенности:**
+  - UI: http://localhost:15672 (user/password)
+
+### 10. Vault
+- **Назначение:** Хранение секретов, токенов, ключей
+- **Внутренний адрес:** vault:8201
+- **Внешний адрес:** Только через SSH-туннель: http://localhost:8201
+- **Данные:** ./vault:/vault/file (volume)
+- **Команды:**
+  - Перезапуск: `docker-compose restart vault`
+  - Логи: `docker-compose logs vault --tail 100`
+  - Войти в контейнер: `docker-compose exec vault sh`
+- **Особенности:**
+  - root token: root
+  - Все секреты для сервисов хранятся здесь
+
+### 11. API Gateway (api-gateway)
+- **Назначение:** Единая точка входа для всех фронтов и сервисов, проксирование, аутентификация, лимиты, CSRF, логирование
+- **Внутренний адрес:** api-gateway:8000
+- **Внешний адрес:** http://92.113.146.148:8000 (или через nginx)
+- **Команды:**
+  - Перезапуск: `docker-compose restart api-gateway`
+  - Логи: `docker-compose logs api-gateway --tail 100`
+  - Войти в контейнер: `docker-compose exec api-gateway sh`
+- **Особенности:**
+  - Все запросы с фронта идут через этот сервис
+  - Лимиты через slowapi, логирование в stdout (JSON)
+  - Секреты (CSRF, JWT) берутся из Vault
+
+### 12. User Service (user-service)
+- **Назначение:** Регистрация, логин, управление пользователями
+- **Внутренний адрес:** user-service:8001
+- **Команды:**
+  - Перезапуск: `docker-compose restart user-service`
+  - Логи: `docker-compose logs user-service --tail 100`
+  - Войти в контейнер: `docker-compose exec user-service sh`
+- **Особенности:**
+  - Работает только через api-gateway
+  - Подключается к MySQL (user_service)
+
+### 13. Integration Service (integration-service)
+- **Назначение:** Пример микросервиса для интеграций
+- **Внутренний адрес:** integration-service:8000
+- **Команды:**
+  - Перезапуск: `docker-compose restart integration-service`
+  - Логи: `docker-compose logs integration-service --tail 100`
+  - Войти в контейнер: `docker-compose exec integration-service sh`
+
+### 14. Frontend
+- **Назначение:** Внешний SPA (React)
+- **Внутренний адрес:** frontend:3000 (dev), статика деплоится в ./frontend-static
+- **Внешний адрес:** https://content-factory.xyz
+- **Данные:** ./frontend-static:/usr/share/nginx/html:ro (volume)
+- **Команды:**
+  - Сборка: `cd frontend && npm run build`
+  - Перезапуск nginx: `docker-compose restart nginx`
+- **Особенности:**
+  - Все статика деплоится через volume
+  - Для разработки: `npm run dev` (порт 3000)
+
+### 15. Nginx (reverse proxy)
+- **Назначение:** Внешний reverse proxy, SSL-терминация, публикация фронта и API
+- **Внутренний адрес:** nginx:80, nginx:443
+- **Внешний адрес:** http://content-factory.xyz, https://content-factory.xyz
+- **Данные:** ./nginx.conf, ./frontend-static
+- **Команды:**
+  - Перезапуск: `docker-compose restart nginx`
+  - Логи: `docker-compose logs nginx --tail 100`
+  - Войти в контейнер: `docker-compose exec nginx sh`
+- **Особенности:**
+  - SSL через Let's Encrypt
+  - Проксирует все запросы на api-gateway и frontend
+
+---
 > **В этом файле не ведётся хронология изменений! Только актуальное состояние и описание. Для истории изменений используйте project-status.md** 
