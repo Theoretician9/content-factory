@@ -82,28 +82,35 @@ const Register = () => {
         return;
       }
       if (res.ok) {
+        console.log('Registration successful, response:', data);
         // После успешной регистрации — автоматический логин
         try {
-          console.log('Attempting automatic login after registration...');
+          console.log('Starting automatic login...');
+          const loginBody = JSON.stringify({ 
+            email: form.email, 
+            password: form.password 
+          });
+          console.log('Login request body:', loginBody);
+          
           const loginRes = await fetch('/api/auth/login', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              email: form.email, 
-              password: form.password 
-            })
+            headers: { 
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: loginBody
           });
           
+          console.log('Login response status:', loginRes.status);
+          const loginData = await loginRes.json();
+          console.log('Login response data:', loginData);
+          
           if (!loginRes.ok) {
-            const loginError = await loginRes.json();
-            console.error('Login failed:', loginError);
-            setError('Регистрация успешна, но не удалось войти: ' + (loginError.detail || 'Ошибка логина'));
+            console.error('Login failed:', loginData);
+            setError('Регистрация успешна, но не удалось войти: ' + (loginData.detail || 'Ошибка логина'));
             setLoading(false);
             return;
           }
-
-          const loginData = await loginRes.json();
-          console.log('Login successful, received tokens');
           
           if (!loginData.access_token || !loginData.refresh_token) {
             console.error('No tokens in response:', loginData);
@@ -112,15 +119,18 @@ const Register = () => {
             return;
           }
 
+          console.log('Login successful, saving tokens...');
           localStorage.setItem('access_token', loginData.access_token);
           localStorage.setItem('refresh_token', loginData.refresh_token);
           setForm({ email: '', password: '', confirm_password: '', agree: false });
+          console.log('Redirecting to dashboard...');
           navigate('/dashboard');
         } catch (e) {
           console.error('Login error:', e);
           setError('Регистрация успешна, но не удалось войти. Попробуйте войти вручную.');
         }
       } else {
+        console.error('Registration failed:', data);
         setError(data.detail || 'Ошибка регистрации');
       }
     } catch (e) {
