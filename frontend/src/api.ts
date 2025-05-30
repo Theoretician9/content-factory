@@ -33,4 +33,16 @@ export async function apiFetch(url: string, options: RequestInit = {}) {
     }
   }
   return res;
-} 
+}
+
+// Централизованные функции для микросервисов
+export const api = {
+  getTariff: () => apiFetch('/api/billing/tariff'),
+  getMailingStatus: () => apiFetch('/api/mailing/status'),
+  getIntegrationsStatus: () => apiFetch('/api/integrations/status'),
+  getAutocallStatus: () => apiFetch('/api/autocall/status'),
+  getFunnelsStatus: () => apiFetch('/api/funnels/status'),
+  getParsingStatus: () => apiFetch('/api/parsing/status'),
+  getAnalytics: () => apiFetch('/api/analytics/summary'),
+  // ...добавлять новые сервисы по мере необходимости
+}; 
