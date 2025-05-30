@@ -85,10 +85,20 @@ const Dashboard = () => {
   const [user, setUser] = useState<{ email?: string; name?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
   const [cardData, setCardData] = useState<Record<string, any>>({});
   const [cardLoading, setCardLoading] = useState<Record<string, boolean>>({});
   const [cardError, setCardError] = useState<Record<string, string>>({});
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 768);
+      if (window.innerWidth >= 768) setSidebarOpen(false); // на desktop всегда открыт
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -165,10 +175,10 @@ const Dashboard = () => {
 
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Sidebar />
+      <Sidebar isOpen={isDesktop || isSidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col min-h-screen">
-        <Header title="Главная" />
-        <main className="flex-1 p-8 flex flex-col gap-6">
+        <Header title="Главная" onMenuClick={() => setSidebarOpen(true)} />
+        <main className="flex-1 p-4 md:p-8 flex flex-col gap-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto w-full">
             {cards.map((card) => (
               <div key={card.key} className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col gap-3">
