@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
-import { api } from '../api';
+import { api, apiFetch } from '../api';
 
 interface CardConfig {
   key: string;
@@ -94,7 +94,7 @@ const Dashboard = () => {
     let ignore = false;
     setLoading(true);
     setError('');
-    api.auth.me()
+    apiFetch('/api/auth/me')
       .then(async (res) => {
         if (!res.ok) {
           if (res.status === 502) {
