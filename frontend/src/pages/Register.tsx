@@ -100,6 +100,7 @@ const Register = () => {
           });
 
           const loginData = await loginRes.json();
+          console.log('Login response:', loginData);
           
           if (!loginRes.ok) {
             setError('Регистрация успешна, но не удалось войти: ' + (loginData.detail || 'Ошибка логина'));
@@ -107,7 +108,8 @@ const Register = () => {
             return;
           }
           
-          if (!loginData.access_token || !loginData.refresh_token) {
+          if (!loginData.access_token && !loginData.refresh_token) {
+            console.log('Response structure:', Object.keys(loginData));
             setError('Регистрация успешна, но не получены токены. Попробуйте войти вручную.');
             setLoading(false);
             return;
@@ -118,6 +120,7 @@ const Register = () => {
           setForm({ email: '', password: '', confirm_password: '', agree: false });
           navigate('/dashboard');
         } catch (e) {
+          console.error('Login error:', e);
           setError('Регистрация успешна, но не удалось войти. Попробуйте войти вручную.');
         } finally {
           setLoading(false);
