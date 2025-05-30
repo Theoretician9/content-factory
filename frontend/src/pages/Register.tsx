@@ -78,13 +78,26 @@ const Register = () => {
       }
       if (!res.ok) {
         setError(data.detail || 'Ошибка регистрации');
-      } else if (!data.access_token || !data.refresh_token) {
-        setError('Ошибка регистрации: не получены токены.');
       } else {
-        localStorage.setItem('access_token', data.access_token);
-        localStorage.setItem('refresh_token', data.refresh_token);
-        setForm({ email: '', password: '', confirm_password: '', agree: false });
-        navigate('/dashboard');
+        // После успешной регистрации — автоматический логин
+        try {
+          const loginRes = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: form.email, password: form.password })
+          });
+          const loginData = await loginRes.json();
+          if (!loginRes.ok) {
+            setError('Регистрация успешна, но не удалось войти: ' + (loginData.detail || 'Ошибка логина'));
+          } else {
+            localStorage.setItem('access_token', loginData.access_token);
+            localStorage.setItem('refresh_token', loginData.refresh_token);
+            setForm({ email: '', password: '', confirm_password: '', agree: false });
+            navigate('/dashboard');
+          }
+        } catch (e) {
+          setError('Регистрация успешна, но не удалось войти. Попробуйте войти вручную.');
+        }
       }
     } catch (e) {
       setError('Ошибка сети или сервера');
