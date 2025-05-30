@@ -76,9 +76,12 @@ const Register = () => {
         setLoading(false);
         return;
       }
-      if (!res.ok) {
+      if (res.status === 400) {
         setError(data.detail || 'Ошибка регистрации');
-      } else {
+        setLoading(false);
+        return;
+      }
+      if (res.ok) {
         // После успешной регистрации — автоматический логин
         try {
           const loginRes = await fetch('/api/auth/login', {
@@ -98,6 +101,8 @@ const Register = () => {
         } catch (e) {
           setError('Регистрация успешна, но не удалось войти. Попробуйте войти вручную.');
         }
+      } else {
+        setError(data.detail || 'Ошибка регистрации');
       }
     } catch (e) {
       setError('Ошибка сети или сервера');
