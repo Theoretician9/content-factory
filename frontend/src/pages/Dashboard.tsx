@@ -3,7 +3,80 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
-import { apiFetch } from '../api';
+import { api } from '../api';
+
+interface CardConfig {
+  key: string;
+  title: string;
+  fetch: () => Promise<Response>;
+  fields: { label: string; key: string }[];
+}
+
+const cards: CardConfig[] = [
+  {
+    key: 'tariff',
+    title: 'Текущий тариф',
+    fetch: api.getTariff,
+    fields: [
+      { label: 'Название тарифа', key: 'name' },
+    ],
+  },
+  {
+    key: 'mailing',
+    title: 'Рассылки/Инвайт',
+    fetch: api.getMailingStatus,
+    fields: [
+      { label: 'Статус', key: 'status' },
+      { label: 'Добавлено', key: 'added' },
+      { label: 'Сообщений отправлено', key: 'sent' },
+    ],
+  },
+  {
+    key: 'integrations',
+    title: 'Интеграции',
+    fetch: api.getIntegrationsStatus,
+    fields: [
+      { label: 'Статус', key: 'status' },
+      { label: 'Активных интеграций', key: 'active' },
+    ],
+  },
+  {
+    key: 'autocall',
+    title: 'Автообзвон',
+    fetch: api.getAutocallStatus,
+    fields: [
+      { label: 'Статус', key: 'status' },
+      { label: 'Звонков сегодня', key: 'calls_today' },
+    ],
+  },
+  {
+    key: 'funnels',
+    title: 'Воронки',
+    fetch: api.getFunnelsStatus,
+    fields: [
+      { label: 'Статус', key: 'status' },
+      { label: 'Активных воронок', key: 'active' },
+    ],
+  },
+  {
+    key: 'parsing',
+    title: 'Парсинг',
+    fetch: api.getParsingStatus,
+    fields: [
+      { label: 'Статус', key: 'status' },
+      { label: 'Задач в очереди', key: 'queue' },
+    ],
+  },
+  {
+    key: 'analytics',
+    title: 'Аналитика',
+    fetch: api.getAnalytics,
+    fields: [
+      { label: 'Статус', key: 'status' },
+      { label: 'Показателей', key: 'metrics' },
+    ],
+  },
+];
 
 const Dashboard = () => {
   const { t } = useTranslation();
@@ -13,19 +86,15 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [tariff, setTariff] = useState<string>('');
-  const [tariffLoading, setTariffLoading] = useState(true);
-  const [tariffError, setTariffError] = useState('');
-
-  const [mailing, setMailing] = useState<{ status?: string; added?: number; sent?: number } | null>(null);
-  const [mailingLoading, setMailingLoading] = useState(true);
-  const [mailingError, setMailingError] = useState('');
+  const [cardData, setCardData] = useState<Record<string, any>>({});
+  const [cardLoading, setCardLoading] = useState<Record<string, boolean>>({});
+  const [cardError, setCardError] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let ignore = false;
     setLoading(true);
     setError('');
-    apiFetch('/api/auth/me')
+    api.auth.me()
       .then(async (res) => {
         if (!res.ok) {
           if (res.status === 502) {
@@ -56,33 +125,18 @@ const Dashboard = () => {
   }, [location.search]);
 
   useEffect(() => {
-    setTariffLoading(true);
-    setTariffError('');
-    apiFetch('/api/billing/tariff')
-      .then(async (res) => {
-        if (!res.ok) throw new Error('Ошибка получения тарифа');
-        const data = await res.json();
-        setTariff(data?.name || '—');
-      })
-      .catch(() => setTariffError('Нет данных/Ошибка подключения'))
-      .finally(() => setTariffLoading(false));
-  }, []);
-
-  useEffect(() => {
-    setMailingLoading(true);
-    setMailingError('');
-    apiFetch('/api/mailing/status')
-      .then(async (res) => {
-        if (!res.ok) throw new Error('Ошибка получения статуса рассылки');
-        const data = await res.json();
-        setMailing({
-          status: data?.status || '—',
-          added: data?.added ?? 0,
-          sent: data?.sent ?? 0,
-        });
-      })
-      .catch(() => setMailingError('Нет данных/Ошибка подключения'))
-      .finally(() => setMailingLoading(false));
+    cards.forEach((card) => {
+      setCardLoading((prev) => ({ ...prev, [card.key]: true }));
+      setCardError((prev) => ({ ...prev, [card.key]: '' }));
+      card.fetch()
+        .then(async (res) => {
+          if (!res.ok) throw new Error('Ошибка');
+          const data = await res.json();
+          setCardData((prev) => ({ ...prev, [card.key]: data }));
+        })
+        .catch(() => setCardError((prev) => ({ ...prev, [card.key]: 'Нет данных/Ошибка подключения' })))
+        .finally(() => setCardLoading((prev) => ({ ...prev, [card.key]: false })));
+    });
   }, []);
 
   const handleLogout = () => {
@@ -115,41 +169,25 @@ const Dashboard = () => {
       <div className="flex-1 flex flex-col min-h-screen">
         <Header title="Главная" />
         <main className="flex-1 p-8 flex flex-col gap-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto w-full">
-            {/* Текущий тариф */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col gap-3">
-              <div className="font-semibold text-lg mb-2">Текущий тариф</div>
-              {tariffLoading ? (
-                <div className="text-gray-400">Загрузка...</div>
-              ) : tariffError ? (
-                <div className="text-red-500">{tariffError}</div>
-              ) : (
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="text"
-                    value={tariff}
-                    readOnly
-                    className="border border-gray-300 dark:border-gray-700 rounded px-3 py-2 bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-200 w-64"
-                  />
-                  <button className="ml-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">Изменить</button>
-                </div>
-              )}
-            </div>
-            {/* Рассылки/Инвайт */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col gap-3">
-              <div className="font-semibold text-lg mb-2">Рассылки/Инвайт</div>
-              {mailingLoading ? (
-                <div className="text-gray-400">Загрузка...</div>
-              ) : mailingError ? (
-                <div className="text-red-500">{mailingError}</div>
-              ) : (
-                <>
-                  <div>Статус: <span className="font-semibold">{mailing?.status}</span></div>
-                  <div>Добавлено: <span className="font-semibold">{mailing?.added}</span></div>
-                  <div>Сообщений отправлено: <span className="font-semibold">{mailing?.sent}</span></div>
-                </>
-              )}
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto w-full">
+            {cards.map((card) => (
+              <div key={card.key} className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col gap-3">
+                <div className="font-semibold text-lg mb-2">{card.title}</div>
+                {cardLoading[card.key] ? (
+                  <div className="text-gray-400">Загрузка...</div>
+                ) : cardError[card.key] ? (
+                  <div className="text-red-500">{cardError[card.key]}</div>
+                ) : (
+                  <>
+                    {card.fields.map((field) => (
+                      <div key={field.key}>
+                        {field.label}: <span className="font-semibold">{cardData[card.key]?.[field.key] ?? '—'}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            ))}
           </div>
         </main>
       </div>
