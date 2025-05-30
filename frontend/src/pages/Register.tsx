@@ -82,15 +82,10 @@ const Register = () => {
         return;
       }
       if (res.ok) {
-        console.log('Registration successful, response:', data);
         // После успешной регистрации — автоматический логин
         try {
-          console.log('Starting automatic login...');
-          const loginBody = JSON.stringify({ 
-            email: form.email, 
-            password: form.password 
-          });
-          console.log('Login request body:', loginBody);
+          // Небольшая задержка перед логином
+          await new Promise(resolve => setTimeout(resolve, 1000));
           
           const loginRes = await fetch('/api/auth/login', {
             method: 'POST',
@@ -98,45 +93,41 @@ const Register = () => {
               'Content-Type': 'application/json',
               'Accept': 'application/json'
             },
-            body: loginBody
+            body: JSON.stringify({ 
+              email: form.email, 
+              password: form.password 
+            })
           });
-          
-          console.log('Login response status:', loginRes.status);
+
           const loginData = await loginRes.json();
-          console.log('Login response data:', loginData);
           
           if (!loginRes.ok) {
-            console.error('Login failed:', loginData);
             setError('Регистрация успешна, но не удалось войти: ' + (loginData.detail || 'Ошибка логина'));
             setLoading(false);
             return;
           }
           
           if (!loginData.access_token || !loginData.refresh_token) {
-            console.error('No tokens in response:', loginData);
             setError('Регистрация успешна, но не получены токены. Попробуйте войти вручную.');
             setLoading(false);
             return;
           }
 
-          console.log('Login successful, saving tokens...');
           localStorage.setItem('access_token', loginData.access_token);
           localStorage.setItem('refresh_token', loginData.refresh_token);
           setForm({ email: '', password: '', confirm_password: '', agree: false });
-          console.log('Redirecting to dashboard...');
           navigate('/dashboard');
         } catch (e) {
-          console.error('Login error:', e);
           setError('Регистрация успешна, но не удалось войти. Попробуйте войти вручную.');
+        } finally {
+          setLoading(false);
         }
       } else {
-        console.error('Registration failed:', data);
         setError(data.detail || 'Ошибка регистрации');
+        setLoading(false);
       }
     } catch (e) {
       setError('Ошибка сети или сервера');
-    } finally {
-      setLoading(false);
     }
   };
 
