@@ -54,8 +54,8 @@ class TelegramService:
         
         # Активные клиенты для переиспользования
         self._active_clients: Dict[str, TelegramClient] = {}
-        # Активные процессы авторизации НЕ используем - заменяем на Redis
-        # self._auth_sessions: Dict[str, Dict] = {}
+        # Временные активные сессии авторизации (для доставки кодов)
+        self._auth_sessions: Dict[str, Dict] = {}
         
     async def _get_api_credentials(self) -> Tuple[str, str]:
         """Получение API ID и Hash из Vault"""
@@ -523,7 +523,7 @@ class TelegramService:
             ) 
 
     async def _save_auth_session(self, auth_key: str, client: TelegramClient, phone_code_hash: str) -> None:
-        """Сохранение состояния авторизации в Redis"""
+        """Сохранение состояния авторизации в Redis И в памяти"""
         try:
             session_string = client.session.save()
             auth_data = {
@@ -535,7 +535,15 @@ class TelegramService:
             # Сохраняем в Redis на 5 минут
             redis_key = f"auth_session:{auth_key}"
             self.redis_client.setex(redis_key, 300, json.dumps(auth_data))
-            logger.info(f"Saved auth session to Redis: {redis_key}")
+            
+            # ТАКЖЕ сохраняем активный клиент в памяти для доставки кода
+            self._auth_sessions[auth_key] = {
+                'client': client,
+                'phone_code_hash': phone_code_hash,
+                'timestamp': int(time.time())
+            }
+            
+            logger.info(f"Saved auth session to Redis AND memory: {redis_key}")
             
         except Exception as e:
             logger.error(f"Error saving auth session: {e}")

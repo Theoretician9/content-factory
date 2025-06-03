@@ -95,26 +95,6 @@ async def check_qr_authorization(
             detail=f"Ошибка проверки QR авторизации: {str(e)}"
         )
 
-@router.post("/resend-sms", response_model=TelegramConnectResponse)
-async def resend_sms_code(
-    auth_request: TelegramAuthRequest,
-    session: AsyncSession = Depends(get_async_session),
-    telegram_service: TelegramService = Depends(get_telegram_service),
-    user_id: int = Depends(get_current_user_id)
-):
-    """Принудительная отправка SMS кода (если код пришел в приложение)"""
-    try:
-        # TODO: Добавить логику принудительного запроса SMS
-        # Пока что используем стандартное подключение
-        result = await telegram_service.connect_account(session, user_id, auth_request)
-        return result
-    except Exception as e:
-        logger.error(f"Error resending SMS code: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка повторной отправки SMS: {str(e)}"
-        )
-
 @router.get("/accounts", response_model=List[TelegramSessionResponse])
 async def get_telegram_accounts(
     session: AsyncSession = Depends(get_async_session),
