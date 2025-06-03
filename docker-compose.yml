@@ -151,6 +151,8 @@ services:
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=user
       - RABBITMQ_PASSWORD=password
+      - TELEGRAM_API_ID=23699038
+      - TELEGRAM_API_HASH=055c48aee9080db331639a87f85617b4
     depends_on:
       - integration-postgres
       - redis

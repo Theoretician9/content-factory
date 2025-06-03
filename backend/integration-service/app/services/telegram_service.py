@@ -12,6 +12,7 @@ import io
 from uuid import UUID
 import json
 import redis
+import os
 
 from .base import BaseCRUDService
 from .integration_log_service import IntegrationLogService
@@ -65,11 +66,22 @@ class TelegramService:
                 
             return api_id, api_hash
         except Exception as e:
-            logger.error(f"Error getting Telegram credentials: {e}")
-            # Fallback к настройкам если Vault недоступен
+            logger.error(f"Error getting Telegram credentials from Vault: {e}")
+            
+            # Fallback к настройкам
             if self.settings.TELEGRAM_API_ID and self.settings.TELEGRAM_API_HASH:
+                logger.info("Using Telegram credentials from settings")
                 return self.settings.TELEGRAM_API_ID, self.settings.TELEGRAM_API_HASH
-            raise
+            
+            # Прямой fallback к переменным окружения (hotfix)
+            env_api_id = os.getenv('TELEGRAM_API_ID')
+            env_api_hash = os.getenv('TELEGRAM_API_HASH')
+            
+            if env_api_id and env_api_hash:
+                logger.info("Using Telegram credentials from environment variables")
+                return env_api_id, env_api_hash
+            
+            raise ValueError("No Telegram API credentials found anywhere!")
     
     async def _create_client(self, session_string: Optional[str] = None) -> TelegramClient:
         """Создание Telegram клиента"""
