@@ -4,7 +4,6 @@ from sqlalchemy import select
 from telethon import TelegramClient, events
 from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError, PasswordHashInvalidError
 from telethon.sessions import StringSession
-from telethon.tl.types import CodeSettings
 import asyncio
 import logging
 import base64
@@ -310,20 +309,15 @@ class TelegramService:
             # Отправляем SMS код
             logger.info(f"Sending SMS code to {auth_request.phone}...")
             
-            # Принудительно запрашиваем SMS код (не звонок)
-            code_settings = CodeSettings(
-                allow_flashcall=False,
-                current_number=False,
-                allow_app_hash=False,
-                allow_missed_call=False,
-                allow_firebase=False
-            )
+            # Стандартный запрос SMS кода (убираем неподдерживаемый code_settings)
+            sent_code = await client.send_code_request(auth_request.phone)
             
-            sent_code = await client.send_code_request(
-                auth_request.phone, 
-                code_settings=code_settings
-            )
-            logger.info(f"SMS code sent successfully. Type: {getattr(sent_code, 'type', 'unknown')}, Next type: {getattr(sent_code, 'next_type', 'unknown')}")
+            # Детальное логирование ответа от Telegram
+            logger.info(f"SMS code sent successfully!")
+            logger.info(f"Code type: {getattr(sent_code, 'type', 'unknown')}")
+            logger.info(f"Next type: {getattr(sent_code, 'next_type', 'unknown')}")
+            logger.info(f"Timeout: {getattr(sent_code, 'timeout', 'unknown')} seconds")
+            logger.info(f"Phone code hash: {sent_code.phone_code_hash[:15]}...")
             
             # Сохраняем активную сессию авторизации в Redis
             await self._save_auth_session(auth_key, client, sent_code.phone_code_hash)
