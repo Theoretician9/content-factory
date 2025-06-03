@@ -29,12 +29,18 @@ class IntegrationVaultClient:
         except:
             # Создаем базовую структуру для интеграций
             try:
+                # Получаем реальные Telegram API credentials из переменных окружения
+                telegram_api_id = os.getenv('TELEGRAM_API_ID', '23699038')
+                telegram_api_hash = os.getenv('TELEGRAM_API_HASH', '055c48aee9080db331639a87f85617b4')
+                
                 self.put_secret('integrations/telegram', {
-                    'api_id': '29948572',  # Тестовый API ID (замените на реальный)
-                    'api_hash': 'your_api_hash_here',  # Замените на реальный API Hash
+                    'api_id': telegram_api_id,
+                    'api_hash': telegram_api_hash,
                     'webhook_url': '',
                     'proxy': ''
                 })
+                logger.info(f"Initialized Telegram credentials in Vault with api_id: {telegram_api_id}")
+                
                 self.put_secret('integrations/vk', {
                     'api_key': '',
                     'group_token': '',
