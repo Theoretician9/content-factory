@@ -337,8 +337,8 @@ class TelegramService:
             # Сохраняем активную сессию авторизации в Redis
             await self._save_auth_session(auth_key, client, sent_code.phone_code_hash)
             
-            # ВАЖНО: Отключаем клиент после отправки SMS, чтобы не блокировать новые запросы
-            await client.disconnect()
+            # НЕ отключаем клиент! Он должен оставаться подключенным для доставки кода в приложение
+            # await client.disconnect()  # УБИРАЕМ ЭТУ СТРОКУ
             
             current_timestamp = int(time.time())
             logger.info(f"Started auth session for {auth_request.phone}, hash: {sent_code.phone_code_hash[:10]}..., timestamp: {current_timestamp}")
