@@ -580,11 +580,22 @@ class TelegramService:
             return None
     
     async def _delete_auth_session(self, auth_key: str) -> None:
-        """Удаление состояния авторизации из Redis"""
+        """Удаление состояния авторизации из Redis и памяти"""
         try:
+            # Удаляем из Redis
             redis_key = f"auth_session:{auth_key}"
             self.redis_client.delete(redis_key)
-            logger.info(f"Deleted auth session from Redis: {redis_key}")
+            
+            # Удаляем из памяти и отключаем клиент если есть
+            if auth_key in self._auth_sessions:
+                if 'client' in self._auth_sessions[auth_key]:
+                    try:
+                        await self._auth_sessions[auth_key]['client'].disconnect()
+                    except:
+                        pass
+                del self._auth_sessions[auth_key]
+            
+            logger.info(f"Deleted auth session from Redis and memory: {auth_key}")
         except Exception as e:
             logger.error(f"Error deleting auth session: {e}")
     
