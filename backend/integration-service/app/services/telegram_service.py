@@ -235,6 +235,30 @@ class TelegramService:
                         status="code_required",
                         message="Неверный код. Попробуйте еще раз"
                     )
+                except Exception as e:
+                    # Обрабатываем специфические ошибки Telegram
+                    await code_client.disconnect()
+                    error_msg = str(e)
+                    
+                    if "confirmation code has expired" in error_msg.lower():
+                        # Удаляем истекший hash из Redis
+                        self.redis_client.delete(redis_key)
+                        logger.warning(f"Confirmation code expired for {auth_request.phone}, removed hash from Redis")
+                        return TelegramConnectResponse(
+                            status="code_expired",
+                            message="Код подтверждения истек. Запросите новый код"
+                        )
+                    elif "phone code invalid" in error_msg.lower():
+                        return TelegramConnectResponse(
+                            status="code_invalid",
+                            message="Неверный код. Проверьте и попробуйте еще раз"
+                        )
+                    else:
+                        logger.error(f"Unknown Telegram error during sign_in: {e}")
+                        return TelegramConnectResponse(
+                            status="error",
+                            message=f"Ошибка входа: {error_msg}"
+                        )
             
             # Если есть пароль для 2FA
             if auth_request.password:
