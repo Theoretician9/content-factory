@@ -390,6 +390,60 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 
+# Integration Service proxy router
+@app.api_route("/api/integrations/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def proxy_integration_service(request: Request, path: str):
+    """
+    Проксирование всех запросов к Integration Service
+    """
+    # Подготовка URL
+    target_url = f"{SERVICE_URLS['integration']}/api/v1/{path}"
+    
+    # Копирование headers (включая Authorization)
+    headers = {}
+    for name, value in request.headers.items():
+        if name.lower() not in ["host", "content-length"]:
+            headers[name] = value
+    
+    # Копирование query parameters
+    query_params = str(request.url.query)
+    if query_params:
+        target_url += f"?{query_params}"
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Получение body для POST/PUT запросов
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+            
+            # Выполнение запроса к Integration Service
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=headers,
+                content=body
+            )
+            
+            # Возврат ответа с оригинальными headers
+            response_headers = dict(response.headers)
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers=response_headers,
+                media_type=response_headers.get("content-type")
+            )
+            
+    except httpx.ConnectError:
+        logger.error(json.dumps({"event": "integration_service_connection_error", "url": target_url}))
+        raise HTTPException(status_code=502, detail="Integration service unavailable")
+    except httpx.TimeoutException:
+        logger.error(json.dumps({"event": "integration_service_timeout", "url": target_url}))
+        raise HTTPException(status_code=504, detail="Integration service timeout")
+    except Exception as e:
+        logger.error(json.dumps({"event": "integration_service_error", "url": target_url, "error": str(e)}))
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 app.include_router(api_router)
 
 if __name__ == "__main__":
