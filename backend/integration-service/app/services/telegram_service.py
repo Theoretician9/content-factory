@@ -54,6 +54,8 @@ class TelegramService:
         
         # Активные клиенты для переиспользования
         self._active_clients: Dict[str, TelegramClient] = {}
+        # Активные процессы авторизации (для хранения состояния между запросом кода и его вводом)
+        self._auth_sessions: Dict[str, Dict] = {}
         
     async def _get_api_credentials(self) -> Tuple[str, str]:
         """Получение API ID и Hash из Vault"""
