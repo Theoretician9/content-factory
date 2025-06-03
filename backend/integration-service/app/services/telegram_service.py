@@ -33,6 +33,9 @@ from ..core.vault import IntegrationVaultClient
 
 logger = logging.getLogger(__name__)
 
+# Глобальное хранилище активных клиентов авторизации (не теряется между HTTP запросами)
+_GLOBAL_AUTH_SESSIONS: Dict[str, Dict] = {}
+
 class TelegramService:
     """Сервис для работы с Telegram интеграцией"""
     
