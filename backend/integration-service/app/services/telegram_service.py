@@ -120,7 +120,9 @@ class TelegramService:
         user_id: int,
         auth_request: TelegramAuthRequest
     ) -> TelegramConnectResponse:
-        """Подключение Telegram аккаунта"""
+        """Подключение Telegram аккаунта с единой сессией"""
+        
+        auth_key = f"auth_{user_id}_{auth_request.phone}"
         
         try:
             # Логируем попытку подключения
@@ -129,16 +131,144 @@ class TelegramService:
                 details={"phone": auth_request.phone}
             )
             
+            # Если есть код, пытаемся войти с существующим клиентом
+            if auth_request.code:
+                if auth_key not in self._auth_sessions:
+                    return TelegramConnectResponse(
+                        status="code_required",
+                        message="Сессия авторизации истекла. Запросите новый код"
+                    )
+                
+                auth_data = self._auth_sessions[auth_key]
+                client = auth_data['client']
+                phone_code_hash = auth_data['phone_code_hash']
+                
+                current_timestamp = int(time.time())
+                request_timestamp = auth_data.get('timestamp', 0)
+                elapsed_seconds = current_timestamp - request_timestamp
+                
+                logger.info(f"Attempting sign_in with existing session. Phone: {auth_request.phone}, code: {auth_request.code}, elapsed: {elapsed_seconds}s")
+                
+                try:
+                    # Входим с кодом используя существующий клиент
+                    await client.sign_in(
+                        phone=auth_request.phone,
+                        code=auth_request.code,
+                        phone_code_hash=phone_code_hash
+                    )
+                    
+                    session_string = client.session.save()
+                    encrypted_session = await self._encrypt_session_data(session_string)
+                    
+                    session_data = {
+                        "user_id": user_id,
+                        "phone": auth_request.phone,
+                        "session_data": {"encrypted_session": encrypted_session},
+                        "session_metadata": {"method": "sms_code_unified", "elapsed_seconds": elapsed_seconds}
+                    }
+                    
+                    telegram_session = await self.session_service.create(session, session_data)
+                    
+                    await self.log_service.log_action(
+                        session, user_id, "telegram", "connect_success", "success",
+                        details={"session_id": str(telegram_session.id), "elapsed_seconds": elapsed_seconds}
+                    )
+                    
+                    # Очищаем временную сессию авторизации
+                    await client.disconnect()
+                    del self._auth_sessions[auth_key]
+                    
+                    return TelegramConnectResponse(
+                        status="success",
+                        session_id=telegram_session.id,
+                        message="Аккаунт успешно подключен"
+                    )
+                    
+                except SessionPasswordNeededError:
+                    return TelegramConnectResponse(
+                        status="2fa_required",
+                        message="Требуется двухфакторная аутентификация"
+                    )
+                except Exception as e:
+                    error_msg = str(e)
+                    logger.error(f"Error during sign_in: {e}")
+                    
+                    # Очищаем сессию при ошибке
+                    await client.disconnect()
+                    del self._auth_sessions[auth_key]
+                    
+                    if "confirmation code has expired" in error_msg.lower():
+                        return TelegramConnectResponse(
+                            status="code_expired",
+                            message="Код подтверждения истек. Запросите новый код"
+                        )
+                    elif "phone code invalid" in error_msg.lower():
+                        return TelegramConnectResponse(
+                            status="code_invalid",
+                            message="Неверный код. Проверьте и попробуйте еще раз"
+                        )
+                    else:
+                        return TelegramConnectResponse(
+                            status="error",
+                            message=f"Ошибка входа: {error_msg}"
+                        )
+            
+            # Если есть пароль для 2FA
+            if auth_request.password:
+                if auth_key not in self._auth_sessions:
+                    return TelegramConnectResponse(
+                        status="code_required", 
+                        message="Сначала запросите SMS код"
+                    )
+                
+                auth_data = self._auth_sessions[auth_key]
+                client = auth_data['client']
+                
+                try:
+                    await client.sign_in(password=auth_request.password)
+                    
+                    session_string = client.session.save()
+                    encrypted_session = await self._encrypt_session_data(session_string)
+                    
+                    session_data = {
+                        "user_id": user_id,
+                        "phone": auth_request.phone,
+                        "session_data": {"encrypted_session": encrypted_session},
+                        "session_metadata": {"method": "2fa_password"}
+                    }
+                    
+                    telegram_session = await self.session_service.create(session, session_data)
+                    
+                    await self.log_service.log_action(
+                        session, user_id, "telegram", "connect_success", "success",
+                        details={"session_id": str(telegram_session.id)}
+                    )
+                    
+                    # Очищаем временную сессию
+                    await client.disconnect()
+                    del self._auth_sessions[auth_key]
+                    
+                    return TelegramConnectResponse(
+                        status="success",
+                        session_id=telegram_session.id,
+                        message="Аккаунт успешно подключен"
+                    )
+                    
+                except PasswordHashInvalidError:
+                    return TelegramConnectResponse(
+                        status="2fa_required",
+                        message="Неверный пароль двухфакторной аутентификации"
+                    )
+            
+            # Первичный запрос: создаем клиент и запрашиваем SMS код
             client = await self._create_client()
             await client.connect()
             
             # Проверяем, авторизован ли уже
             if await client.is_user_authorized():
-                # Пользователь уже авторизован
                 session_string = client.session.save()
                 encrypted_session = await self._encrypt_session_data(session_string)
                 
-                # Сохраняем сессию
                 session_data = {
                     "user_id": user_id,
                     "phone": auth_request.phone,
@@ -161,163 +291,19 @@ class TelegramService:
                     message="Аккаунт успешно подключен"
                 )
             
-            # Ключ для хранения phone_code_hash в Redis
-            redis_key = f"telegram_code_hash:{user_id}:{auth_request.phone}"
-            
-            # Если есть код, пытаемся войти
-            if auth_request.code:
-                try:
-                    # Получаем phone_code_hash из Redis
-                    phone_code_hash = self.redis_client.get(redis_key)
-                    
-                    current_timestamp = int(time.time())
-                    logger.info(f"Looking for Redis key: {redis_key}, timestamp: {current_timestamp}")
-                    logger.info(f"Found phone_code_hash: {phone_code_hash[:10] if phone_code_hash else 'None'}...")
-                    
-                    if not phone_code_hash:
-                        logger.warning(f"No phone_code_hash found in Redis for key: {redis_key}")
-                        return TelegramConnectResponse(
-                            status="code_required",
-                            message="Код истек. Запросите новый код"
-                        )
-                    
-                    # Проверяем оставшееся время жизни ключа в Redis
-                    ttl_remaining = self.redis_client.ttl(redis_key)
-                    logger.info(f"Attempting sign_in with phone: {auth_request.phone}, code: {auth_request.code}, hash: {phone_code_hash[:10]}..., TTL remaining: {ttl_remaining}s, timestamp: {current_timestamp}")
-                    
-                    # ВАЖНО: Создаем новый клиент для попытки входа с кодом
-                    # Это избегает проблем с состоянием предыдущего клиента
-                    code_client = await self._create_client()
-                    await code_client.connect()
-                    
-                    # Входим с кодом и phone_code_hash
-                    await code_client.sign_in(
-                        phone=auth_request.phone,
-                        code=auth_request.code,
-                        phone_code_hash=phone_code_hash
-                    )
-                    
-                    session_string = code_client.session.save()
-                    encrypted_session = await self._encrypt_session_data(session_string)
-                    
-                    session_data = {
-                        "user_id": user_id,
-                        "phone": auth_request.phone,
-                        "session_data": {"encrypted_session": encrypted_session},
-                        "session_metadata": {"method": "sms_code"}
-                    }
-                    
-                    telegram_session = await self.session_service.create(session, session_data)
-                    
-                    await self.log_service.log_action(
-                        session, user_id, "telegram", "connect_success", "success",
-                        details={"session_id": str(telegram_session.id)}
-                    )
-                    
-                    # Удаляем phone_code_hash из Redis после успешного входа
-                    self.redis_client.delete(redis_key)
-                    
-                    await code_client.disconnect()
-                    
-                    return TelegramConnectResponse(
-                        status="success",
-                        session_id=telegram_session.id,
-                        message="Аккаунт успешно подключен"
-                    )
-                    
-                except SessionPasswordNeededError:
-                    await code_client.disconnect()
-                    return TelegramConnectResponse(
-                        status="2fa_required",
-                        message="Требуется двухфакторная аутентификация"
-                    )
-                except PhoneCodeInvalidError:
-                    await code_client.disconnect()
-                    return TelegramConnectResponse(
-                        status="code_required",
-                        message="Неверный код. Попробуйте еще раз"
-                    )
-                except Exception as e:
-                    # Обрабатываем специфические ошибки Telegram
-                    await code_client.disconnect()
-                    error_msg = str(e)
-                    
-                    if "confirmation code has expired" in error_msg.lower():
-                        # Удаляем истекший hash из Redis
-                        self.redis_client.delete(redis_key)
-                        logger.warning(f"Confirmation code expired for {auth_request.phone}, removed hash from Redis")
-                        return TelegramConnectResponse(
-                            status="code_expired",
-                            message="Код подтверждения истек. Запросите новый код"
-                        )
-                    elif "phone code invalid" in error_msg.lower():
-                        return TelegramConnectResponse(
-                            status="code_invalid",
-                            message="Неверный код. Проверьте и попробуйте еще раз"
-                        )
-                    else:
-                        logger.error(f"Unknown Telegram error during sign_in: {e}")
-                        return TelegramConnectResponse(
-                            status="error",
-                            message=f"Ошибка входа: {error_msg}"
-                        )
-            
-            # Если есть пароль для 2FA
-            if auth_request.password:
-                try:
-                    await client.sign_in(password=auth_request.password)
-                    
-                    session_string = client.session.save()
-                    encrypted_session = await self._encrypt_session_data(session_string)
-                    
-                    session_data = {
-                        "user_id": user_id,
-                        "phone": auth_request.phone,
-                        "session_data": {"encrypted_session": encrypted_session},
-                        "session_metadata": {"method": "2fa_password"}
-                    }
-                    
-                    telegram_session = await self.session_service.create(session, session_data)
-                    
-                    await self.log_service.log_action(
-                        session, user_id, "telegram", "connect_success", "success",
-                        details={"session_id": str(telegram_session.id)}
-                    )
-                    
-                    # Удаляем phone_code_hash из Redis после успешного входа
-                    self.redis_client.delete(redis_key)
-                    
-                    await client.disconnect()
-                    
-                    return TelegramConnectResponse(
-                        status="success",
-                        session_id=telegram_session.id,
-                        message="Аккаунт успешно подключен"
-                    )
-                    
-                except PasswordHashInvalidError:
-                    await client.disconnect()
-                    return TelegramConnectResponse(
-                        status="2fa_required",
-                        message="Неверный пароль двухфакторной аутентификации"
-                    )
-            
             # Отправляем SMS код
             sent_code = await client.send_code_request(auth_request.phone)
             
-            # Сохраняем phone_code_hash в Redis с TTL 5 минут (вместо 15)
-            # Telegram коды обычно действуют 5 минут
-            ttl_seconds = 300  # 5 минут
-            self.redis_client.setex(
-                redis_key,
-                ttl_seconds,
-                sent_code.phone_code_hash
-            )
-            
+            # Сохраняем активную сессию авторизации (НЕ отключаем клиент!)
             current_timestamp = int(time.time())
-            logger.info(f"Saved phone_code_hash to Redis: {redis_key}, hash: {sent_code.phone_code_hash[:10]}..., TTL: {ttl_seconds}s, timestamp: {current_timestamp}")
+            self._auth_sessions[auth_key] = {
+                'client': client,
+                'phone_code_hash': sent_code.phone_code_hash,
+                'timestamp': current_timestamp,
+                'expires_at': current_timestamp + 300  # 5 минут
+            }
             
-            await client.disconnect()
+            logger.info(f"Started auth session for {auth_request.phone}, hash: {sent_code.phone_code_hash[:10]}..., timestamp: {current_timestamp}")
             
             return TelegramConnectResponse(
                 status="code_required",
@@ -326,6 +312,14 @@ class TelegramService:
             
         except Exception as e:
             logger.error(f"Error connecting Telegram account: {e}")
+            
+            # Очищаем сессию при ошибке
+            if auth_key in self._auth_sessions:
+                try:
+                    await self._auth_sessions[auth_key]['client'].disconnect()
+                except:
+                    pass
+                del self._auth_sessions[auth_key]
             
             await self.log_service.log_action(
                 session, user_id, "telegram", "connect_error", "error",
