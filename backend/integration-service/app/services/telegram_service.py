@@ -125,6 +125,9 @@ class TelegramService:
     ) -> TelegramConnectResponse:
         """Подключение Telegram аккаунта с единой сессией"""
         
+        # Очищаем старые auth sessions
+        self._cleanup_old_auth_sessions()
+        
         auth_key = f"auth_{user_id}_{auth_request.phone}"
         
         try:
