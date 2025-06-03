@@ -410,6 +410,8 @@ services:
       - VAULT_LOG_LEVEL=debug
       - VAULT_DEV_ROOT_TOKEN_ID=root
       - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8201
+      - VAULT_ADDR=http://127.0.0.1:8201
+      - VAULT_TOKEN=root
     cap_add:
       - IPC_LOCK
     ports:
@@ -420,7 +422,7 @@ services:
       - vault_data:/vault/data
     command: server -dev
     healthcheck:
-      test: ["CMD", "vault", "status"]
+      test: ["CMD", "sh", "-c", "VAULT_ADDR=http://127.0.0.1:8201 vault status"]
       interval: 10s
       timeout: 5s
       retries: 3
