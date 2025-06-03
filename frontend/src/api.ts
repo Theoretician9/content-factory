@@ -39,7 +39,41 @@ export async function apiFetch(url: string, options: RequestInit = {}) {
 export const api = {
   getTariff: () => apiFetch('/api/billing/tariff'),
   getMailingStatus: () => apiFetch('/api/mailing/status'),
-  getIntegrationsStatus: () => apiFetch('/api/integrations/status'),
+  getIntegrationsStatus: async () => {
+    try {
+      // Получаем статистику интеграций
+      const [accountsRes, statsRes] = await Promise.all([
+        integrationApi.telegram.getAccounts(),
+        integrationApi.telegram.getErrorStats(7)
+      ]);
+
+      let activeAccounts = 0;
+      let status = 'error';
+
+      if (accountsRes.ok) {
+        const accounts = await accountsRes.json();
+        activeAccounts = accounts.filter((acc: any) => acc.is_active).length;
+        status = activeAccounts > 0 ? 'active' : 'inactive';
+      }
+
+      // Возвращаем данные в том же формате что ожидает Dashboard
+      return new Response(JSON.stringify({
+        status: status,
+        active: activeAccounts
+      }), { 
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (error) {
+      return new Response(JSON.stringify({
+        status: 'error',
+        active: 0
+      }), { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  },
   getAutocallStatus: () => apiFetch('/api/autocall/status'),
   getFunnelsStatus: () => apiFetch('/api/funnels/status'),
   getParsingStatus: () => apiFetch('/api/parsing/status'),
