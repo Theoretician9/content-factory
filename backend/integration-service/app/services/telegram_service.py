@@ -167,11 +167,17 @@ class TelegramService:
                     # Получаем phone_code_hash из Redis
                     phone_code_hash = self.redis_client.get(redis_key)
                     
+                    logger.info(f"Looking for Redis key: {redis_key}")
+                    logger.info(f"Found phone_code_hash: {phone_code_hash[:10] if phone_code_hash else 'None'}...")
+                    
                     if not phone_code_hash:
+                        logger.warning(f"No phone_code_hash found in Redis for key: {redis_key}")
                         return TelegramConnectResponse(
                             status="code_required",
                             message="Код истек. Запросите новый код"
                         )
+                    
+                    logger.info(f"Attempting sign_in with phone: {auth_request.phone}, code: {auth_request.code}, hash: {phone_code_hash[:10]}...")
                     
                     # Входим с кодом и phone_code_hash
                     await client.sign_in(
@@ -264,12 +270,14 @@ class TelegramService:
             # Отправляем SMS код
             sent_code = await client.send_code_request(auth_request.phone)
             
-            # Сохраняем phone_code_hash в Redis с TTL 10 минут
+            # Сохраняем phone_code_hash в Redis с TTL 15 минут
             self.redis_client.setex(
                 redis_key,
-                600,  # 10 минут
+                900,  # 15 минут
                 sent_code.phone_code_hash
             )
+            
+            logger.info(f"Saved phone_code_hash to Redis: {redis_key}, hash: {sent_code.phone_code_hash[:10]}...")
             
             await client.disconnect()
             
