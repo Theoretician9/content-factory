@@ -102,7 +102,7 @@ SERVICE_URLS = {
     "content": os.getenv("CONTENT_SERVICE_URL", "http://92.113.146.148:8005"),
     "invite": os.getenv("INVITE_SERVICE_URL", "http://92.113.146.148:8006"),
     "parsing": os.getenv("PARSING_SERVICE_URL", "http://92.113.146.148:8007"),
-    "integration": os.getenv("INTEGRATION_SERVICE_URL", "http://92.113.146.148:8008"),
+    "integration": os.getenv("INTEGRATION_SERVICE_URL", "http://integration-service:8000"),
 }
 
 # Настройка логирования (JSON в stdout)
