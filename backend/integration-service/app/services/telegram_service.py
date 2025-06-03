@@ -13,6 +13,7 @@ from uuid import UUID
 import json
 import redis
 import os
+import time
 
 from .base import BaseCRUDService
 from .integration_log_service import IntegrationLogService
@@ -167,7 +168,8 @@ class TelegramService:
                     # Получаем phone_code_hash из Redis
                     phone_code_hash = self.redis_client.get(redis_key)
                     
-                    logger.info(f"Looking for Redis key: {redis_key}")
+                    current_timestamp = int(time.time())
+                    logger.info(f"Looking for Redis key: {redis_key}, timestamp: {current_timestamp}")
                     logger.info(f"Found phone_code_hash: {phone_code_hash[:10] if phone_code_hash else 'None'}...")
                     
                     if not phone_code_hash:
@@ -177,7 +179,9 @@ class TelegramService:
                             message="Код истек. Запросите новый код"
                         )
                     
-                    logger.info(f"Attempting sign_in with phone: {auth_request.phone}, code: {auth_request.code}, hash: {phone_code_hash[:10]}...")
+                    # Проверяем оставшееся время жизни ключа в Redis
+                    ttl_remaining = self.redis_client.ttl(redis_key)
+                    logger.info(f"Attempting sign_in with phone: {auth_request.phone}, code: {auth_request.code}, hash: {phone_code_hash[:10]}..., TTL remaining: {ttl_remaining}s, timestamp: {current_timestamp}")
                     
                     # Входим с кодом и phone_code_hash
                     await client.sign_in(
@@ -270,20 +274,23 @@ class TelegramService:
             # Отправляем SMS код
             sent_code = await client.send_code_request(auth_request.phone)
             
-            # Сохраняем phone_code_hash в Redis с TTL 15 минут
+            # Сохраняем phone_code_hash в Redis с TTL 5 минут (вместо 15)
+            # Telegram коды обычно действуют 5 минут
+            ttl_seconds = 300  # 5 минут
             self.redis_client.setex(
                 redis_key,
-                900,  # 15 минут
+                ttl_seconds,
                 sent_code.phone_code_hash
             )
             
-            logger.info(f"Saved phone_code_hash to Redis: {redis_key}, hash: {sent_code.phone_code_hash[:10]}...")
+            current_timestamp = int(time.time())
+            logger.info(f"Saved phone_code_hash to Redis: {redis_key}, hash: {sent_code.phone_code_hash[:10]}..., TTL: {ttl_seconds}s, timestamp: {current_timestamp}")
             
             await client.disconnect()
             
             return TelegramConnectResponse(
                 status="code_required",
-                message=f"Код отправлен на номер {auth_request.phone}"
+                message=f"Код отправлен на номер {auth_request.phone}. Введите код в течение 5 минут."
             )
             
         except Exception as e:
