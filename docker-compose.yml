@@ -136,6 +136,8 @@ services:
   # Integration Service
   integration-service:
     build: ./backend/integration-service
+    ports:
+      - "127.0.0.1:8001:8000"
     environment:
       - POSTGRES_HOST=integration-postgres
       - POSTGRES_PORT=5432

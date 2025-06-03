@@ -12,7 +12,7 @@ CREATE TABLE telegram_sessions (
     user_id INT NOT NULL,
     phone VARCHAR(20) NOT NULL,
     session_data JSONB NOT NULL,
-    metadata JSONB DEFAULT '{}',
+    session_metadata JSONB DEFAULT '{}',
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -21,7 +21,7 @@ CREATE TABLE telegram_sessions (
 -- Индексы для telegram_sessions
 CREATE INDEX idx_telegram_sessions_user_id ON telegram_sessions(user_id);
 CREATE INDEX idx_telegram_sessions_phone ON telegram_sessions(phone);
-CREATE INDEX idx_telegram_sessions_metadata ON telegram_sessions USING GIN (metadata);
+CREATE INDEX idx_telegram_sessions_metadata ON telegram_sessions USING GIN (session_metadata);
 CREATE INDEX idx_telegram_sessions_active ON telegram_sessions(is_active) WHERE is_active = TRUE;
 
 -- Таблица для хранения ботов
