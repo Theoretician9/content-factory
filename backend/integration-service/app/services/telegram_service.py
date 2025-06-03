@@ -54,8 +54,8 @@ class TelegramService:
         
         # Активные клиенты для переиспользования
         self._active_clients: Dict[str, TelegramClient] = {}
-        # Активные процессы авторизации (для хранения состояния между запросом кода и его вводом)
-        self._auth_sessions: Dict[str, Dict] = {}
+        # Активные процессы авторизации НЕ используем - заменяем на Redis
+        # self._auth_sessions: Dict[str, Dict] = {}
         
     async def _get_api_credentials(self) -> Tuple[str, str]:
         """Получение API ID и Hash из Vault"""
@@ -488,3 +488,56 @@ class TelegramService:
                 status="error",
                 message=f"Ошибка проверки QR авторизации: {str(e)}"
             ) 
+
+    async def _save_auth_session(self, auth_key: str, client: TelegramClient, phone_code_hash: str) -> None:
+        """Сохранение состояния авторизации в Redis"""
+        try:
+            session_string = client.session.save()
+            auth_data = {
+                'session_string': session_string,
+                'phone_code_hash': phone_code_hash,
+                'timestamp': int(time.time())
+            }
+            
+            # Сохраняем в Redis на 5 минут
+            redis_key = f"auth_session:{auth_key}"
+            self.redis_client.setex(redis_key, 300, json.dumps(auth_data))
+            logger.info(f"Saved auth session to Redis: {redis_key}")
+            
+        except Exception as e:
+            logger.error(f"Error saving auth session: {e}")
+    
+    async def _get_auth_session(self, auth_key: str) -> Optional[Dict]:
+        """Получение состояния авторизации из Redis"""
+        try:
+            redis_key = f"auth_session:{auth_key}"
+            data = self.redis_client.get(redis_key)
+            
+            if data:
+                auth_data = json.loads(data)
+                logger.info(f"Retrieved auth session from Redis: {redis_key}")
+                return auth_data
+            else:
+                logger.info(f"No auth session found in Redis: {redis_key}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting auth session: {e}")
+            return None
+    
+    async def _delete_auth_session(self, auth_key: str) -> None:
+        """Удаление состояния авторизации из Redis"""
+        try:
+            redis_key = f"auth_session:{auth_key}"
+            self.redis_client.delete(redis_key)
+            logger.info(f"Deleted auth session from Redis: {redis_key}")
+        except Exception as e:
+            logger.error(f"Error deleting auth session: {e}")
+    
+    async def _create_client_from_session(self, session_string: str) -> TelegramClient:
+        """Создание клиента из сохраненной сессии"""
+        api_id, api_hash = await self._get_api_credentials()
+        session = StringSession(session_string)
+        client = TelegramClient(session, api_id, api_hash)
+        await client.connect()
+        return client 
