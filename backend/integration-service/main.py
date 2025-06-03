@@ -55,8 +55,8 @@ app = FastAPI(
     title=settings.APP_NAME,
     description="Микросервис для управления интеграциями с внешними платформами",
     version=settings.VERSION,
-    docs_url="/docs" if settings.DEBUG else None,
-    redoc_url="/redoc" if settings.DEBUG else None,
+    docs_url="/docs",
+    redoc_url="/redoc",
     openapi_url="/openapi.json",
     lifespan=lifespan
 )
