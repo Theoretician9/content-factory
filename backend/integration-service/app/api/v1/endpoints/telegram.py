@@ -95,7 +95,7 @@ async def get_telegram_accounts(
                 updated_at=s.updated_at,
                 user_id=s.user_id,
                 phone=s.phone,
-                metadata=s.metadata,
+                session_metadata=s.session_metadata,
                 is_active=s.is_active
             )
             for s in sessions
@@ -130,7 +130,7 @@ async def get_telegram_account(
             updated_at=telegram_session.updated_at,
             user_id=telegram_session.user_id,
             phone=telegram_session.phone,
-            metadata=telegram_session.metadata,
+            session_metadata=telegram_session.session_metadata,
             is_active=telegram_session.is_active
         )
     except HTTPException:
