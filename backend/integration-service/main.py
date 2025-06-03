@@ -2,7 +2,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -110,7 +110,7 @@ async def root():
 
 @app.get("/health")
 @limiter.limit("60/minute")
-async def health_check(request):
+async def health_check(request: Request):
     """Простая проверка здоровья сервиса"""
     return {
         "status": "healthy",
