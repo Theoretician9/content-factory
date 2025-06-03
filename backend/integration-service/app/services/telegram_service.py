@@ -218,16 +218,16 @@ class TelegramService:
             
             # Если есть пароль для 2FA
             if auth_request.password:
-                if auth_key not in self._auth_sessions:
+                auth_data = await self._get_auth_session(auth_key)
+                
+                if not auth_data:
                     return TelegramConnectResponse(
                         status="code_required", 
                         message="Сначала запросите SMS код"
                     )
                 
-                auth_data = self._auth_sessions[auth_key]
-                client = auth_data['client']
-                
                 try:
+                    client = await self._create_client_from_session(auth_data['session_string'])
                     await client.sign_in(password=auth_request.password)
                     
                     session_string = client.session.save()
@@ -247,9 +247,9 @@ class TelegramService:
                         details={"session_id": str(telegram_session.id)}
                     )
                     
-                    # Очищаем временную сессию
+                    # Очищаем auth session
                     await client.disconnect()
-                    del self._auth_sessions[auth_key]
+                    await self._delete_auth_session(auth_key)
                     
                     return TelegramConnectResponse(
                         status="success",
@@ -258,9 +258,21 @@ class TelegramService:
                     )
                     
                 except PasswordHashInvalidError:
+                    await client.disconnect()
                     return TelegramConnectResponse(
                         status="2fa_required",
                         message="Неверный пароль двухфакторной аутентификации"
+                    )
+            
+            # Проверяем есть ли уже активная auth session (защита от спама)
+            existing_auth = await self._get_auth_session(auth_key)
+            if existing_auth:
+                request_timestamp = existing_auth.get('timestamp', 0)
+                elapsed = int(time.time()) - request_timestamp
+                if elapsed < 60:  # Если запрос был меньше минуты назад
+                    return TelegramConnectResponse(
+                        status="code_required",
+                        message=f"Код уже отправлен. Повторный запрос возможен через {60 - elapsed} секунд"
                     )
             
             # Первичный запрос: создаем клиент и запрашиваем SMS код
