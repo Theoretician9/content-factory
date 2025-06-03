@@ -9,7 +9,7 @@ class TelegramSession(BaseModel):
     user_id = Column(Integer, nullable=False, index=True)
     phone = Column(String(20), nullable=False, index=True)
     session_data = Column(JSONB, nullable=False)
-    metadata = Column(JSONB, default={})
+    session_metadata = Column(JSONB, default={})
     is_active = Column(Boolean, default=True, index=True)
     
     def __repr__(self):
