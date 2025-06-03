@@ -4,6 +4,7 @@ import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import Integrations from './pages/Integrations';
 import PrivateRoute from './PrivateRoute';
 import { UserProvider } from './UserContext';
 
@@ -16,6 +17,11 @@ const App = () => (
       <Route path="/dashboard" element={
         <PrivateRoute>
           <Dashboard />
+        </PrivateRoute>
+      } />
+      <Route path="/integrations" element={
+        <PrivateRoute>
+          <Integrations />
         </PrivateRoute>
       } />
     </Routes>
