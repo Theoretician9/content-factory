@@ -137,21 +137,46 @@ services:
   integration-service:
     build: ./backend/integration-service
     environment:
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_USER=telegraminvi
-      - MYSQL_PASSWORD=szkTgBhWh6XU
-      - MYSQL_DATABASE=integration_service
+      - POSTGRES_HOST=integration-postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=integration_user
+      - POSTGRES_PASSWORD=integration_password
+      - POSTGRES_DATABASE=integration_db
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - VAULT_ADDR=http://vault:8202
+      - VAULT_ADDR=http://vault:8201
       - VAULT_TOKEN=root
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=user
+      - RABBITMQ_PASSWORD=password
     depends_on:
-      - mysql
+      - integration-postgres
       - redis
       - vault
+      - rabbitmq
     networks:
       - backend
+      - app-network
+
+  # PostgreSQL для Integration Service  
+  integration-postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=integration_user
+      - POSTGRES_PASSWORD=integration_password
+      - POSTGRES_DB=integration_db
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - integration_postgres_data:/var/lib/postgresql/data
+      - ./backend/integration-service/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U integration_user -d integration_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   # Task Worker
   task-worker:
@@ -432,6 +457,7 @@ volumes:
   logstash_logs:
     driver: local
   frontend-static:
+  integration_postgres_data:
 
 networks:
   app-network:
