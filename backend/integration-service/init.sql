@@ -73,7 +73,8 @@ CREATE TABLE integration_logs (
     status VARCHAR(20) NOT NULL CHECK (status IN ('success', 'error', 'pending')),
     details JSONB DEFAULT '{}',
     error_message TEXT,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Индексы для integration_logs
@@ -105,6 +106,11 @@ CREATE TRIGGER update_telegram_bots_updated_at
 
 CREATE TRIGGER update_telegram_channels_updated_at
     BEFORE UPDATE ON telegram_channels
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_integration_logs_updated_at
+    BEFORE UPDATE ON integration_logs
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
