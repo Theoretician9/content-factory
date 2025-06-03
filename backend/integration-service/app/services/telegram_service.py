@@ -369,8 +369,14 @@ class TelegramService:
             client = await self._create_client()
             await client.connect()
             
-            # Получаем QR код для входа
-            qr_login = await client.qr_login()
+            # Получаем QR код для входа (убираем await - это не async метод)
+            qr_login = client.qr_login()
+            
+            # Сохраняем qr_login в Redis для последующей проверки авторизации
+            redis_key = f"telegram_qr_login:{user_id}"
+            self.redis_client.setex(redis_key, 300, str(qr_login.token.hex()))  # 5 минут
+            
+            logger.info(f"Generated QR code for user {user_id}, token saved to Redis")
             
             # Создаем QR код
             qr = qrcode.QRCode(version=1, box_size=10, border=5)
@@ -390,3 +396,70 @@ class TelegramService:
         except Exception as e:
             logger.error(f"Error generating QR code: {e}")
             raise 
+    
+    async def check_qr_authorization(
+        self,
+        session: AsyncSession,
+        user_id: int
+    ) -> TelegramConnectResponse:
+        """Проверка авторизации по QR коду"""
+        try:
+            redis_key = f"telegram_qr_login:{user_id}"
+            token_hex = self.redis_client.get(redis_key)
+            
+            if not token_hex:
+                return TelegramConnectResponse(
+                    status="qr_expired",
+                    message="QR код истек. Сгенерируйте новый"
+                )
+            
+            client = await self._create_client()
+            await client.connect()
+            
+            # Проверяем авторизацию
+            if await client.is_user_authorized():
+                # Пользователь авторизован
+                session_string = client.session.save()
+                encrypted_session = await self._encrypt_session_data(session_string)
+                
+                # Получаем информацию о пользователе
+                me = await client.get_me()
+                phone = getattr(me, 'phone', 'unknown')
+                
+                session_data = {
+                    "user_id": user_id,
+                    "phone": phone,
+                    "session_data": {"encrypted_session": encrypted_session},
+                    "session_metadata": {"method": "qr_code", "telegram_id": me.id}
+                }
+                
+                telegram_session = await self.session_service.create(session, session_data)
+                
+                await self.log_service.log_action(
+                    session, user_id, "telegram", "qr_connect_success", "success",
+                    details={"session_id": str(telegram_session.id), "telegram_id": me.id}
+                )
+                
+                # Удаляем токен из Redis
+                self.redis_client.delete(redis_key)
+                
+                await client.disconnect()
+                
+                return TelegramConnectResponse(
+                    status="success",
+                    session_id=telegram_session.id,
+                    message="Аккаунт успешно подключен через QR код"
+                )
+            else:
+                await client.disconnect()
+                return TelegramConnectResponse(
+                    status="qr_waiting",
+                    message="Ожидание авторизации по QR коду"
+                )
+                
+        except Exception as e:
+            logger.error(f"Error checking QR authorization: {e}")
+            return TelegramConnectResponse(
+                status="error",
+                message=f"Ошибка проверки QR авторизации: {str(e)}"
+            ) 
