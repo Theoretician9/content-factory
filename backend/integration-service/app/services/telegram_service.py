@@ -57,8 +57,6 @@ class TelegramService:
         
         # Активные клиенты для переиспользования
         self._active_clients: Dict[str, TelegramClient] = {}
-        # Временные активные сессии авторизации (для доставки кодов)
-        self._auth_sessions: Dict[str, Dict] = {}
         
     async def _get_api_credentials(self) -> Tuple[str, str]:
         """Получение API ID и Hash из Vault"""
@@ -533,7 +531,7 @@ class TelegramService:
             ) 
 
     async def _save_auth_session(self, auth_key: str, client: TelegramClient, phone_code_hash: str) -> None:
-        """Сохранение состояния авторизации в Redis И в памяти"""
+        """Сохранение состояния авторизации в Redis И в глобальной памяти"""
         try:
             session_string = client.session.save()
             auth_data = {
@@ -546,25 +544,28 @@ class TelegramService:
             redis_key = f"auth_session:{auth_key}"
             self.redis_client.setex(redis_key, 300, json.dumps(auth_data))
             
-            # ТАКЖЕ сохраняем активный клиент в памяти для доставки кода
-            self._auth_sessions[auth_key] = {
+            # ТАКЖЕ сохраняем активный клиент в ГЛОБАЛЬНОЙ памяти для доставки кода
+            global _GLOBAL_AUTH_SESSIONS
+            _GLOBAL_AUTH_SESSIONS[auth_key] = {
                 'client': client,
                 'phone_code_hash': phone_code_hash,
                 'timestamp': int(time.time())
             }
             
-            logger.info(f"Saved auth session to Redis AND memory: {redis_key}")
+            logger.info(f"Saved auth session to Redis AND global memory: {redis_key}")
             
         except Exception as e:
             logger.error(f"Error saving auth session: {e}")
     
     async def _get_auth_session(self, auth_key: str) -> Optional[Dict]:
-        """Получение состояния авторизации из памяти или Redis"""
+        """Получение состояния авторизации из глобальной памяти или Redis"""
         try:
-            # Сначала проверяем память (активный клиент)
-            if auth_key in self._auth_sessions:
-                logger.info(f"Retrieved auth session from memory: {auth_key}")
-                return self._auth_sessions[auth_key]
+            global _GLOBAL_AUTH_SESSIONS
+            
+            # Сначала проверяем глобальную память (активный клиент)
+            if auth_key in _GLOBAL_AUTH_SESSIONS:
+                logger.info(f"Retrieved auth session from global memory: {auth_key}")
+                return _GLOBAL_AUTH_SESSIONS[auth_key]
             
             # Если нет в памяти - пытаемся получить из Redis и восстановить
             redis_key = f"auth_session:{auth_key}"
@@ -575,7 +576,7 @@ class TelegramService:
                 logger.info(f"Retrieved auth session from Redis: {redis_key}")
                 return auth_data
             else:
-                logger.info(f"No auth session found in memory or Redis: {auth_key}")
+                logger.info(f"No auth session found in global memory or Redis: {auth_key}")
                 return None
                 
         except Exception as e:
@@ -583,22 +584,23 @@ class TelegramService:
             return None
     
     async def _delete_auth_session(self, auth_key: str) -> None:
-        """Удаление состояния авторизации из Redis и памяти"""
+        """Удаление состояния авторизации из Redis и глобальной памяти"""
         try:
             # Удаляем из Redis
             redis_key = f"auth_session:{auth_key}"
             self.redis_client.delete(redis_key)
             
-            # Удаляем из памяти и отключаем клиент если есть
-            if auth_key in self._auth_sessions:
-                if 'client' in self._auth_sessions[auth_key]:
+            # Удаляем из глобальной памяти и отключаем клиент если есть
+            global _GLOBAL_AUTH_SESSIONS
+            if auth_key in _GLOBAL_AUTH_SESSIONS:
+                if 'client' in _GLOBAL_AUTH_SESSIONS[auth_key]:
                     try:
-                        await self._auth_sessions[auth_key]['client'].disconnect()
+                        await _GLOBAL_AUTH_SESSIONS[auth_key]['client'].disconnect()
                     except:
                         pass
-                del self._auth_sessions[auth_key]
+                del _GLOBAL_AUTH_SESSIONS[auth_key]
             
-            logger.info(f"Deleted auth session from Redis and memory: {auth_key}")
+            logger.info(f"Deleted auth session from Redis and global memory: {auth_key}")
         except Exception as e:
             logger.error(f"Error deleting auth session: {e}")
     
