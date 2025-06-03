@@ -399,8 +399,8 @@ class TelegramService:
             client = await self._create_client()
             await client.connect()
             
-            # Получаем QR код для входа (убираем await - это не async метод)
-            qr_login = client.qr_login()
+            # Получаем QR код для входа (добавляем await)
+            qr_login = await client.qr_login()
             
             # Сохраняем qr_login в Redis для последующей проверки авторизации
             redis_key = f"telegram_qr_login:{user_id}"
@@ -425,7 +425,7 @@ class TelegramService:
             
         except Exception as e:
             logger.error(f"Error generating QR code: {e}")
-            raise 
+            raise
     
     async def check_qr_authorization(
         self,
