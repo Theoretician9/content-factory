@@ -37,13 +37,13 @@ class TelegramSessionCreate(BaseModel):
     """Схема создания Telegram сессии"""
     phone: str
     session_data: Dict[str, Any]
-    metadata: Optional[Dict[str, Any]] = {}
+    session_metadata: Optional[Dict[str, Any]] = {}
 
 class TelegramSessionResponse(BaseModelResponse):
     """Схема ответа с данными сессии"""
     user_id: int
     phone: str
-    metadata: Dict[str, Any]
+    session_metadata: Dict[str, Any]
     is_active: bool
 
 # Схемы для ботов

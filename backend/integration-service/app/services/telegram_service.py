@@ -119,7 +119,7 @@ class TelegramService:
                     "user_id": user_id,
                     "phone": auth_request.phone,
                     "session_data": {"encrypted_session": encrypted_session},
-                    "metadata": {"method": "existing_session"}
+                    "session_metadata": {"method": "existing_session"}
                 }
                 
                 telegram_session = await self.session_service.create(session, session_data)
@@ -149,7 +149,7 @@ class TelegramService:
                         "user_id": user_id,
                         "phone": auth_request.phone,
                         "session_data": {"encrypted_session": encrypted_session},
-                        "metadata": {"method": "sms_code"}
+                        "session_metadata": {"method": "sms_code"}
                     }
                     
                     telegram_session = await self.session_service.create(session, session_data)
@@ -192,7 +192,7 @@ class TelegramService:
                         "user_id": user_id,
                         "phone": auth_request.phone,
                         "session_data": {"encrypted_session": encrypted_session},
-                        "metadata": {"method": "2fa_password"}
+                        "session_metadata": {"method": "2fa_password"}
                     }
                     
                     telegram_session = await self.session_service.create(session, session_data)
