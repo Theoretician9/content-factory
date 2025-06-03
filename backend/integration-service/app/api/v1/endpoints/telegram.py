@@ -217,7 +217,7 @@ async def get_integration_logs(
     log_service: IntegrationLogService = Depends(get_log_service),
     user_id: int = Depends(get_current_user_id),
     integration_type: Optional[str] = Query("telegram", description="Тип интеграции"),
-    status: Optional[str] = Query(None, description="Статус: success, error, pending"),
+    log_status: Optional[str] = Query(None, description="Статус: success, error, pending"),
     days_back: int = Query(30, ge=1, le=365, description="Количество дней назад"),
     pagination: PaginationParams = Depends()
 ):
@@ -229,7 +229,7 @@ async def get_integration_logs(
             session=session,
             user_id=user_id,
             integration_type=integration_type,
-            status=status,
+            status=log_status,
             days_back=days_back,
             offset=offset,
             limit=pagination.size
