@@ -7,143 +7,62 @@
 - [ ] Время подключения аккаунта ≤ 5 сек
 - [ ] Доступность API ≥ 99.9%
 - [ ] Максимальная задержка отправки сообщения ≤ 1 сек
+- [ ] Нагрузочное тестирование: 1000 аккаунтов → задержка ≤ 2 сек
+- [ ] Нагрузочное тестирование: 10 000 сообщений/мин → без потерь
 
 ## Технологический стек
 - Python 3.11+
 - FastAPI
 - PostgreSQL 15+ (с поддержкой JSONB, массивов, полнотекстового поиска)
 - Redis 7.0+
-- RabbitMQ 3.12+
+- RabbitMQ 3.12+ (с TLS)
 - Telethon (с возможным переходом на TDLib)
 - Prometheus + Grafana
 - ELK Stack
 - HashiCorp Vault
 - React (фронтенд)
+- WebSocket для real-time обновлений
 
-## Архитектура и интеграция
+## Приоритеты задач
 
-### Взаимодействие с другими сервисами
-- [ ] Интеграция с API Gateway (проксирование запросов)
-- [ ] Интеграция с User Service (авторизация)
-- [ ] Интеграция с Vault (хранение секретов)
-- [ ] Интеграция с ELK (логирование)
-- [ ] Интеграция с Prometheus (метрики)
+### Critical (Безопасность и базовый функционал)
+- [ ] Настройка TLS для RabbitMQ
+- [ ] Шифрование сессий через Vault (AES-GCM)
+- [ ] Базовая интеграция с Telegram
+- [ ] JWT авторизация
+- [ ] Rate limiting
+- [ ] Бэкапы PostgreSQL
 
-### Структура базы данных (PostgreSQL)
-```sql
--- Расширения
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+### High (Мониторинг и фронтенд)
+- [ ] Метрики в Prometheus
+- [ ] Алерты в Alertmanager
+- [ ] WebSocket для статусов
+- [ ] Базовый UI
+- [ ] Логирование в ELK
 
--- Таблица для хранения сессий Telegram
-CREATE TABLE telegram_sessions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id INT NOT NULL,
-    phone VARCHAR(20) NOT NULL,
-    session_data JSONB NOT NULL,
-    metadata JSONB,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- Индексы для telegram_sessions
-CREATE INDEX idx_telegram_sessions_user_id ON telegram_sessions(user_id);
-CREATE INDEX idx_telegram_sessions_phone ON telegram_sessions(phone);
-CREATE INDEX idx_telegram_sessions_metadata ON telegram_sessions USING GIN (metadata);
-
--- Таблица для хранения ботов
-CREATE TABLE telegram_bots (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id INT NOT NULL,
-    bot_token VARCHAR(100) NOT NULL,
-    username VARCHAR(50) NOT NULL,
-    settings JSONB,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- Индексы для telegram_bots
-CREATE INDEX idx_telegram_bots_user_id ON telegram_bots(user_id);
-CREATE INDEX idx_telegram_bots_username ON telegram_bots(username);
-CREATE INDEX idx_telegram_bots_settings ON telegram_bots USING GIN (settings);
-
--- Таблица для хранения каналов/групп
-CREATE TABLE telegram_channels (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id INT NOT NULL,
-    channel_id BIGINT NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    type VARCHAR(20) NOT NULL CHECK (type IN ('channel', 'group')),
-    settings JSONB,
-    members_count INT,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- Индексы для telegram_channels
-CREATE INDEX idx_telegram_channels_user_id ON telegram_channels(user_id);
-CREATE INDEX idx_telegram_channels_channel_id ON telegram_channels(channel_id);
-CREATE INDEX idx_telegram_channels_settings ON telegram_channels USING GIN (settings);
-CREATE INDEX idx_telegram_channels_title_trgm ON telegram_channels USING GIN (title gin_trgm_ops);
-
--- Таблица для логов интеграций
-CREATE TABLE integration_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id INT NOT NULL,
-    integration_type VARCHAR(50) NOT NULL,
-    action VARCHAR(50) NOT NULL,
-    status VARCHAR(20) NOT NULL CHECK (status IN ('success', 'error')),
-    details JSONB,
-    error_message TEXT,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- Индексы для integration_logs
-CREATE INDEX idx_integration_logs_user_id ON integration_logs(user_id);
-CREATE INDEX idx_integration_logs_created_at ON integration_logs(created_at);
-CREATE INDEX idx_integration_logs_details ON integration_logs USING GIN (details);
-
--- Функция для автоматического обновления updated_at
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
-
--- Триггеры для автоматического обновления updated_at
-CREATE TRIGGER update_telegram_sessions_updated_at
-    BEFORE UPDATE ON telegram_sessions
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_telegram_bots_updated_at
-    BEFORE UPDATE ON telegram_bots
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_telegram_channels_updated_at
-    BEFORE UPDATE ON telegram_channels
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-```
+### Medium (Оптимизации)
+- [ ] Автомасштабирование
+- [ ] Кэширование
+- [ ] Оптимизация запросов
+- [ ] Дополнительные тесты
 
 ## Чек-лист задач
 
 ### 1. Базовая инфраструктура
 - [ ] Создать docker-compose конфигурацию
 - [ ] Настроить PostgreSQL базу данных
+  - [ ] Настроить WAL-G для бэкапов
+  - [ ] Настроить репликацию
+  - [ ] Настроить мониторинг
 - [ ] Настроить Redis для кэширования
 - [ ] Настроить RabbitMQ для очередей
+  - [ ] Настроить TLS
+  - [ ] Настроить мониторинг очередей
 - [ ] Интегрировать с Vault для секретов
+  - [ ] Инициализация Vault
+  - [ ] Настройка unseal keys
+  - [ ] Создание политик доступа
+  - [ ] Настройка Transit KMS
 - [ ] Настроить логирование в ELK
 - [ ] Настроить метрики в Prometheus
 
@@ -151,33 +70,60 @@ CREATE TRIGGER update_telegram_channels_updated_at
 - [ ] Реализовать базовые CRUD операции
 - [ ] Настроить JWT авторизацию
 - [ ] Реализовать rate limiting
+  - [ ] 10/мин для /connect
+  - [ ] 100/мин для /send
+  - [ ] 1000/мин для /status
 - [ ] Добавить валидацию входных данных
+  - [ ] Проверка формата телефона
+  - [ ] Валидация токена бота (^\d+:[\w-]+$)
+  - [ ] Проверка прав доступа
 - [ ] Настроить CORS
 - [ ] Добавить OpenAPI документацию
+  - [ ] Примеры запросов
+  - [ ] Описание ошибок
+  - [ ] Схемы данных
 - [ ] Реализовать health check эндпоинты
 
 ### 3. Telegram интеграция
 - [ ] Реализовать подключение аккаунтов через QR
 - [ ] Реализовать подключение через SMS
 - [ ] Добавить поддержку 2FA
+  - [ ] Хранение 2FA в Vault
+  - [ ] Безопасное восстановление
 - [ ] Реализовать подключение ботов
+  - [ ] Проверка токена
+  - [ ] Проверка прав
 - [ ] Реализовать подключение каналов/групп
+  - [ ] Проверка админских прав
+  - [ ] Проверка прав на отправку
 - [ ] Добавить проверку прав доступа
 - [ ] Реализовать отправку сообщений
+- [ ] Автоматическое переподключение при разрыве
 
 ### 4. Безопасность
 - [ ] Настроить шифрование сессий через Vault
+  - [ ] Использовать AES-GCM
+  - [ ] Ротация ключей каждые 7 дней
 - [ ] Реализовать rotation ключей
 - [ ] Настроить ACL для API
 - [ ] Добавить подпись webhook-запросов
 - [ ] Реализовать rate limiting
 - [ ] Настроить мониторинг безопасности
 - [ ] Добавить аудит действий
+  - [ ] Кто подключил бота
+  - [ ] Кто отправил сообщение
+  - [ ] Изменения в настройках
 
 ### 5. Мониторинг и логирование
 - [ ] Настроить метрики в Prometheus
+  - [ ] telegram_session_duration_seconds
+  - [ ] telegram_api_latency_seconds
+  - [ ] telegram_sessions_active
+  - [ ] telegram_messages_sent_total
 - [ ] Создать дашборды в Grafana
 - [ ] Настроить алерты в Alertmanager
+  - [ ] DegradedState при 10% упавших сессий
+  - [ ] HighErrorRate при >1% ошибок
 - [ ] Настроить логирование в ELK
 - [ ] Добавить трейсинг запросов
 - [ ] Настроить мониторинг очередей
@@ -186,128 +132,107 @@ CREATE TRIGGER update_telegram_channels_updated_at
 ### 6. Фронтенд интеграция
 - [ ] Создать компоненты для подключения аккаунтов
 - [ ] Реализовать отображение статуса интеграций
+  - [ ] WebSocket для real-time обновлений
+  - [ ] Статусы: active, connecting, error
 - [ ] Добавить статистику и метрики
 - [ ] Реализовать управление ботами
 - [ ] Добавить управление каналами/группами
 - [ ] Реализовать отображение ошибок
+  - [ ] Коды ошибок (TG_API_429)
+  - [ ] Детальные сообщения
 - [ ] Добавить систему уведомлений
 
 ### 7. Масштабирование
 - [ ] Настроить Celery для фоновых задач
+  - [ ] Autoscaling на основе длины очереди
+  - [ ] Приоритеты задач
 - [ ] Реализовать параллельную обработку
 - [ ] Настроить health checks
 - [ ] Добавить circuit breakers
 - [ ] Реализовать retry механизмы
 - [ ] Настроить балансировку нагрузки
 - [ ] Подготовить к k8s деплою
+- [ ] Настроить лимиты памяти
+  - [ ] 50 MB на аккаунт
+  - [ ] Мониторинг использования
 
 ### 8. Тестирование
 - [ ] Написать unit тесты
 - [ ] Добавить интеграционные тесты
 - [ ] Настроить CI/CD
 - [ ] Реализовать нагрузочное тестирование
+  - [ ] 1000 аккаунтов
+  - [ ] 10 000 сообщений/мин
 - [ ] Добавить тесты безопасности
+  - [ ] SQL-инъекции
+  - [ ] Доступ к чужим сессиям
+  - [ ] XSS
+  - [ ] CSRF
 - [ ] Настроить автоматическое тестирование
 - [ ] Добавить тесты отказоустойчивости
 
-## API Endpoints
+### 9. Документация
+- [ ] Swagger-документация
+  - [ ] Примеры запросов
+  - [ ] Схемы данных
+- [ ] Описание ошибок API
+  - [ ] TG_SESSION_EXPIRED
+  - [ ] TG_API_429
+  - [ ] TG_2FA_REQUIRED
+- [ ] Инструкция по развертыванию
+  - [ ] Docker Compose
+  - [ ] Kubernetes
+- [ ] Руководство по безопасности
+- [ ] Troubleshooting guide
 
-### Telegram Accounts
-```
-POST /api/integrations/telegram/connect
-GET /api/integrations/telegram/accounts
-GET /api/integrations/telegram/accounts/{id}
-DELETE /api/integrations/telegram/accounts/{id}
-POST /api/integrations/telegram/accounts/{id}/reconnect
-```
+### 10. Резервные копии
+- [ ] Настроить бэкапы PostgreSQL
+  - [ ] Ежедневный полный бэкап
+  - [ ] WAL-архивация
+- [ ] Бэкап сессий
+  - [ ] Шифрование
+  - [ ] Ротация
+- [ ] Бэкап Vault
+  - [ ] Unseal keys
+  - [ ] Политики
+- [ ] Тестирование восстановления
 
-### Telegram Bots
-```
-POST /api/integrations/telegram/bots
-GET /api/integrations/telegram/bots
-GET /api/integrations/telegram/bots/{id}
-DELETE /api/integrations/telegram/bots/{id}
-POST /api/integrations/telegram/bots/{id}/send
-```
+### 11. GDPR и комплаенс
+- [ ] Настроить очистку логов
+  - [ ] Старше 30 дней
+  - [ ] По запросу пользователя
+- [ ] Реализовать удаление данных
+  - [ ] Все данные пользователя
+  - [ ] Логи
+  - [ ] Сессии
+- [ ] Добавить согласие на обработку
+- [ ] Настроить экспорт данных
 
-### Telegram Channels
-```
-POST /api/integrations/telegram/channels
-GET /api/integrations/telegram/channels
-GET /api/integrations/telegram/channels/{id}
-DELETE /api/integrations/telegram/channels/{id}
-POST /api/integrations/telegram/channels/{id}/send
-```
+## Критерии приемки
+1. Безопасность
+   - [ ] Все секреты в Vault
+   - [ ] TLS для RabbitMQ
+   - [ ] Шифрование сессий
+   - [ ] Rate limiting
+   - [ ] Аудит действий
 
-## Метрики Prometheus
+2. Производительность
+   - [ ] 1000 аккаунтов → задержка ≤ 2 сек
+   - [ ] 10 000 сообщений/мин → без потерь
+   - [ ] Автомасштабирование работает
+   - [ ] Мониторинг настроен
 
-```yaml
-# Telegram Sessions
-telegram_sessions_total{type="account"}
-telegram_sessions_active{type="account"}
-telegram_sessions_error{type="account"}
+3. Надежность
+   - [ ] Бэкапы работают
+   - [ ] Автоматическое восстановление
+   - [ ] Алерты настроены
+   - [ ] Логирование полноценное
 
-# Messages
-telegram_messages_sent_total{type="account|bot|channel"}
-telegram_messages_error_total{type="account|bot|channel"}
-
-# API
-api_request_duration_seconds{endpoint="/api/integrations/telegram/*"}
-api_request_total{endpoint="/api/integrations/telegram/*"}
-api_request_error_total{endpoint="/api/integrations/telegram/*"}
-
-# Queue
-celery_tasks_total{queue="high|mid|low"}
-celery_tasks_error_total{queue="high|mid|low"}
-```
-
-## Алерты Alertmanager
-
-```yaml
-groups:
-- name: telegram_integrations
-  rules:
-  - alert: TelegramSessionDown
-    expr: telegram_sessions_active{type="account"} == 0
-    for: 5m
-    labels:
-      severity: critical
-    annotations:
-      summary: "Telegram session is down"
-      description: "Session {{ $labels.session_id }} is not active"
-
-  - alert: HighErrorRate
-    expr: rate(telegram_messages_error_total[5m]) > 0.1
-    for: 5m
-    labels:
-      severity: warning
-    annotations:
-      summary: "High error rate in Telegram messages"
-      description: "Error rate is {{ $value }}"
-```
-
-## Интеграция с Vault
-
-```python
-# Пример использования Vault для хранения сессий
-def encrypt_session(session_data: bytes) -> bytes:
-    client = hvac.Client(url=VAULT_ADDR, token=VAULT_TOKEN)
-    response = client.secrets.transit.encrypt_data(
-        mount_point='transit',
-        name='telegram-sessions',
-        plaintext=base64.b64encode(session_data).decode()
-    )
-    return base64.b64decode(response['data']['ciphertext'])
-
-def decrypt_session(encrypted_data: bytes) -> bytes:
-    client = hvac.Client(url=VAULT_ADDR, token=VAULT_TOKEN)
-    response = client.secrets.transit.decrypt_data(
-        mount_point='transit',
-        name='telegram-sessions',
-        ciphertext=base64.b64encode(encrypted_data).decode()
-    )
-    return base64.b64decode(response['data']['plaintext'])
-```
+4. Фронтенд
+   - [ ] Real-time обновления
+   - [ ] Обработка ошибок
+   - [ ] Адаптивный дизайн
+   - [ ] Удобный UX
 
 ## Следующие шаги
 1. Создать базовую структуру проекта
