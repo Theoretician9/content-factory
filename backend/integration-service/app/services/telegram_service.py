@@ -148,9 +148,16 @@ class TelegramService:
                 logger.info(f"Attempting sign_in with restored session. Phone: {auth_request.phone}, code: {auth_request.code}, elapsed: {elapsed_seconds}s")
                 
                 try:
-                    # Восстанавливаем клиент из сохраненной сессии
-                    client = await self._create_client_from_session(auth_data['session_string'])
-                    phone_code_hash = auth_data['phone_code_hash']
+                    # Если в auth_data есть активный клиент - используем его
+                    if 'client' in auth_data:
+                        client = auth_data['client']
+                        phone_code_hash = auth_data['phone_code_hash']
+                        logger.info(f"Using active client from memory for sign_in")
+                    else:
+                        # Восстанавливаем клиент из сохраненной сессии (из Redis)
+                        client = await self._create_client_from_session(auth_data['session_string'])
+                        phone_code_hash = auth_data['phone_code_hash']
+                        logger.info(f"Restored client from Redis session for sign_in")
                     
                     # Входим с кодом
                     await client.sign_in(
@@ -549,8 +556,14 @@ class TelegramService:
             logger.error(f"Error saving auth session: {e}")
     
     async def _get_auth_session(self, auth_key: str) -> Optional[Dict]:
-        """Получение состояния авторизации из Redis"""
+        """Получение состояния авторизации из памяти или Redis"""
         try:
+            # Сначала проверяем память (активный клиент)
+            if auth_key in self._auth_sessions:
+                logger.info(f"Retrieved auth session from memory: {auth_key}")
+                return self._auth_sessions[auth_key]
+            
+            # Если нет в памяти - пытаемся получить из Redis и восстановить
             redis_key = f"auth_session:{auth_key}"
             data = self.redis_client.get(redis_key)
             
@@ -559,7 +572,7 @@ class TelegramService:
                 logger.info(f"Retrieved auth session from Redis: {redis_key}")
                 return auth_data
             else:
-                logger.info(f"No auth session found in Redis: {redis_key}")
+                logger.info(f"No auth session found in memory or Redis: {auth_key}")
                 return None
                 
         except Exception as e:
