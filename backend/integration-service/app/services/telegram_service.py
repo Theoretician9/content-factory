@@ -57,6 +57,8 @@ class TelegramService:
         
         # Активные клиенты для переиспользования
         self._active_clients: Dict[str, TelegramClient] = {}
+        # Активные auth sessions хранятся в глобальной переменной _GLOBAL_AUTH_SESSIONS
+        # чтобы не теряться между HTTP запросами (FastAPI создает новый сервис для каждого запроса)
         
     async def _get_api_credentials(self) -> Tuple[str, str]:
         """Получение API ID и Hash из Vault"""
@@ -610,4 +612,30 @@ class TelegramService:
         session = StringSession(session_string)
         client = TelegramClient(session, api_id, api_hash)
         await client.connect()
-        return client 
+        return client
+    
+    def _cleanup_old_auth_sessions(self) -> None:
+        """Очистка старых auth sessions для предотвращения утечек памяти"""
+        try:
+            global _GLOBAL_AUTH_SESSIONS
+            current_time = int(time.time())
+            expired_keys = []
+            
+            for auth_key, auth_data in _GLOBAL_AUTH_SESSIONS.items():
+                # Удаляем сессии старше 10 минут
+                if current_time - auth_data.get('timestamp', 0) > 600:
+                    expired_keys.append(auth_key)
+            
+            for key in expired_keys:
+                if 'client' in _GLOBAL_AUTH_SESSIONS[key]:
+                    try:
+                        # НЕ используем await здесь так как это sync метод
+                        # asyncio.create_task(_GLOBAL_AUTH_SESSIONS[key]['client'].disconnect())
+                        pass  # Клиент отключится сам через timeout
+                    except:
+                        pass
+                del _GLOBAL_AUTH_SESSIONS[key]
+                logger.info(f"Cleaned up expired auth session: {key}")
+                
+        except Exception as e:
+            logger.error(f"Error cleaning up auth sessions: {e}") 
