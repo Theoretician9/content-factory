@@ -10,6 +10,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import uvicorn
+from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.database import init_db, close_db
@@ -120,17 +121,17 @@ async def health_check(request):
 # Обработчики ошибок
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
-    return HTTPException(
+    return JSONResponse(
         status_code=404,
-        detail="Endpoint не найден"
+        content={"detail": "Endpoint не найден"}
     )
 
 @app.exception_handler(500)
 async def internal_error_handler(request, exc):
     logger.error(f"Internal server error: {exc}")
-    return HTTPException(
+    return JSONResponse(
         status_code=500,
-        detail="Внутренняя ошибка сервера"
+        content={"detail": "Внутренняя ошибка сервера"}
     )
 
 if __name__ == "__main__":
