@@ -319,6 +319,21 @@ class TelegramService:
             logger.info(f"Timeout: {getattr(sent_code, 'timeout', 'unknown')} seconds")
             logger.info(f"Phone code hash: {sent_code.phone_code_hash[:15]}...")
             
+            # Определяем тип кода для пользователя
+            code_type = getattr(sent_code, 'type', None)
+            if hasattr(code_type, '__class__'):
+                type_name = code_type.__class__.__name__
+                if type_name == 'SentCodeTypeApp':
+                    message = f"Код отправлен в приложение Telegram на номере {auth_request.phone}. Проверьте уведомления в приложении Telegram."
+                elif type_name == 'SentCodeTypeSms':
+                    message = f"SMS код отправлен на номер {auth_request.phone}. Введите код в течение 5 минут."
+                elif type_name == 'SentCodeTypeCall':
+                    message = f"Код будет передан голосовым звонком на номер {auth_request.phone}."
+                else:
+                    message = f"Код отправлен на номер {auth_request.phone}. Проверьте SMS или приложение Telegram."
+            else:
+                message = f"Код отправлен на номер {auth_request.phone}. Проверьте SMS или приложение Telegram."
+            
             # Сохраняем активную сессию авторизации в Redis
             await self._save_auth_session(auth_key, client, sent_code.phone_code_hash)
             
@@ -330,7 +345,7 @@ class TelegramService:
             
             return TelegramConnectResponse(
                 status="code_required",
-                message=f"Код отправлен на номер {auth_request.phone}. Введите код в течение 5 минут."
+                message=message
             )
             
         except Exception as e:
