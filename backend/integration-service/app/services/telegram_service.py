@@ -133,24 +133,26 @@ class TelegramService:
             
             # Если есть код, пытаемся войти с существующим клиентом
             if auth_request.code:
-                if auth_key not in self._auth_sessions:
+                auth_data = await self._get_auth_session(auth_key)
+                
+                if not auth_data:
                     return TelegramConnectResponse(
                         status="code_required",
                         message="Сессия авторизации истекла. Запросите новый код"
                     )
                 
-                auth_data = self._auth_sessions[auth_key]
-                client = auth_data['client']
-                phone_code_hash = auth_data['phone_code_hash']
-                
                 current_timestamp = int(time.time())
                 request_timestamp = auth_data.get('timestamp', 0)
                 elapsed_seconds = current_timestamp - request_timestamp
                 
-                logger.info(f"Attempting sign_in with existing session. Phone: {auth_request.phone}, code: {auth_request.code}, elapsed: {elapsed_seconds}s")
+                logger.info(f"Attempting sign_in with restored session. Phone: {auth_request.phone}, code: {auth_request.code}, elapsed: {elapsed_seconds}s")
                 
                 try:
-                    # Входим с кодом используя существующий клиент
+                    # Восстанавливаем клиент из сохраненной сессии
+                    client = await self._create_client_from_session(auth_data['session_string'])
+                    phone_code_hash = auth_data['phone_code_hash']
+                    
+                    # Входим с кодом
                     await client.sign_in(
                         phone=auth_request.phone,
                         code=auth_request.code,
@@ -164,7 +166,7 @@ class TelegramService:
                         "user_id": user_id,
                         "phone": auth_request.phone,
                         "session_data": {"encrypted_session": encrypted_session},
-                        "session_metadata": {"method": "sms_code_unified", "elapsed_seconds": elapsed_seconds}
+                        "session_metadata": {"method": "sms_code_redis", "elapsed_seconds": elapsed_seconds}
                     }
                     
                     telegram_session = await self.session_service.create(session, session_data)
@@ -174,9 +176,9 @@ class TelegramService:
                         details={"session_id": str(telegram_session.id), "elapsed_seconds": elapsed_seconds}
                     )
                     
-                    # Очищаем временную сессию авторизации
+                    # Очищаем auth session
                     await client.disconnect()
-                    del self._auth_sessions[auth_key]
+                    await self._delete_auth_session(auth_key)
                     
                     return TelegramConnectResponse(
                         status="success",
@@ -185,6 +187,7 @@ class TelegramService:
                     )
                     
                 except SessionPasswordNeededError:
+                    await client.disconnect()
                     return TelegramConnectResponse(
                         status="2fa_required",
                         message="Требуется двухфакторная аутентификация"
@@ -195,7 +198,7 @@ class TelegramService:
                     
                     # Очищаем сессию при ошибке
                     await client.disconnect()
-                    del self._auth_sessions[auth_key]
+                    await self._delete_auth_session(auth_key)
                     
                     if "confirmation code has expired" in error_msg.lower():
                         return TelegramConnectResponse(
