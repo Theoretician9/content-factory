@@ -183,14 +183,19 @@ class TelegramService:
                     ttl_remaining = self.redis_client.ttl(redis_key)
                     logger.info(f"Attempting sign_in with phone: {auth_request.phone}, code: {auth_request.code}, hash: {phone_code_hash[:10]}..., TTL remaining: {ttl_remaining}s, timestamp: {current_timestamp}")
                     
+                    # ВАЖНО: Создаем новый клиент для попытки входа с кодом
+                    # Это избегает проблем с состоянием предыдущего клиента
+                    code_client = await self._create_client()
+                    await code_client.connect()
+                    
                     # Входим с кодом и phone_code_hash
-                    await client.sign_in(
+                    await code_client.sign_in(
                         phone=auth_request.phone,
                         code=auth_request.code,
                         phone_code_hash=phone_code_hash
                     )
                     
-                    session_string = client.session.save()
+                    session_string = code_client.session.save()
                     encrypted_session = await self._encrypt_session_data(session_string)
                     
                     session_data = {
@@ -210,7 +215,7 @@ class TelegramService:
                     # Удаляем phone_code_hash из Redis после успешного входа
                     self.redis_client.delete(redis_key)
                     
-                    await client.disconnect()
+                    await code_client.disconnect()
                     
                     return TelegramConnectResponse(
                         status="success",
@@ -219,13 +224,13 @@ class TelegramService:
                     )
                     
                 except SessionPasswordNeededError:
-                    await client.disconnect()
+                    await code_client.disconnect()
                     return TelegramConnectResponse(
                         status="2fa_required",
                         message="Требуется двухфакторная аутентификация"
                     )
                 except PhoneCodeInvalidError:
-                    await client.disconnect()
+                    await code_client.disconnect()
                     return TelegramConnectResponse(
                         status="code_required",
                         message="Неверный код. Попробуйте еще раз"

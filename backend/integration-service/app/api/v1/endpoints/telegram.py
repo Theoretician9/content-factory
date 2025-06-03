@@ -78,6 +78,23 @@ async def get_qr_code(
             detail=f"Ошибка генерации QR кода: {str(e)}"
         )
 
+@router.post("/qr-check", response_model=TelegramConnectResponse)
+async def check_qr_authorization(
+    session: AsyncSession = Depends(get_async_session),
+    telegram_service: TelegramService = Depends(get_telegram_service),
+    user_id: int = Depends(get_current_user_id)
+):
+    """Проверка авторизации по QR коду"""
+    try:
+        result = await telegram_service.check_qr_authorization(session, user_id)
+        return result
+    except Exception as e:
+        logger.error(f"Error checking QR authorization: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка проверки QR авторизации: {str(e)}"
+        )
+
 @router.get("/accounts", response_model=List[TelegramSessionResponse])
 async def get_telegram_accounts(
     session: AsyncSession = Depends(get_async_session),
