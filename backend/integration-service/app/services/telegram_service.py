@@ -11,6 +11,7 @@ import qrcode
 import io
 from uuid import UUID
 import json
+import redis
 
 from .base import BaseCRUDService
 from .integration_log_service import IntegrationLogService
@@ -40,6 +41,14 @@ class TelegramService:
         self.bot_service = BaseCRUDService(TelegramBot)
         self.channel_service = BaseCRUDService(TelegramChannel)
         self.log_service = IntegrationLogService()
+        
+        # Redis для временного хранения phone_code_hash
+        self.redis_client = redis.Redis(
+            host=self.settings.REDIS_HOST,
+            port=self.settings.REDIS_PORT,
+            db=self.settings.REDIS_DB,
+            decode_responses=True
+        )
         
         # Активные клиенты для переиспользования
         self._active_clients: Dict[str, TelegramClient] = {}
