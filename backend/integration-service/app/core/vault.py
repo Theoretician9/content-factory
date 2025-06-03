@@ -25,22 +25,22 @@ class IntegrationVaultClient:
             
         try:
             # Пытаемся получить существующие секреты
-            self.get_secret('secret/data/integrations/telegram')
+            self.get_secret('integrations/telegram')
         except:
             # Создаем базовую структуру для интеграций
             try:
-                self.put_secret('secret/data/integrations/telegram', {
+                self.put_secret('integrations/telegram', {
                     'api_id': '29948572',  # Тестовый API ID (замените на реальный)
                     'api_hash': 'your_api_hash_here',  # Замените на реальный API Hash
                     'webhook_url': '',
                     'proxy': ''
                 })
-                self.put_secret('secret/data/integrations/vk', {
+                self.put_secret('integrations/vk', {
                     'api_key': '',
                     'group_token': '',
                     'proxy': ''
                 })
-                self.put_secret('secret/data/integrations/whatsapp', {
+                self.put_secret('integrations/whatsapp', {
                     'api_key': '',
                     'phone_number': '',
                     'proxy': ''
@@ -55,10 +55,10 @@ class IntegrationVaultClient:
             raise Exception("Vault client not initialized")
         
         try:
-            response = self.client.secrets.kv.v2.read_secret_version(path=path.replace('secret/data/', ''))
+            response = self.client.secrets.kv.v2.read_secret_version(path=path)
             return response['data']['data']
         except Exception as e:
-            logger.error(f"Error getting secret {path}: {e}")
+            logger.error(f"Error getting secret {path}: {e}, on get {self.vault_addr}/v1/secret/data/{path}")
             raise
 
     def put_secret(self, path: str, data: Dict[str, Any]) -> None:
@@ -68,7 +68,7 @@ class IntegrationVaultClient:
         
         try:
             self.client.secrets.kv.v2.create_or_update_secret(
-                path=path.replace('secret/data/', ''),
+                path=path,
                 secret=data
             )
         except Exception as e:
@@ -82,7 +82,7 @@ class IntegrationVaultClient:
         
         try:
             self.client.secrets.kv.v2.delete_metadata_and_all_versions(
-                path=path.replace('secret/data/', '')
+                path=path
             )
         except Exception as e:
             logger.error(f"Error deleting secret {path}: {e}")
@@ -95,7 +95,7 @@ class IntegrationVaultClient:
         :return: словарь с учетными данными
         """
         try:
-            return self.get_secret(f'secret/data/integrations/{platform}')
+            return self.get_secret(f'integrations/{platform}')
         except Exception as e:
             logger.error(f"Error getting credentials for {platform}: {e}")
             # Возвращаем пустые данные при ошибке
@@ -107,14 +107,14 @@ class IntegrationVaultClient:
         :param platform: название платформы
         :param credentials: новые учетные данные
         """
-        self.put_secret(f'secret/data/integrations/{platform}', credentials)
+        self.put_secret(f'integrations/{platform}', credentials)
 
     def delete_integration_credentials(self, platform: str) -> None:
         """
         Удаляет учетные данные платформы
         :param platform: название платформы
         """
-        self.delete_secret(f'secret/data/integrations/{platform}')
+        self.delete_secret(f'integrations/{platform}')
 
     def list_integrations(self) -> list:
         """
