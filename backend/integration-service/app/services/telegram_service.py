@@ -297,15 +297,10 @@ class TelegramService:
             # Отправляем SMS код
             sent_code = await client.send_code_request(auth_request.phone)
             
-            # Сохраняем активную сессию авторизации (НЕ отключаем клиент!)
-            current_timestamp = int(time.time())
-            self._auth_sessions[auth_key] = {
-                'client': client,
-                'phone_code_hash': sent_code.phone_code_hash,
-                'timestamp': current_timestamp,
-                'expires_at': current_timestamp + 300  # 5 минут
-            }
+            # Сохраняем активную сессию авторизации в Redis (НЕ отключаем клиент!)
+            await self._save_auth_session(auth_key, client, sent_code.phone_code_hash)
             
+            current_timestamp = int(time.time())
             logger.info(f"Started auth session for {auth_request.phone}, hash: {sent_code.phone_code_hash[:10]}..., timestamp: {current_timestamp}")
             
             return TelegramConnectResponse(
@@ -317,12 +312,7 @@ class TelegramService:
             logger.error(f"Error connecting Telegram account: {e}")
             
             # Очищаем сессию при ошибке
-            if auth_key in self._auth_sessions:
-                try:
-                    await self._auth_sessions[auth_key]['client'].disconnect()
-                except:
-                    pass
-                del self._auth_sessions[auth_key]
+            await self._delete_auth_session(auth_key)
             
             await self.log_service.log_action(
                 session, user_id, "telegram", "connect_error", "error",
