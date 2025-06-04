@@ -412,6 +412,7 @@ services:
   vault:
     image: vault:1.13.3
     container_name: vault
+    user: root
     environment:
       - VAULT_LOG_LEVEL=info
       - VAULT_ADDR=http://0.0.0.0:8201
