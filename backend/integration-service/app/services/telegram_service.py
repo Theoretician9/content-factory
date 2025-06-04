@@ -67,7 +67,10 @@ class TelegramService:
             api_id = credentials.get('api_id')
             api_hash = credentials.get('api_hash')
             
+            logger.info(f"Retrieved credentials from Vault - API ID: {api_id}, Hash: {api_hash[:10]}...")
+            
             if not api_id or not api_hash:
+                logger.error("Telegram API credentials not found in Vault")
                 raise ValueError("Telegram API credentials not found in Vault")
                 
             return api_id, api_hash
@@ -76,7 +79,7 @@ class TelegramService:
             
             # Fallback к настройкам
             if self.settings.TELEGRAM_API_ID and self.settings.TELEGRAM_API_HASH:
-                logger.info("Using Telegram credentials from settings")
+                logger.info(f"Using Telegram credentials from settings - API ID: {self.settings.TELEGRAM_API_ID}")
                 return self.settings.TELEGRAM_API_ID, self.settings.TELEGRAM_API_HASH
             
             # Прямой fallback к переменным окружения (hotfix)
@@ -84,7 +87,7 @@ class TelegramService:
             env_api_hash = os.getenv('TELEGRAM_API_HASH')
             
             if env_api_id and env_api_hash:
-                logger.info("Using Telegram credentials from environment variables")
+                logger.info(f"Using Telegram credentials from environment variables - API ID: {env_api_id}")
                 return env_api_id, env_api_hash
             
             raise ValueError("No Telegram API credentials found anywhere!")
@@ -92,6 +95,13 @@ class TelegramService:
     async def _create_client(self, session_string: Optional[str] = None) -> TelegramClient:
         """Создание Telegram клиента"""
         api_id, api_hash = await self._get_api_credentials()
+        
+        # Проверяем формат api_id
+        try:
+            api_id = int(api_id)
+        except ValueError:
+            logger.error(f"Invalid API ID format: {api_id}")
+            raise ValueError("Invalid API ID format")
         
         session = StringSession(session_string) if session_string else StringSession()
         client = TelegramClient(session, api_id, api_hash)
