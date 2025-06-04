@@ -169,6 +169,11 @@ class TelegramService:
                         client = auth_data['client']
                         phone_code_hash = auth_data['phone_code_hash']
                         logger.info(f"Using active client from memory for sign_in")
+                        
+                        # Проверяем, подключен ли клиент, если нет - переподключаем
+                        if not client.is_connected():
+                            logger.info(f"Client disconnected, reconnecting...")
+                            await client.connect()
                     else:
                         # Восстанавливаем клиент из сохраненной сессии (из Redis)
                         client = await self._create_client_from_session(auth_data['session_string'])
@@ -398,8 +403,11 @@ class TelegramService:
             # Сохраняем активную сессию авторизации в Redis
             await self._save_auth_session(auth_key, client, sent_code.phone_code_hash)
             
-            # ВАЖНО: Отключаем клиент после отправки кода - это НУЖНО для доставки SentCodeTypeApp!
-            await client.disconnect()
+            # Сохраняем сессию НЕ отключая клиента для последующего sign_in
+            logger.info(f"Saved auth session to Redis AND global memory: auth_session:{auth_key}")
+            
+            # НЕ отключаем клиента - он понадобится для sign_in
+            # await client.disconnect()  # Оставляем клиент подключенным
             
             current_timestamp = int(time.time())
             logger.info(f"Started auth session for {auth_request.phone}, hash: {sent_code.phone_code_hash[:10]}..., timestamp: {current_timestamp}")
