@@ -25,7 +25,8 @@ class IntegrationVaultClient:
             
         try:
             # Проверяем, что KV v2 включен
-            if 'kv/' not in self.client.sys.list_mounted_secrets_engines()['data']:
+            mounted_secrets = self.client.sys.list_mounted_secrets_engines()
+            if 'kv/' not in mounted_secrets.get('data', {}):
                 self.client.sys.enable_secrets_engine(
                     backend_type='kv',
                     options={'version': '2'},
@@ -33,15 +34,20 @@ class IntegrationVaultClient:
                 )
                 logger.info("Enabled KV v2 secrets engine")
             
-            # Пытаемся получить существующие секреты
-            self.get_secret('integrations/telegram')
-        except:
-            # Создаем базовую структуру для интеграций
+            # Проверяем существование секрета
             try:
+                self.get_secret('integrations/telegram')
+                logger.info("Telegram credentials found in Vault")
+            except Exception as e:
+                logger.info(f"Telegram credentials not found in Vault, initializing: {e}")
                 # Получаем реальные Telegram API credentials из переменных окружения
-                telegram_api_id = os.getenv('TELEGRAM_API_ID', '23699038')
-                telegram_api_hash = os.getenv('TELEGRAM_API_HASH', '055c48aee9080db331639a87f85617b4')
+                telegram_api_id = os.getenv('TELEGRAM_API_ID')
+                telegram_api_hash = os.getenv('TELEGRAM_API_HASH')
                 
+                if not telegram_api_id or not telegram_api_hash:
+                    raise ValueError("TELEGRAM_API_ID and TELEGRAM_API_HASH must be set in environment")
+                
+                # Создаем секрет в Vault
                 self.put_secret('integrations/telegram', {
                     'api_id': telegram_api_id,
                     'api_hash': telegram_api_hash,
@@ -50,19 +56,9 @@ class IntegrationVaultClient:
                 })
                 logger.info(f"Initialized Telegram credentials in Vault with api_id: {telegram_api_id}")
                 
-                self.put_secret('integrations/vk', {
-                    'api_key': '',
-                    'group_token': '',
-                    'proxy': ''
-                })
-                self.put_secret('integrations/whatsapp', {
-                    'api_key': '',
-                    'phone_number': '',
-                    'proxy': ''
-                })
-            except Exception as e:
-                # Логируем ошибку, но не падаем
-                logger.warning(f"Could not initialize Vault secrets: {e}")
+        except Exception as e:
+            logger.error(f"Error in _ensure_secrets_mount: {e}")
+            raise
 
     def get_secret(self, path: str) -> Dict[str, Any]:
         """Получить секрет из Vault"""
@@ -73,8 +69,10 @@ class IntegrationVaultClient:
             # Используем правильный путь для KV v2
             response = self.client.secrets.kv.v2.read_secret_version(
                 path=path,
-                mount_point='kv'  # Явно указываем mount point
+                mount_point='kv'
             )
+            if not response or 'data' not in response or 'data' not in response['data']:
+                raise Exception(f"Invalid response format from Vault for path {path}")
             return response['data']['data']
         except Exception as e:
             logger.error(f"Error getting secret {path}: {e}")
@@ -90,8 +88,9 @@ class IntegrationVaultClient:
             self.client.secrets.kv.v2.create_or_update_secret(
                 path=path,
                 secret=data,
-                mount_point='kv'  # Явно указываем mount point
+                mount_point='kv'
             )
+            logger.info(f"Successfully saved secret to Vault: {path}")
         except Exception as e:
             logger.error(f"Error putting secret {path}: {e}")
             raise
