@@ -426,7 +426,11 @@ services:
     volumes:
       - vault_data:/vault/data
       - ./vault/config:/vault/config
-    command: vault server -config=/vault/config/vault.hcl
+    command: >
+      sh -c "
+        chown -R vault:vault /vault/data &&
+        su vault -c 'vault server -config=/vault/config/vault.hcl'
+      "
     healthcheck:
       test: ["CMD", "sh", "-c", "VAULT_ADDR=http://127.0.0.1:8201 vault status || exit 0"]
       interval: 30s
