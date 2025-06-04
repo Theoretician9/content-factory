@@ -288,7 +288,7 @@ class TelegramService:
                         message=f"Код уже отправлен. Повторный запрос возможен через {60 - elapsed} секунд"
                     )
             
-            # Первичный запрос: создаем клиент и запрашиваем SMS код
+            # Первичный запрос: создаем клиент и запрашиваем код
             client = await self._create_client()
             await client.connect()
             
@@ -319,18 +319,15 @@ class TelegramService:
                     message="Аккаунт успешно подключен"
                 )
             
-            # Отправляем SMS код
-            logger.info(f"Sending SMS code to {auth_request.phone}...")
+            # Отправляем код
+            logger.info(f"Sending code to {auth_request.phone}...")
             
             try:
-                # Явно запрашиваем SMS код
-                sent_code = await client.send_code_request(
-                    phone=auth_request.phone,
-                    force_sms=True  # Принудительно запрашиваем SMS
-                )
+                # Отправляем код через приложение Telegram
+                sent_code = await client.send_code_request(auth_request.phone)
                 
                 # Детальное логирование ответа от Telegram
-                logger.info(f"SMS code sent successfully!")
+                logger.info(f"Code sent successfully!")
                 logger.info(f"Code type: {getattr(sent_code, 'type', 'unknown')}")
                 logger.info(f"Next type: {getattr(sent_code, 'next_type', 'unknown')}")
                 logger.info(f"Timeout: {getattr(sent_code, 'timeout', 'unknown')} seconds")
@@ -360,10 +357,12 @@ class TelegramService:
                         status="error",
                         message="Неверный формат номера телефона"
                     )
-                elif "flood" in error_msg.lower():
+                elif "wait of" in error_msg.lower():
+                    wait_time = int(error_msg.split("wait of ")[1].split(" seconds")[0])
+                    minutes = wait_time // 60
                     return TelegramConnectResponse(
                         status="error",
-                        message="Слишком много попыток. Попробуйте позже"
+                        message=f"Слишком много попыток. Подождите {minutes} минут"
                     )
                 else:
                     return TelegramConnectResponse(
