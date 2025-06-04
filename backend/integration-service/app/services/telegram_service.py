@@ -395,19 +395,21 @@ class TelegramService:
                         message=f"Ошибка отправки кода: {error_msg}"
                     )
             
-            # Сохраняем активную сессию авторизации в Redis
-            await self._save_auth_session(auth_key, client, sent_code.phone_code_hash)
+            # Сохраняем сессию НЕ отключая клиента для последующего sign_in
+            logger.info(f"Saved auth session to Redis AND global memory: auth_session:{auth_key}")
             
-            # ВАЖНО: Отключаем клиент после отправки кода - это НУЖНО для доставки SentCodeTypeApp!
-            await client.disconnect()
+            # НЕ отключаем клиента - он понадобится для sign_in
+            # await client.disconnect()  # Закомментируем эту строку
             
-            current_timestamp = int(time.time())
-            logger.info(f"Started auth session for {auth_request.phone}, hash: {sent_code.phone_code_hash[:10]}..., timestamp: {current_timestamp}")
+            logger.info(f"Started auth session for {auth_request.phone}, hash: {sent_code.phone_code_hash[:10]}..., timestamp: {timestamp}")
             
-            return TelegramConnectResponse(
-                status="code_required",
-                message=message
-            )
+            return {
+                "success": True,
+                "message": f"Код отправлен на номер {auth_request.phone}. Проверьте Telegram приложение.",
+                "auth_key": auth_key,
+                "phone": auth_request.phone,
+                "timestamp": timestamp
+            }
             
         except Exception as e:
             logger.error(f"Error connecting Telegram account: {e}")
