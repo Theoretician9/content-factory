@@ -12,14 +12,21 @@ cluster_addr = "http://vault:8201"
 
 ui = true
 
-# Настройки для production
+# Production настройки
 disable_mlock = false
 default_lease_ttl = "168h"
 max_lease_ttl = "720h"
 
+# Логирование
+log_level = "info"
+cluster_name = "content-factory-vault"
+
+# Отключаем dev режим для production
+# Данные будут сохраняться в /vault/data
+
 # Настройки для стабильности
-log_level = "debug"
-cluster_name = "vault-cluster"
+# log_level = "debug"
+# cluster_name = "vault-cluster"
 
 # В production нужно настроить seal
 # seal "transit" {
