@@ -24,6 +24,15 @@ class IntegrationVaultClient:
             return
             
         try:
+            # Проверяем, что KV v2 включен
+            if 'kv/' not in self.client.sys.list_mounted_secrets_engines()['data']:
+                self.client.sys.enable_secrets_engine(
+                    backend_type='kv',
+                    options={'version': '2'},
+                    path='kv'
+                )
+                logger.info("Enabled KV v2 secrets engine")
+            
             # Пытаемся получить существующие секреты
             self.get_secret('integrations/telegram')
         except:
@@ -61,10 +70,14 @@ class IntegrationVaultClient:
             raise Exception("Vault client not initialized")
         
         try:
-            response = self.client.secrets.kv.v2.read_secret_version(path=path)
+            # Используем правильный путь для KV v2
+            response = self.client.secrets.kv.v2.read_secret_version(
+                path=path,
+                mount_point='kv'  # Явно указываем mount point
+            )
             return response['data']['data']
         except Exception as e:
-            logger.error(f"Error getting secret {path}: {e}, on get {self.vault_addr}/v1/secret/data/{path}")
+            logger.error(f"Error getting secret {path}: {e}")
             raise
 
     def put_secret(self, path: str, data: Dict[str, Any]) -> None:
@@ -73,9 +86,11 @@ class IntegrationVaultClient:
             raise Exception("Vault client not initialized")
         
         try:
+            # Используем правильный путь для KV v2
             self.client.secrets.kv.v2.create_or_update_secret(
                 path=path,
-                secret=data
+                secret=data,
+                mount_point='kv'  # Явно указываем mount point
             )
         except Exception as e:
             logger.error(f"Error putting secret {path}: {e}")
@@ -87,8 +102,10 @@ class IntegrationVaultClient:
             raise Exception("Vault client not initialized")
         
         try:
+            # Используем правильный путь для KV v2
             self.client.secrets.kv.v2.delete_metadata_and_all_versions(
-                path=path
+                path=path,
+                mount_point='kv'  # Явно указываем mount point
             )
         except Exception as e:
             logger.error(f"Error deleting secret {path}: {e}")
