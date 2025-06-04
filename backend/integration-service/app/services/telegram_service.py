@@ -334,7 +334,10 @@ class TelegramService:
             
             try:
                 # Отправляем код через приложение Telegram
-                sent_code = await client.send_code_request(auth_request.phone)
+                sent_code = await client.send_code_request(
+                    phone=auth_request.phone,
+                    force_sms=False  # Явно указываем, что не хотим принудительно SMS
+                )
                 
                 # Детальное логирование ответа от Telegram
                 logger.info(f"Code sent successfully!")
