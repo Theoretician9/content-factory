@@ -333,12 +333,9 @@ class TelegramService:
             logger.info(f"Sending code to {auth_request.phone}...")
             
             try:
-                # Отправляем код через приложение Telegram
-                sent_code = await client.send_code_request(
-                    phone=auth_request.phone,
-                    force_sms=False,  # Явно указываем, что не хотим принудительно SMS
-                    allow_flashcall=False  # Отключаем flashcall
-                )
+                # Используем современную документацию Telethon 1.34.0
+                # Убираем deprecated параметры force_sms и allow_flashcall
+                sent_code = await client.send_code_request(auth_request.phone)
                 
                 # Детальное логирование ответа от Telegram
                 logger.info(f"Code sent successfully!")
@@ -357,6 +354,10 @@ class TelegramService:
                         message = f"SMS код отправлен на номер {auth_request.phone}. Введите код в течение 5 минут."
                     elif type_name == 'SentCodeTypeCall':
                         message = f"Код будет передан голосовым звонком на номер {auth_request.phone}."
+                    elif type_name == 'SentCodeTypeFlashCall':
+                        message = f"Код будет передан через flash-звонок на номер {auth_request.phone}."
+                    elif type_name == 'SentCodeTypeMissedCall':
+                        message = f"Код будет передан через пропущенный звонок на номер {auth_request.phone}."
                     else:
                         message = f"Код отправлен на номер {auth_request.phone}. Проверьте SMS или приложение Telegram."
                 else:
@@ -373,10 +374,20 @@ class TelegramService:
                     )
                 elif "wait of" in error_msg.lower():
                     wait_time = int(error_msg.split("wait of ")[1].split(" seconds")[0])
-                    minutes = wait_time // 60
+                    hours = wait_time // 3600
+                    minutes = (wait_time % 3600) // 60
+                    if hours > 0:
+                        time_str = f"{hours} ч {minutes} мин"
+                    else:
+                        time_str = f"{minutes} мин"
                     return TelegramConnectResponse(
                         status="error",
-                        message=f"Слишком много попыток. Подождите {minutes} минут"
+                        message=f"Слишком много попыток. Подождите {time_str} и попробуйте снова"
+                    )
+                elif "phone number banned" in error_msg.lower():
+                    return TelegramConnectResponse(
+                        status="error",
+                        message="Номер телефона заблокирован в Telegram"
                     )
                 else:
                     return TelegramConnectResponse(
