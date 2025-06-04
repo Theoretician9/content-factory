@@ -147,7 +147,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - VAULT_ADDR=http://vault:8201
-      - VAULT_TOKEN=root
+      - VAULT_TOKEN=${VAULT_ROOT_TOKEN}
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=user
       - RABBITMQ_PASSWORD=password
@@ -412,7 +412,6 @@ services:
   vault:
     image: vault:1.13.3
     container_name: vault
-    user: root
     environment:
       - VAULT_LOG_LEVEL=info
       - VAULT_ADDR=http://0.0.0.0:8201
@@ -426,10 +425,10 @@ services:
     volumes:
       - vault_data:/vault/data
       - ./vault/config:/vault/config
-    command: >
+    entrypoint: >
       sh -c "
         chown -R vault:vault /vault/data &&
-        su vault -c 'vault server -config=/vault/config/vault.hcl'
+        exec docker-entrypoint.sh vault server -config=/vault/config/vault.hcl
       "
     healthcheck:
       test: ["CMD", "sh", "-c", "VAULT_ADDR=http://127.0.0.1:8201 vault status || exit 0"]
