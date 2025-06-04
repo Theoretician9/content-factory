@@ -322,30 +322,54 @@ class TelegramService:
             # Отправляем SMS код
             logger.info(f"Sending SMS code to {auth_request.phone}...")
             
-            # Стандартный запрос SMS кода (убираем неподдерживаемый code_settings)
-            sent_code = await client.send_code_request(auth_request.phone)
-            
-            # Детальное логирование ответа от Telegram
-            logger.info(f"SMS code sent successfully!")
-            logger.info(f"Code type: {getattr(sent_code, 'type', 'unknown')}")
-            logger.info(f"Next type: {getattr(sent_code, 'next_type', 'unknown')}")
-            logger.info(f"Timeout: {getattr(sent_code, 'timeout', 'unknown')} seconds")
-            logger.info(f"Phone code hash: {sent_code.phone_code_hash[:15]}...")
-            
-            # Определяем тип кода для пользователя
-            code_type = getattr(sent_code, 'type', None)
-            if hasattr(code_type, '__class__'):
-                type_name = code_type.__class__.__name__
-                if type_name == 'SentCodeTypeApp':
-                    message = f"Код отправлен в приложение Telegram на номере {auth_request.phone}. Проверьте уведомления в приложении Telegram."
-                elif type_name == 'SentCodeTypeSms':
-                    message = f"SMS код отправлен на номер {auth_request.phone}. Введите код в течение 5 минут."
-                elif type_name == 'SentCodeTypeCall':
-                    message = f"Код будет передан голосовым звонком на номер {auth_request.phone}."
+            try:
+                # Явно запрашиваем SMS код
+                sent_code = await client.send_code_request(
+                    phone=auth_request.phone,
+                    force_sms=True  # Принудительно запрашиваем SMS
+                )
+                
+                # Детальное логирование ответа от Telegram
+                logger.info(f"SMS code sent successfully!")
+                logger.info(f"Code type: {getattr(sent_code, 'type', 'unknown')}")
+                logger.info(f"Next type: {getattr(sent_code, 'next_type', 'unknown')}")
+                logger.info(f"Timeout: {getattr(sent_code, 'timeout', 'unknown')} seconds")
+                logger.info(f"Phone code hash: {sent_code.phone_code_hash[:15]}...")
+                
+                # Определяем тип кода для пользователя
+                code_type = getattr(sent_code, 'type', None)
+                if hasattr(code_type, '__class__'):
+                    type_name = code_type.__class__.__name__
+                    if type_name == 'SentCodeTypeApp':
+                        message = f"Код отправлен в приложение Telegram на номере {auth_request.phone}. Проверьте уведомления в приложении Telegram."
+                    elif type_name == 'SentCodeTypeSms':
+                        message = f"SMS код отправлен на номер {auth_request.phone}. Введите код в течение 5 минут."
+                    elif type_name == 'SentCodeTypeCall':
+                        message = f"Код будет передан голосовым звонком на номер {auth_request.phone}."
+                    else:
+                        message = f"Код отправлен на номер {auth_request.phone}. Проверьте SMS или приложение Telegram."
                 else:
                     message = f"Код отправлен на номер {auth_request.phone}. Проверьте SMS или приложение Telegram."
-            else:
-                message = f"Код отправлен на номер {auth_request.phone}. Проверьте SMS или приложение Telegram."
+                
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"Error sending code: {error_msg}")
+                
+                if "phone number invalid" in error_msg.lower():
+                    return TelegramConnectResponse(
+                        status="error",
+                        message="Неверный формат номера телефона"
+                    )
+                elif "flood" in error_msg.lower():
+                    return TelegramConnectResponse(
+                        status="error",
+                        message="Слишком много попыток. Попробуйте позже"
+                    )
+                else:
+                    return TelegramConnectResponse(
+                        status="error",
+                        message=f"Ошибка отправки кода: {error_msg}"
+                    )
             
             # Сохраняем активную сессию авторизации в Redis
             await self._save_auth_session(auth_key, client, sent_code.phone_code_hash)
