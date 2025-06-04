@@ -169,6 +169,11 @@ class TelegramService:
                         client = auth_data['client']
                         phone_code_hash = auth_data['phone_code_hash']
                         logger.info(f"Using active client from memory for sign_in")
+                        
+                        # Проверяем, подключен ли клиент, если нет - переподключаем
+                        if not client.is_connected():
+                            logger.info(f"Client disconnected, reconnecting...")
+                            await client.connect()
                     else:
                         # Восстанавливаем клиент из сохраненной сессии (из Redis)
                         client = await self._create_client_from_session(auth_data['session_string'])
