@@ -36,25 +36,12 @@ class IntegrationVaultClient:
             
             # Проверяем существование секрета
             try:
-                self.get_secret('integrations/telegram')
-                logger.info("Telegram credentials found in Vault")
+                secret = self.get_secret('integrations/telegram')
+                logger.info(f"Telegram credentials found in Vault: {secret.get('api_id')}")
+                return secret
             except Exception as e:
-                logger.info(f"Telegram credentials not found in Vault, initializing: {e}")
-                # Получаем реальные Telegram API credentials из переменных окружения
-                telegram_api_id = os.getenv('TELEGRAM_API_ID')
-                telegram_api_hash = os.getenv('TELEGRAM_API_HASH')
-                
-                if not telegram_api_id or not telegram_api_hash:
-                    raise ValueError("TELEGRAM_API_ID and TELEGRAM_API_HASH must be set in environment")
-                
-                # Создаем секрет в Vault
-                self.put_secret('integrations/telegram', {
-                    'api_id': telegram_api_id,
-                    'api_hash': telegram_api_hash,
-                    'webhook_url': '',
-                    'proxy': ''
-                })
-                logger.info(f"Initialized Telegram credentials in Vault with api_id: {telegram_api_id}")
+                logger.error(f"Error getting Telegram credentials from Vault: {e}")
+                raise
                 
         except Exception as e:
             logger.error(f"Error in _ensure_secrets_mount: {e}")
