@@ -225,6 +225,13 @@ async def reconnect_telegram_account(
             detail=f"Ошибка переподключения аккаунта: {str(e)}"
         )
 
+# Тестовый endpoint для проверки авторизации
+@router.get("/test-auth")
+async def test_auth(user_id: int = Depends(get_current_user_id)):
+    """Тестовый endpoint для проверки работы авторизации"""
+    logger.info(f"🔐 TEST-AUTH: Successfully authenticated user_id = {user_id}")
+    return {"authenticated_user_id": user_id, "message": "Authentication working!"}
+
 # TODO: Добавить endpoints для ботов и каналов
 # @router.post("/bots", response_model=TelegramBotResponse)
 # @router.get("/bots", response_model=List[TelegramBotResponse])
