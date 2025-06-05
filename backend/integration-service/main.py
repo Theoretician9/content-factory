@@ -81,6 +81,13 @@ app.add_middleware(
     allowed_hosts=["*"]  # В продакшене указать конкретные хосты
 )
 
+# Auth middleware для централизованной авторизации
+from app.middleware.auth_middleware import AuthMiddleware
+app.add_middleware(
+    AuthMiddleware,
+    jwt_secret="super-secret-jwt-key-for-content-factory-2024"
+)
+
 # Prometheus метрики
 if settings.PROMETHEUS_ENABLED:
     instrumentator = Instrumentator(
