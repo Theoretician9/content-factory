@@ -405,6 +405,16 @@ async def proxy_integration_service(request: Request, path: str):
         if name.lower() not in ["host", "content-length"]:
             headers[name] = value
     
+    # Логирование для отладки авторизации
+    auth_header = headers.get("authorization", "MISSING")
+    logger.info(json.dumps({
+        "event": "proxy_to_integration_service", 
+        "path": path, 
+        "method": request.method,
+        "auth_header": auth_header[:50] + "..." if len(auth_header) > 50 else auth_header,
+        "target_url": target_url
+    }))
+    
     # Копирование query parameters
     query_params = str(request.url.query)
     if query_params:
