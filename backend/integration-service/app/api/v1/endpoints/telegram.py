@@ -101,8 +101,11 @@ async def get_telegram_accounts(
 ):
     """Получение списка подключенных Telegram аккаунтов"""
     try:
+        logger.info(f"🔍 GET /accounts - Authenticated User ID: {user_id}, active_only: {active_only}")
         sessions = await telegram_service.get_user_sessions(session, user_id, active_only)
-        return [
+        logger.info(f"📋 Found {len(sessions)} sessions for user {user_id}")
+        
+        result = [
             TelegramSessionResponse(
                 id=s.id,
                 created_at=s.created_at,
@@ -114,8 +117,14 @@ async def get_telegram_accounts(
             )
             for s in sessions
         ]
+        
+        # Логируем user_id каждой возвращаемой сессии
+        for r in result:
+            logger.info(f"📱 Returning session {r.id} with user_id={r.user_id} for requesting user {user_id}")
+        
+        return result
     except Exception as e:
-        logger.error(f"Error getting accounts: {e}")
+        logger.error(f"Error getting accounts for user {user_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка получения аккаунтов: {str(e)}"
