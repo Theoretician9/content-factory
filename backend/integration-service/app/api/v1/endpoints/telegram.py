@@ -77,11 +77,26 @@ async def connect_telegram_account(
 
 @router.get("/qr-code")
 async def get_qr_code(
-    telegram_service: TelegramService = Depends(get_telegram_service),
-    user_id: int = Depends(get_current_user_id)
+    request: Request,
+    telegram_service: TelegramService = Depends(get_telegram_service)
 ):
     """Получение QR кода для авторизации через Telegram приложение"""
     try:
+        # ПРЯМАЯ ПРОВЕРКА JWT ТОКЕНА
+        auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            logger.error("🚫 Missing or invalid Authorization header")
+            raise HTTPException(status_code=401, detail="Authorization header missing or invalid")
+        
+        token = auth_header[7:]  # Убираем "Bearer "
+        try:
+            payload = jwt.decode(token, "super-secret-jwt-key-for-content-factory-2024", algorithms=["HS256"])
+            user_id = int(payload.get("sub", 0))
+            logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
+        except Exception as e:
+            logger.error(f"🚫 JWT token validation failed: {e}")
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        
         qr_code = await telegram_service.generate_qr_code(user_id)
         return {"qr_code": qr_code, "message": "Отсканируйте QR код в Telegram приложении"}
     except Exception as e:
@@ -93,12 +108,27 @@ async def get_qr_code(
 
 @router.post("/qr-check", response_model=TelegramConnectResponse)
 async def check_qr_authorization(
+    request: Request,
     session: AsyncSession = Depends(get_async_session),
-    telegram_service: TelegramService = Depends(get_telegram_service),
-    user_id: int = Depends(get_current_user_id)
+    telegram_service: TelegramService = Depends(get_telegram_service)
 ):
     """Проверка авторизации по QR коду"""
     try:
+        # ПРЯМАЯ ПРОВЕРКА JWT ТОКЕНА
+        auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            logger.error("🚫 Missing or invalid Authorization header")
+            raise HTTPException(status_code=401, detail="Authorization header missing or invalid")
+        
+        token = auth_header[7:]  # Убираем "Bearer "
+        try:
+            payload = jwt.decode(token, "super-secret-jwt-key-for-content-factory-2024", algorithms=["HS256"])
+            user_id = int(payload.get("sub", 0))
+            logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
+        except Exception as e:
+            logger.error(f"🚫 JWT token validation failed: {e}")
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        
         result = await telegram_service.check_qr_authorization(session, user_id)
         return result
     except Exception as e:
