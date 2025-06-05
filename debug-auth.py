@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 # Конфигурация
 API_BASE = "http://92.113.146.148:8000"
-JWT_SECRET = "your-jwt-secret"  # Тот же что в API Gateway и Integration Service
+JWT_SECRET = "super-secret-jwt-key-for-content-factory-2024"  # Значение по умолчанию из docker-compose
 
 def create_test_token(user_id: int) -> str:
     """Создает тестовый JWT токен"""
