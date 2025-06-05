@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import get_settings
 from app.database import init_db, close_db
 from app.api import api_router
+from app.middleware.auth_middleware import AuthMiddleware
 
 # Настройка логирования
 logging.basicConfig(
