@@ -49,7 +49,7 @@ async def get_current_user_id(
             logger.warning(f"Invalid user_id format in JWT: {user_id}")
             raise AuthenticationError("Invalid token: invalid user ID format")
         
-        logger.info(f"Authenticated user: {user_id_int}")
+        logger.info(f"🔐 JWT Authentication successful - User ID: {user_id_int}, Token payload: {payload}")
         return user_id_int
         
     except jwt.ExpiredSignatureError:
