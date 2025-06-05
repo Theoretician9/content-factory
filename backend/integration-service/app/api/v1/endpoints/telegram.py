@@ -364,13 +364,28 @@ async def get_integration_logs(
 
 @router.get("/stats/errors")
 async def get_error_stats(
+    request: Request,
     session: AsyncSession = Depends(get_async_session),
     log_service: IntegrationLogService = Depends(get_log_service),
-    user_id: int = Depends(get_current_user_id),
     days_back: int = Query(7, ge=1, le=30, description="Количество дней назад")
 ):
     """Получение статистики ошибок для пользователя"""
     try:
+        # ПРЯМАЯ ПРОВЕРКА JWT ТОКЕНА
+        auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            logger.error("🚫 Missing or invalid Authorization header")
+            raise HTTPException(status_code=401, detail="Authorization header missing or invalid")
+        
+        token = auth_header[7:]  # Убираем "Bearer "
+        try:
+            payload = jwt.decode(token, "super-secret-jwt-key-for-content-factory-2024", algorithms=["HS256"])
+            user_id = int(payload.get("sub", 0))
+            logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
+        except Exception as e:
+            logger.error(f"🚫 JWT token validation failed: {e}")
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        
         stats = await log_service.get_error_stats(
             session=session,
             user_id=user_id,
