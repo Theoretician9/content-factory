@@ -35,10 +35,13 @@ async def get_current_user_id(
         token = credentials.credentials
         logger.info(f"🔍 Processing JWT token: {token[:30]}...")
         
+        # Используем правильный JWT секрет
+        jwt_secret = "super-secret-jwt-key-for-content-factory-2024"
+        
         # Декодируем JWT токен
         payload = jwt.decode(
             token, 
-            settings.JWT_SECRET_KEY, 
+            jwt_secret, 
             algorithms=[settings.JWT_ALGORITHM]
         )
         
