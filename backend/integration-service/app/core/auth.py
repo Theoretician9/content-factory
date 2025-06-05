@@ -6,7 +6,7 @@ import logging
 from .config import get_settings
 
 logger = logging.getLogger(__name__)
-security = HTTPBearer()
+security = HTTPBearer(auto_error=True)  # Принудительная проверка токена
 
 class AuthenticationError(HTTPException):
     def __init__(self, detail: str = "Authentication failed"):
