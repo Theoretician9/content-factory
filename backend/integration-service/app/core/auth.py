@@ -25,9 +25,15 @@ async def get_current_user_id(
     """
     settings = get_settings()
     
+    # Принудительная проверка наличия токена
+    if not credentials:
+        logger.error("🚫 Missing Authorization header")
+        raise AuthenticationError("Authorization header missing")
+    
     try:
         # Получаем токен из заголовка Authorization
         token = credentials.credentials
+        logger.info(f"🔍 Processing JWT token: {token[:30]}...")
         
         # Декодируем JWT токен
         payload = jwt.decode(
