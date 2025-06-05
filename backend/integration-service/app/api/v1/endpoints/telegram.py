@@ -3,7 +3,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
 import logging
-import jwt
 
 from ....database import get_async_session
 from ....services.telegram_service import TelegramService
@@ -21,12 +20,10 @@ from ....schemas.telegram import (
 )
 from ....schemas.base import BaseResponse, ErrorResponse, PaginationParams
 from ....schemas.integration_logs import IntegrationLogResponse
+from ....core.auth import get_user_id_from_request
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-# Импорт функции авторизации для изоляции пользователей
-from ....core.auth import get_user_id_from_request
 
 # Зависимости
 async def get_telegram_service() -> TelegramService:
@@ -43,7 +40,7 @@ async def connect_telegram_account(
     telegram_service: TelegramService = Depends(get_telegram_service)
 ):
     """
-    Подключение Telegram аккаунта.
+    Подключение Telegram аккаунта с изоляцией пользователей.
     
     Поддерживает:
     - SMS код (code: str)
@@ -109,25 +106,12 @@ async def get_telegram_accounts(
     telegram_service: TelegramService = Depends(get_telegram_service),
     active_only: bool = Query(True, description="Только активные аккаунты")
 ):
-    """Получение списка подключенных Telegram аккаунтов"""
+    """Получение списка подключенных Telegram аккаунтов с изоляцией пользователей"""
     try:
-        # ПРЯМАЯ ПРОВЕРКА JWT ТОКЕНА
-        import jwt
-        auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            logger.error("🚫 Missing or invalid Authorization header")
-            raise HTTPException(status_code=401, detail="Authorization header missing or invalid")
+        # Изоляция пользователей
+        user_id = await get_user_id_from_request(request)
         
-        token = auth_header[7:]  # Убираем "Bearer "
-        try:
-            payload = jwt.decode(token, "super-secret-jwt-key-for-content-factory-2024", algorithms=["HS256"])
-            user_id = int(payload.get("sub", 0))
-            logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
-        except Exception as e:
-            logger.error(f"🚫 JWT token validation failed: {e}")
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        
-        logger.info(f"🔍 GET /accounts - Authenticated User ID: {user_id}, active_only: {active_only}")
+        logger.info(f"🔍 GET /accounts - User ID: {user_id}, active_only: {active_only}")
         sessions = await telegram_service.get_user_sessions(session, user_id, active_only)
         logger.info(f"📋 Found {len(sessions)} sessions for user {user_id}")
         
@@ -144,13 +128,13 @@ async def get_telegram_accounts(
             for s in sessions
         ]
         
-        # Логируем user_id каждой возвращаемой сессии
+        # Логируем что возвращаем только данные текущего пользователя
         for r in result:
             logger.info(f"📱 Returning session {r.id} with user_id={r.user_id} for requesting user {user_id}")
         
         return result
     except Exception as e:
-        logger.error(f"Error getting accounts for user {user_id}: {e}")
+        logger.error(f"Error getting accounts: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка получения аккаунтов: {str(e)}"
@@ -163,8 +147,11 @@ async def get_telegram_account(
     session: AsyncSession = Depends(get_async_session),
     telegram_service: TelegramService = Depends(get_telegram_service)
 ):
-    """Получение информации о конкретном Telegram аккаунте"""
+    """Получение информации о конкретном Telegram аккаунте с изоляцией пользователей"""
     try:
+        # Изоляция пользователей
+        user_id = await get_user_id_from_request(request)
+        
         telegram_session = await telegram_service.session_service.get_by_id(session, session_id)
         
         if not telegram_session or telegram_session.user_id != user_id:
@@ -193,13 +180,16 @@ async def get_telegram_account(
 
 @router.delete("/accounts/{session_id}", response_model=BaseResponse)
 async def disconnect_telegram_account(
+    request: Request,
     session_id: UUID,
     session: AsyncSession = Depends(get_async_session),
-    telegram_service: TelegramService = Depends(get_telegram_service),
-    user_id: int = Depends(get_current_user_id)
+    telegram_service: TelegramService = Depends(get_telegram_service)
 ):
-    """Отключение Telegram аккаунта"""
+    """Отключение Telegram аккаунта с изоляцией пользователей"""
     try:
+        # Изоляция пользователей
+        user_id = await get_user_id_from_request(request)
+        
         success = await telegram_service.disconnect_session(session, user_id, session_id)
         
         if not success:
@@ -220,13 +210,16 @@ async def disconnect_telegram_account(
 
 @router.post("/accounts/{session_id}/reconnect", response_model=BaseResponse)
 async def reconnect_telegram_account(
+    request: Request,
     session_id: UUID,
     session: AsyncSession = Depends(get_async_session),
-    telegram_service: TelegramService = Depends(get_telegram_service),
-    user_id: int = Depends(get_current_user_id)
+    telegram_service: TelegramService = Depends(get_telegram_service)
 ):
-    """Переподключение Telegram аккаунта"""
+    """Переподключение Telegram аккаунта с изоляцией пользователей"""
     try:
+        # Изоляция пользователей
+        user_id = await get_user_id_from_request(request)
+        
         # Получаем сессию
         telegram_session = await telegram_service.session_service.get_by_id(session, session_id)
         
@@ -252,19 +245,13 @@ async def reconnect_telegram_account(
         )
 
 @router.get("/test-auth")
-async def test_auth(user_id: int = Depends(get_current_user_id)):
+async def test_auth(request: Request):
     """Тестовый endpoint для проверки работы авторизации"""
+    # Изоляция пользователей
+    user_id = await get_user_id_from_request(request)
+    
     logger.info(f"🔐 TEST-AUTH: Successfully authenticated user_id = {user_id}")
     return {"authenticated_user_id": user_id, "message": "Authentication working!"}
-
-# TODO: Добавить endpoints для ботов и каналов
-# @router.post("/bots", response_model=TelegramBotResponse)
-# @router.get("/bots", response_model=List[TelegramBotResponse])
-# @router.delete("/bots/{bot_id}")
-# @router.post("/channels", response_model=TelegramChannelResponse)
-# @router.get("/channels", response_model=List[TelegramChannelResponse])
-# @router.delete("/channels/{channel_id}")
-# @router.post("/channels/{channel_id}/send", response_model=SendMessageResponse)
 
 @router.get("/logs", response_model=List[IntegrationLogResponse])
 async def get_integration_logs(
@@ -276,22 +263,10 @@ async def get_integration_logs(
     days_back: int = Query(30, ge=1, le=365, description="Количество дней назад"),
     pagination: PaginationParams = Depends()
 ):
-    """Получение логов интеграций пользователя"""
+    """Получение логов интеграций пользователя с изоляцией"""
     try:
-        # ПРЯМАЯ ПРОВЕРКА JWT ТОКЕНА
-        auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            logger.error("🚫 Missing or invalid Authorization header")
-            raise HTTPException(status_code=401, detail="Authorization header missing or invalid")
-        
-        token = auth_header[7:]  # Убираем "Bearer "
-        try:
-            payload = jwt.decode(token, "super-secret-jwt-key-for-content-factory-2024", algorithms=["HS256"])
-            user_id = int(payload.get("sub", 0))
-            logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
-        except Exception as e:
-            logger.error(f"🚫 JWT token validation failed: {e}")
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        # Изоляция пользователей
+        user_id = await get_user_id_from_request(request)
         
         offset = (pagination.page - 1) * pagination.size
         
@@ -333,22 +308,10 @@ async def get_error_stats(
     log_service: IntegrationLogService = Depends(get_log_service),
     days_back: int = Query(7, ge=1, le=30, description="Количество дней назад")
 ):
-    """Получение статистики ошибок для пользователя"""
+    """Получение статистики ошибок для пользователя с изоляцией"""
     try:
-        # ПРЯМАЯ ПРОВЕРКА JWT ТОКЕНА
-        auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            logger.error("🚫 Missing or invalid Authorization header")
-            raise HTTPException(status_code=401, detail="Authorization header missing or invalid")
-        
-        token = auth_header[7:]  # Убираем "Bearer "
-        try:
-            payload = jwt.decode(token, "super-secret-jwt-key-for-content-factory-2024", algorithms=["HS256"])
-            user_id = int(payload.get("sub", 0))
-            logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
-        except Exception as e:
-            logger.error(f"🚫 JWT token validation failed: {e}")
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        # Изоляция пользователей
+        user_id = await get_user_id_from_request(request)
         
         stats = await log_service.get_error_stats(
             session=session,
