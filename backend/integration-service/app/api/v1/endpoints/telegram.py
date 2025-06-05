@@ -31,11 +31,8 @@ async def get_telegram_service() -> TelegramService:
 async def get_log_service() -> IntegrationLogService:
     return IntegrationLogService()
 
-# Временная заглушка для получения user_id из токена
-# В реальной реализации это будет через JWT токен
-async def get_current_user_id() -> int:
-    # TODO: Интегрировать с системой авторизации
-    return 1
+# Импорт реальной авторизации из core модуля
+from ....core.auth import get_current_user_id
 
 @router.post("/connect", response_model=TelegramConnectResponse)
 async def connect_telegram_account(
