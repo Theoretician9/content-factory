@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     RABBITMQ_USER: str = "user"
     RABBITMQ_PASSWORD: str = "password"
     
-    # JWT секреты
-    JWT_SECRET_KEY: str = "super-secret-jwt-key-for-content-factory-2024"
+    # JWT секреты (получаем из переменной окружения)
+    JWT_SECRET_KEY: str = "your-jwt-secret"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_DELTA: int = 3600  # 1 час
     
