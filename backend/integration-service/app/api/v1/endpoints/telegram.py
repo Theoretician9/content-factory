@@ -212,10 +212,10 @@ async def get_telegram_accounts(
 
 @router.get("/accounts/{session_id}", response_model=TelegramSessionResponse)
 async def get_telegram_account(
+    request: Request,
     session_id: UUID,
     session: AsyncSession = Depends(get_async_session),
-    telegram_service: TelegramService = Depends(get_telegram_service),
-    user_id: int = Depends(get_current_user_id)
+    telegram_service: TelegramService = Depends(get_telegram_service)
 ):
     """Получение информации о конкретном Telegram аккаунте"""
     try:
