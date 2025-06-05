@@ -51,8 +51,7 @@ async def connect_telegram_account(
     - QR-код авторизацию
     """
     try:
-        # ПРОВЕРКА JWT ТОКЕНА для изоляции пользователей
-        from ....core.auth import get_user_id_from_request
+        # Изоляция пользователей
         user_id = await get_user_id_from_request(request)
         
         result = await telegram_service.connect_account(session, user_id, auth_request)
