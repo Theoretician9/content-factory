@@ -1,4 +1,4 @@
-from fastapi import HTTPException, Depends, status
+from fastapi import HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 from typing import Optional
@@ -6,7 +6,10 @@ import logging
 from .config import get_settings
 
 logger = logging.getLogger(__name__)
-security = HTTPBearer(auto_error=True)  # Принудительная проверка токена
+security = HTTPBearer(auto_error=False)  # Не auto_error, проверяем вручную
+
+# Константа JWT секрета (синхронизировано с docker-compose)
+JWT_SECRET = "super-secret-jwt-key-for-content-factory-2024"
 
 class AuthenticationError(HTTPException):
     def __init__(self, detail: str = "Authentication failed"):
