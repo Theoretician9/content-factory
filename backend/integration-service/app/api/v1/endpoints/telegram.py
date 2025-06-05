@@ -25,15 +25,33 @@ from ....schemas.integration_logs import IntegrationLogResponse
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# JWT секрет для изоляции пользователей
+JWT_SECRET = "super-secret-jwt-key-for-content-factory-2024"
+
+def extract_user_id_from_request(request: Request) -> int:
+    """Извлекает user_id из JWT токена для изоляции пользователей"""
+    auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+    
+    if not auth_header or not auth_header.startswith("Bearer "):
+        logger.error("🚫 Missing or invalid Authorization header")
+        raise HTTPException(status_code=401, detail="Authorization header missing or invalid")
+    
+    token = auth_header[7:]  # Убираем "Bearer "
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        user_id = int(payload.get("sub", 0))
+        logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
+        return user_id
+    except Exception as e:
+        logger.error(f"🚫 JWT token validation failed: {e}")
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
 # Зависимости
 async def get_telegram_service() -> TelegramService:
     return TelegramService()
 
 async def get_log_service() -> IntegrationLogService:
     return IntegrationLogService()
-
-# Импорт реальной авторизации из core модуля
-from ....core.auth import get_current_user_id
 
 @router.post("/connect", response_model=TelegramConnectResponse)
 async def connect_telegram_account(
