@@ -115,6 +115,17 @@ async def get_telegram_accounts(
         sessions = await telegram_service.get_user_sessions(session, user_id, active_only)
         logger.info(f"📋 Found {len(sessions)} sessions for user {user_id}")
         
+        # КРИТИЧЕСКАЯ ПРОВЕРКА БЕЗОПАСНОСТИ: фильтруем сессии еще раз
+        filtered_sessions = [s for s in sessions if s.user_id == user_id]
+        
+        logger.info(f"🔒 Security check: filtered {len(sessions)} → {len(filtered_sessions)} sessions for user {user_id}")
+        
+        if len(sessions) != len(filtered_sessions):
+            logger.error(f"🚨 SECURITY BREACH: Found sessions with wrong user_id for requesting user {user_id}!")
+            for s in sessions:
+                if s.user_id != user_id:
+                    logger.error(f"🚨 Wrong session: {s.id} has user_id={s.user_id}, expected {user_id}")
+        
         result = [
             TelegramSessionResponse(
                 id=s.id,
@@ -125,7 +136,7 @@ async def get_telegram_accounts(
                 session_metadata=s.session_metadata,
                 is_active=s.is_active
             )
-            for s in sessions
+            for s in filtered_sessions  # Используем отфильтрованный список
         ]
         
         # Логируем что возвращаем только данные текущего пользователя
