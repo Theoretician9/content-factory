@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Скрипт для отладки JWT токенов и проверки изоляции пользователей.
+Диагностический скрипт для проверки JWT обработки Integration Service.
 """
 
 import requests
@@ -10,133 +10,78 @@ from datetime import datetime, timedelta
 
 # Конфигурация
 API_BASE = "http://92.113.146.148:8000"
-JWT_SECRET_API_GATEWAY = "your-jwt-secret"  # Значение по умолчанию в API Gateway
-JWT_SECRET_INTEGRATION = "super-secret-jwt-key-for-content-factory-2024"  # Значение в Integration Service
+JWT_SECRET = "super-secret-jwt-key-for-content-factory-2024"
 
-def create_jwt_token(user_id: int, secret: str) -> str:
-    """Создает JWT токен для пользователя с указанным секретом"""
+def create_jwt_token(user_id: int) -> str:
+    """Создает JWT токен для пользователя"""
     payload = {
         "sub": str(user_id),
         "exp": datetime.utcnow() + timedelta(hours=1)
     }
-    return jwt.encode(payload, secret, algorithm="HS256")
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
-def decode_jwt_token(token: str, secret: str) -> dict:
-    """Декодирует JWT токен с указанным секретом"""
-    try:
-        return jwt.decode(token, secret, algorithms=["HS256"])
-    except Exception as e:
-        return {"error": str(e)}
-
-def test_jwt_secrets():
-    """Тестирует JWT токены с разными секретами"""
-    print("🔐 Тестирование JWT токенов...")
+def test_jwt_processing():
+    """Тестирует обработку JWT токенов"""
+    print("🧪 Диагностика JWT обработки...")
     
-    # Тест 1: Создаем токены с разными секретами
-    user1_token_api = create_jwt_token(1, JWT_SECRET_API_GATEWAY)
-    user1_token_int = create_jwt_token(1, JWT_SECRET_INTEGRATION)
-    
-    print(f"\n👤 User 1 token (API Gateway secret): {user1_token_api[:50]}...")
-    print(f"👤 User 1 token (Integration secret): {user1_token_int[:50]}...")
-    
-    # Тест 2: Декодируем токены
-    print("\n🔍 Декодирование токенов:")
-    print("API Gateway token с API Gateway secret:", decode_jwt_token(user1_token_api, JWT_SECRET_API_GATEWAY))
-    print("API Gateway token с Integration secret:", decode_jwt_token(user1_token_api, JWT_SECRET_INTEGRATION))
-    print("Integration token с API Gateway secret:", decode_jwt_token(user1_token_int, JWT_SECRET_API_GATEWAY))
-    print("Integration token с Integration secret:", decode_jwt_token(user1_token_int, JWT_SECRET_INTEGRATION))
-
-def test_real_login():
-    """Тестирует реальный логин и получение токена"""
-    print("\n🚪 Тестирование реального логина...")
-    
-    # Логинимся и получаем токен
-    login_data = {
-        "username": "test@example.com",
-        "password": "testpassword123"
+    # Создаем токены для разных пользователей
+    tokens = {
+        1: create_jwt_token(1),
+        2: create_jwt_token(2),
+        99: create_jwt_token(99)
     }
     
-    try:
-        response = requests.post(f"{API_BASE}/api/auth/login", json=login_data)
-        print(f"Login status: {response.status_code}")
+    for user_id, token in tokens.items():
+        print(f"\n👤 Тест для user_id={user_id}")
+        print(f"Token: {token[:50]}...")
         
-        if response.status_code == 200:
-            token_data = response.json()
-            access_token = token_data.get("access_token")
-            
-            if access_token:
-                print(f"Access token получен: {access_token[:50]}...")
-                
-                # Декодируем токен с разными секретами
-                print("\n🔍 Декодирование реального токена:")
-                payload_api = decode_jwt_token(access_token, JWT_SECRET_API_GATEWAY)
-                payload_int = decode_jwt_token(access_token, JWT_SECRET_INTEGRATION)
-                
-                print(f"С API Gateway secret: {payload_api}")
-                print(f"С Integration secret: {payload_int}")
-                
-                # Тестируем запрос к Integration Service
-                headers = {"Authorization": f"Bearer {access_token}"}
-                int_response = requests.get(f"{API_BASE}/api/integrations/telegram/accounts", headers=headers)
-                print(f"\nЗапрос к Integration Service: {int_response.status_code}")
-                if int_response.status_code == 200:
-                    accounts = int_response.json()
-                    print(f"Найдено аккаунтов: {len(accounts)}")
-                    for acc in accounts:
-                        print(f"  - Account: {acc.get('id', 'N/A')}, User ID: {acc.get('user_id', 'N/A')}")
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        # Тест 1: Проверяем debug-jwt endpoint (если есть)
+        try:
+            response = requests.get(f"{API_BASE}/debug-jwt", headers=headers)
+            print(f"Debug JWT - Status: {response.status_code}")
+            if response.status_code == 200:
+                data = response.json()
+                extracted_user_id = data.get("extracted_user_id")
+                print(f"  Extracted user_id: {extracted_user_id}")
+                if extracted_user_id == user_id:
+                    print("  ✅ JWT обработка корректна")
                 else:
-                    print(f"Ошибка: {int_response.text}")
+                    print("  ❌ ОШИБКА JWT обработки!")
             else:
-                print("Access token не найден в ответе")
-        else:
-            print(f"Ошибка логина: {response.text}")
-            
-    except Exception as e:
-        print(f"❌ Ошибка: {e}")
-
-def test_manual_tokens():
-    """Тестирует с разными токенами вручную"""
-    print("\n🧪 Тестирование с разными токенами...")
-    
-    # Создаем токены для разных пользователей с правильным секретом
-    user1_token = create_jwt_token(1, JWT_SECRET_API_GATEWAY)
-    user2_token = create_jwt_token(2, JWT_SECRET_API_GATEWAY)
-    
-    headers1 = {"Authorization": f"Bearer {user1_token}"}
-    headers2 = {"Authorization": f"Bearer {user2_token}"}
-    
-    print(f"\n👤 User 1 token: {user1_token[:50]}...")
-    print(f"👤 User 2 token: {user2_token[:50]}...")
-    
-    # Тестируем запросы
-    try:
-        print("\n📋 Запросы от user 1:")
-        response1 = requests.get(f"{API_BASE}/api/integrations/telegram/accounts", headers=headers1)
-        print(f"Status: {response1.status_code}")
-        if response1.status_code == 200:
-            accounts1 = response1.json()
-            print(f"Аккаунтов для user 1: {len(accounts1)}")
-            for acc in accounts1:
-                print(f"  - User ID: {acc.get('user_id', 'N/A')}, Phone: {acc.get('phone', 'N/A')}")
-        else:
-            print(f"Ошибка: {response1.text}")
+                print(f"  Error: {response.text}")
+        except Exception as e:
+            print(f"  ❌ Ошибка запроса debug-jwt: {e}")
         
-        print("\n📋 Запросы от user 2:")
-        response2 = requests.get(f"{API_BASE}/api/integrations/telegram/accounts", headers=headers2)
-        print(f"Status: {response2.status_code}")
-        if response2.status_code == 200:
-            accounts2 = response2.json()
-            print(f"Аккаунтов для user 2: {len(accounts2)}")
-            for acc in accounts2:
-                print(f"  - User ID: {acc.get('user_id', 'N/A')}, Phone: {acc.get('phone', 'N/A')}")
+        # Тест 2: Проверяем обычный accounts endpoint  
+        try:
+            response = requests.get(f"{API_BASE}/api/v1/telegram/accounts", headers=headers)
+            print(f"Accounts - Status: {response.status_code}")
+            if response.status_code == 200:
+                accounts = response.json()
+                print(f"  Найдено аккаунтов: {len(accounts)}")
+                for acc in accounts:
+                    acc_user_id = acc.get("user_id")
+                    print(f"    Account {acc['id']}: user_id={acc_user_id}")
+                    if acc_user_id != user_id:
+                        print(f"    ❌ НАРУШЕНИЕ ИЗОЛЯЦИИ: ожидался user_id={user_id}, получен {acc_user_id}")
+            else:
+                print(f"  Error: {response.text}")
+        except Exception as e:
+            print(f"  ❌ Ошибка запроса accounts: {e}")
+
+    # Дополнительный тест: проверяем без токена
+    print(f"\n🔒 Тест без авторизации")
+    try:
+        response = requests.get(f"{API_BASE}/api/v1/telegram/accounts")
+        print(f"No auth - Status: {response.status_code}")
+        if response.status_code == 401:
+            print("  ✅ Правильно блокируется неавторизованный доступ")
         else:
-            print(f"Ошибка: {response2.text}")
-            
+            print(f"  ❌ Неожиданный ответ: {response.text}")
     except Exception as e:
-        print(f"❌ Ошибка запроса: {e}")
+        print(f"  ❌ Ошибка запроса: {e}")
 
 if __name__ == "__main__":
-    test_jwt_secrets()
-    test_real_login()
-    test_manual_tokens()
-    print("\n🎯 Тестирование завершено!") 
+    test_jwt_processing() 
