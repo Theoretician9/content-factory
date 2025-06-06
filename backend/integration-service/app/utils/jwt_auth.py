@@ -37,8 +37,38 @@ def extract_user_id_from_request(request: Request) -> int:
     logger.info(f"🔍 Processing JWT token: {token[:30]}...")
     
     try:
-        # Декодируем JWT токен
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        # Попробуем несколько JWT секретов для совместимости с основной системой
+        jwt_secrets = [
+            "your-jwt-secret",  # API Gateway / основная система
+            JWT_SECRET,  # Integration Service секрет
+            "super-secret-jwt-key-for-content-factory-2024",  # Fallback
+        ]
+        
+        payload = None
+        used_secret = None
+        last_error = None
+        
+        for secret in jwt_secrets:
+            try:
+                payload = jwt.decode(token, secret, algorithms=["HS256"])
+                used_secret = secret
+                logger.info(f"✅ JWT decoded successfully with secret: {secret[:15]}...")
+                break
+            except jwt.ExpiredSignatureError as e:
+                logger.warning(f"🚫 JWT token expired with secret {secret[:15]}...")
+                last_error = e
+                continue
+            except jwt.InvalidTokenError as e:
+                logger.warning(f"🚫 JWT invalid with secret {secret[:15]}...: {e}")
+                last_error = e
+                continue
+        
+        if not payload:
+            logger.error(f"🚫 JWT token failed verification with all secrets")
+            if isinstance(last_error, jwt.ExpiredSignatureError):
+                raise AuthenticationError("Token expired")
+            else:
+                raise AuthenticationError("Invalid token: signature verification failed")
         
         # Извлекаем user_id из поля 'sub'
         user_id_str = payload.get("sub")
@@ -48,15 +78,11 @@ def extract_user_id_from_request(request: Request) -> int:
         
         # Конвертируем в int
         user_id = int(user_id_str)
-        logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
+        logger.info(f"✅ JWT Authentication successful - User ID: {user_id}, Secret: {used_secret[:15]}...")
         return user_id
         
-    except jwt.ExpiredSignatureError:
-        logger.warning("🚫 JWT token expired")
-        raise AuthenticationError("Token expired")
-    except jwt.InvalidTokenError as e:
-        logger.warning(f"🚫 Invalid JWT token: {e}")
-        raise AuthenticationError("Invalid token")
+    except AuthenticationError:
+        raise
     except ValueError:
         logger.warning("🚫 Invalid user_id format in JWT")
         raise AuthenticationError("Invalid token: invalid user ID format")
