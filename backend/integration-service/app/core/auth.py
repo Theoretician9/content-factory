@@ -98,14 +98,8 @@ async def get_user_id_from_request(request: Request) -> int:
     try:
         # Попробуем несколько JWT секретов для совместимости
         jwt_secrets = [
-<<<<<<< HEAD
-            JWT_SECRET,  # Integration Service секрет
-            "your-jwt-secret",  # API Gateway секрет
-            "your-jwt-secret",  # Fallback
-=======
             "your-jwt-secret",  # API Gateway секрет (приоритет)
             "super-secret-jwt-key-for-content-factory-2024",  # Fallback
->>>>>>> 7025e3e8cc5efb53206f8a0de09ede1136756521
         ]
         
         payload = None
