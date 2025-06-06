@@ -103,7 +103,7 @@ certbot/
 letsencrypt/
 
 # Vault
-vault/
+vault/data/
 .vault-token
 
 # PHP
