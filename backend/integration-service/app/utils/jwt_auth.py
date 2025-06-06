@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 # JWT секреты для совместимости с основной системой
 JWT_SECRETS = [
     "your-jwt-secret",  # API Gateway / основная система
-    "super-secret-jwt-key-for-content-factory-2024",  # Integration Service
+    "your-jwt-secret",  # Integration Service
 ]
 
 class AuthenticationError(HTTPException):
