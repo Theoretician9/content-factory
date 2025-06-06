@@ -22,7 +22,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/api/v1/telegram/qr-code",
             "/api/v1/telegram/qr-check",
             "/api/v1/telegram/logs",
-            "/api/v1/telegram/stats"
+            "/api/v1/telegram/stats",
+            "/api/v1/telegram/test-auth"
         ]
         self.public_paths = [
             "/health",
