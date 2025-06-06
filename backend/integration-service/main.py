@@ -88,13 +88,6 @@ app.add_middleware(
     jwt_secret="super-secret-jwt-key-for-content-factory-2024"
 )
 
-# Auth middleware для централизованной авторизации
-from app.middleware.auth_middleware import AuthMiddleware
-app.add_middleware(
-    AuthMiddleware,
-    jwt_secret="super-secret-jwt-key-for-content-factory-2024"
-)
-
 # Prometheus метрики
 if settings.PROMETHEUS_ENABLED:
     instrumentator = Instrumentator(
@@ -132,6 +125,31 @@ async def health_check(request: Request):
         "service": settings.APP_NAME,
         "version": settings.VERSION
     }
+
+@app.get("/debug-jwt")
+async def debug_jwt(request: Request):
+    """Диагностический endpoint для проверки JWT"""
+    from app.core.auth import get_user_id_from_request
+    
+    try:
+        auth_header = request.headers.get("authorization") or "MISSING"
+        print(f"🔍 DEBUG-JWT: Auth header = {auth_header[:50]}...")
+        
+        user_id = await get_user_id_from_request(request)
+        print(f"🔍 DEBUG-JWT: Extracted user_id = {user_id}")
+        
+        return {
+            "extracted_user_id": user_id,
+            "auth_header_present": "authorization" in request.headers,
+            "message": "JWT processing successful"
+        }
+    except Exception as e:
+        print(f"🚨 DEBUG-JWT ERROR: {e}")
+        return {
+            "error": str(e),
+            "auth_header_present": "authorization" in request.headers,
+            "message": "JWT processing failed"
+        }
 
 # Обработчики ошибок
 @app.exception_handler(404)
