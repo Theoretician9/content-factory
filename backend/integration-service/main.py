@@ -85,7 +85,7 @@ app.add_middleware(
 # from app.middleware.auth_middleware import AuthMiddleware
 # app.add_middleware(
 #     AuthMiddleware,
-#     jwt_secret="super-secret-jwt-key-for-content-factory-2024"
+#     jwt_secret="your-jwt-secret"
 # )
 
 # Prometheus метрики

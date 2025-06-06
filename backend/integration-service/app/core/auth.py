@@ -131,7 +131,7 @@ async def get_user_id_from_request(request: Request) -> int:
         logger.error("🚫 JWT token expired")
         raise AuthenticationError("Token expired")
     except jwt.InvalidTokenError as e:
-        logger.error(f"�� Invalid JWT token: {e}")
+        logger.error(f"🚫 Invalid JWT token: {e}")
         raise AuthenticationError("Invalid token")
     except ValueError:
         logger.error("🚫 Invalid user_id format in JWT")

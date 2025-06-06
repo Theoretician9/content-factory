@@ -5,7 +5,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # JWT секрет (синхронизировано с docker-compose)
-JWT_SECRET = "super-secret-jwt-key-for-content-factory-2024"
+JWT_SECRET = "your-jwt-secret"
 
 class AuthenticationError(HTTPException):
     def __init__(self, detail: str = "Authentication failed"):
