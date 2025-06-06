@@ -60,11 +60,17 @@ class BaseCRUDService(Generic[ModelType]):
         try:
             query = select(self.model)
             
+            # Детальное логирование фильтров
+            logger.info(f"🔍 get_multi for {self.model.__name__}: filters={filters}")
+            
             # Применяем фильтры
             if filters:
                 for field, value in filters.items():
                     if hasattr(self.model, field):
+                        logger.info(f"🔍 Applying filter: {field} == {value}")
                         query = query.where(getattr(self.model, field) == value)
+                    else:
+                        logger.warning(f"⚠️ Field {field} does not exist in {self.model.__name__}")
             
             # Сортировка
             if order_by and hasattr(self.model, order_by):
@@ -75,8 +81,21 @@ class BaseCRUDService(Generic[ModelType]):
             # Пагинация
             query = query.offset(offset).limit(limit)
             
+            # Логируем итоговый запрос
+            logger.info(f"🔍 Executing query for {self.model.__name__}")
+            
             result = await session.execute(query)
-            return result.scalars().all()
+            items = result.scalars().all()
+            
+            # Детальное логирование результатов
+            logger.info(f"📊 get_multi result for {self.model.__name__}: found {len(items)} items")
+            for item in items:
+                if hasattr(item, 'user_id'):
+                    logger.info(f"  📱 Item {item.id}: user_id={item.user_id}")
+                else:
+                    logger.info(f"  📱 Item {item.id}: no user_id field")
+            
+            return items
         except Exception as e:
             logger.error(f"Error getting {self.model.__name__} list: {e}")
             raise
