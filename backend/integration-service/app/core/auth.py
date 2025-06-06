@@ -76,9 +76,18 @@ async def get_current_user_id(
 
 async def get_user_id_from_request(request: Request) -> int:
     """
-    Альтернативная функция авторизации - читает токен напрямую из заголовков.
-    Более надежна для работы через API Gateway proxy.
+    Функция авторизации - сначала проверяет middleware state, 
+    затем читает токен напрямую из заголовков (fallback).
     """
+    # ПРИОРИТЕТ 1: Проверяем результат middleware
+    if hasattr(request.state, 'user_id') and request.state.user_id:
+        user_id = request.state.user_id
+        logger.error(f"✅ Using user_id from middleware state: {user_id}")
+        return user_id
+    
+    # ПРИОРИТЕТ 2: Парсим JWT напрямую (fallback)
+    logger.error("🔄 Middleware state not found, parsing JWT directly...")
+    
     # Получаем Authorization header напрямую
     auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
     
@@ -93,7 +102,7 @@ async def get_user_id_from_request(request: Request) -> int:
     
     # Извлекаем токен
     token = auth_header[7:]  # Убираем "Bearer "
-    logger.info(f"🔍 Processing JWT token from request: {token[:30]}...")
+    logger.error(f"🔍 Processing JWT token from request: {token[:30]}...")
     
     try:
         # Декодируем JWT токен
@@ -102,21 +111,21 @@ async def get_user_id_from_request(request: Request) -> int:
         # Извлекаем user_id
         user_id_str = payload.get("sub")
         if not user_id_str:
-            logger.warning(f"🚫 JWT token missing 'sub' field: {payload}")
+            logger.error(f"🚫 JWT token missing 'sub' field: {payload}")
             raise AuthenticationError("Invalid token: missing user ID")
         
         user_id = int(user_id_str)
-        logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
+        logger.error(f"✅ JWT Authentication successful - User ID: {user_id}")
         return user_id
         
     except jwt.ExpiredSignatureError:
-        logger.warning("🚫 JWT token expired")
+        logger.error("🚫 JWT token expired")
         raise AuthenticationError("Token expired")
     except jwt.InvalidTokenError as e:
-        logger.warning(f"🚫 Invalid JWT token: {e}")
+        logger.error(f"🚫 Invalid JWT token: {e}")
         raise AuthenticationError("Invalid token")
     except ValueError:
-        logger.warning("🚫 Invalid user_id format in JWT")
+        logger.error("🚫 Invalid user_id format in JWT")
         raise AuthenticationError("Invalid token: invalid user ID format")
     except Exception as e:
         logger.error(f"🚫 Authentication error: {e}")
@@ -135,52 +144,4 @@ async def get_optional_user_id(
     try:
         return await get_current_user_id(credentials)
     except AuthenticationError:
-        return None
-
-async def get_user_id_from_request(request: Request) -> int:
-    """
-    Альтернативная функция авторизации - читает токен напрямую из заголовков.
-    Более надежна для работы через API Gateway proxy.
-    """
-    # Получаем Authorization header напрямую
-    auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
-    
-    if not auth_header:
-        logger.error("🚫 Missing Authorization header in request")
-        raise AuthenticationError("Authorization header missing")
-    
-    # Проверяем формат Bearer token
-    if not auth_header.startswith("Bearer "):
-        logger.error("🚫 Invalid Authorization header format")
-        raise AuthenticationError("Invalid Authorization header format")
-    
-    # Извлекаем токен
-    token = auth_header[7:]  # Убираем "Bearer "
-    logger.info(f"🔍 Processing JWT token from request: {token[:30]}...")
-    
-    try:
-        # Декодируем JWT токен
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        
-        # Извлекаем user_id
-        user_id_str = payload.get("sub")
-        if not user_id_str:
-            logger.warning(f"🚫 JWT token missing 'sub' field: {payload}")
-            raise AuthenticationError("Invalid token: missing user ID")
-        
-        user_id = int(user_id_str)
-        logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
-        return user_id
-        
-    except jwt.ExpiredSignatureError:
-        logger.warning("🚫 JWT token expired")
-        raise AuthenticationError("Token expired")
-    except jwt.InvalidTokenError as e:
-        logger.warning(f"🚫 Invalid JWT token: {e}")
-        raise AuthenticationError("Invalid token")
-    except ValueError:
-        logger.warning("🚫 Invalid user_id format in JWT")
-        raise AuthenticationError("Invalid token: invalid user ID format")
-    except Exception as e:
-        logger.error(f"🚫 Authentication error: {e}")
-        raise AuthenticationError("Authentication failed") 
+        return None 
