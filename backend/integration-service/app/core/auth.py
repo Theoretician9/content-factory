@@ -8,8 +8,8 @@ from .config import get_settings
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)  # Не auto_error, проверяем вручную
 
-# Константа JWT секрета (синхронизировано с docker-compose)
-JWT_SECRET = "super-secret-jwt-key-for-content-factory-2024"
+# Константа JWT секрета (синхронизировано с API Gateway)
+JWT_SECRET = "your-jwt-secret"
 
 class AuthenticationError(HTTPException):
     def __init__(self, detail: str = "Authentication failed"):
