@@ -76,23 +76,9 @@ async def get_current_user_id(
 
 async def get_user_id_from_request(request: Request) -> int:
     """
-    Функция авторизации - временно возвращает user_id = 1 для всех запросов.
-    TODO: Исправить JWT секреты для правильной изоляции пользователей.
+    Функция авторизации - читает токен напрямую из заголовков.
+    Обеспечивает изоляцию пользователей между разными user_id.
     """
-    # ВРЕМЕННОЕ РЕШЕНИЕ: Принудительно используем user_id = 1
-    logger.error("⚠️ TEMPORARY FIX: Using hardcoded user_id = 1 for all requests")
-    return 1
-    
-    # ОТКЛЮЧЕННЫЙ КОД JWT ПРОВЕРКИ:
-    # # ПРИОРИТЕТ 1: Проверяем результат middleware
-    # if hasattr(request.state, 'user_id') and request.state.user_id:
-    #     user_id = request.state.user_id
-    #     logger.error(f"✅ Using user_id from middleware state: {user_id}")
-    #     return user_id
-    # 
-    # # ПРИОРИТЕТ 2: Парсим JWT напрямую (fallback)
-    # logger.error("🔄 Middleware state not found, parsing JWT directly...")
-    
     # Получаем Authorization header напрямую
     auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
     
@@ -112,9 +98,14 @@ async def get_user_id_from_request(request: Request) -> int:
     try:
         # Попробуем несколько JWT секретов для совместимости
         jwt_secrets = [
+<<<<<<< HEAD
             JWT_SECRET,  # Integration Service секрет
             "your-jwt-secret",  # API Gateway секрет
             "your-jwt-secret",  # Fallback
+=======
+            "your-jwt-secret",  # API Gateway секрет (приоритет)
+            "super-secret-jwt-key-for-content-factory-2024",  # Fallback
+>>>>>>> 7025e3e8cc5efb53206f8a0de09ede1136756521
         ]
         
         payload = None
@@ -146,7 +137,7 @@ async def get_user_id_from_request(request: Request) -> int:
         logger.error("🚫 JWT token expired")
         raise AuthenticationError("Token expired")
     except jwt.InvalidTokenError as e:
-        logger.error(f"🚫 Invalid JWT token: {e}")
+        logger.error(f"�� Invalid JWT token: {e}")
         raise AuthenticationError("Invalid token")
     except ValueError:
         logger.error("🚫 Invalid user_id format in JWT")
