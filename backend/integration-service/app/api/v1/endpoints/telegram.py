@@ -259,11 +259,20 @@ async def reconnect_telegram_account(
 @router.get("/test-auth")
 async def test_auth(request: Request):
     """Тестовый endpoint для проверки работы авторизации"""
-    # Изоляция пользователей
-    user_id = await get_user_id_from_request(request)
-    
-    logger.info(f"🔐 TEST-AUTH: Successfully authenticated user_id = {user_id}")
-    return {"authenticated_user_id": user_id, "message": "Authentication working!"}
+    try:
+        # Изоляция пользователей
+        user_id = await get_user_id_from_request(request)
+        
+        logger.info(f"🔐 TEST-AUTH: Successfully authenticated user_id = {user_id}")
+        return {"authenticated_user_id": user_id, "message": "Authentication working!"}
+    except Exception as e:
+        logger.error(f"🚨 TEST-AUTH ERROR: {e}")
+        return {"error": str(e), "message": "Authentication failed"}
+
+@router.get("/test-public")
+async def test_public():
+    """Публичный тестовый endpoint для проверки работы сервиса"""
+    return {"status": "ok", "message": "Integration Service is working!", "service": "integration-service"}
 
 @router.get("/logs", response_model=List[IntegrationLogResponse])
 async def get_integration_logs(
