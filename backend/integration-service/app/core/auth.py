@@ -140,77 +140,7 @@ async def get_user_id_from_request(request: Request) -> int:
         logger.error(f"🚫 Authentication error: {e}")
         raise AuthenticationError("Authentication failed")
     
-    # ОТКЛЮЧЕННЫЙ КОД JWT ПРОВЕРКИ:
-    # # ПРИОРИТЕТ 1: Проверяем результат middleware
-    # if hasattr(request.state, 'user_id') and request.state.user_id:
-    #     user_id = request.state.user_id
-    #     logger.error(f"✅ Using user_id from middleware state: {user_id}")
-    #     return user_id
-    # 
-    # # ПРИОРИТЕТ 2: Парсим JWT напрямую (fallback)
-    # logger.error("🔄 Middleware state not found, parsing JWT directly...")
-    
-    # Получаем Authorization header напрямую
-    auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
-    
-    if not auth_header:
-        logger.error("🚫 Missing Authorization header in request")
-        raise AuthenticationError("Authorization header missing")
-    
-    # Проверяем формат Bearer token
-    if not auth_header.startswith("Bearer "):
-        logger.error("🚫 Invalid Authorization header format")
-        raise AuthenticationError("Invalid Authorization header format")
-    
-    # Извлекаем токен
-    token = auth_header[7:]  # Убираем "Bearer "
-    logger.error(f"🔍 Processing JWT token from request: {token[:30]}...")
-    
-    try:
-        # Попробуем несколько JWT секретов для совместимости
-        jwt_secrets = [
-            "your-jwt-secret",  # API Gateway секрет (приоритет)
-            JWT_SECRET,  # Integration Service секрет
-            "super-secret-jwt-key-for-content-factory-2024",  # Fallback
-        ]
-        
-        payload = None
-        used_secret = None
-        
-        for secret in jwt_secrets:
-            try:
-                payload = jwt.decode(token, secret, algorithms=["HS256"])
-                used_secret = secret
-                break
-            except jwt.InvalidTokenError:
-                continue
-        
-        if not payload:
-            logger.error(f"🚫 JWT token failed verification with all secrets")
-            raise AuthenticationError("Invalid token: signature verification failed")
-        
-        # Извлекаем user_id
-        user_id_str = payload.get("sub")
-        if not user_id_str:
-            logger.error(f"🚫 JWT token missing 'sub' field: {payload}")
-            raise AuthenticationError("Invalid token: missing user ID")
-        
-        user_id = int(user_id_str)
-        logger.error(f"✅ JWT Authentication successful - User ID: {user_id}, secret: {used_secret[:20]}...")
-        return user_id
-        
-    except jwt.ExpiredSignatureError:
-        logger.error("🚫 JWT token expired")
-        raise AuthenticationError("Token expired")
-    except jwt.InvalidTokenError as e:
-        logger.error(f"🚫 Invalid JWT token: {e}")
-        raise AuthenticationError("Invalid token")
-    except ValueError:
-        logger.error("🚫 Invalid user_id format in JWT")
-        raise AuthenticationError("Invalid token: invalid user ID format")
-    except Exception as e:
-        logger.error(f"🚫 Authentication error: {e}")
-        raise AuthenticationError("Authentication failed")
+
 
 async def get_optional_user_id(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
