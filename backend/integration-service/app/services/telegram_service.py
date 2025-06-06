@@ -444,8 +444,16 @@ class TelegramService:
         filters = {"user_id": user_id}
         if active_only:
             filters["is_active"] = True
-            
-        return await self.session_service.get_multi(session, filters=filters)
+        
+        logger.info(f"🔍 get_user_sessions: user_id={user_id}, active_only={active_only}, filters={filters}")
+        
+        sessions = await self.session_service.get_multi(session, filters=filters)
+        
+        logger.info(f"📊 get_user_sessions result: found {len(sessions)} sessions")
+        for s in sessions:
+            logger.info(f"  📱 Session {s.id}: user_id={s.user_id}, phone={s.phone}, active={s.is_active}")
+        
+        return sessions
     
     async def disconnect_session(
         self,
