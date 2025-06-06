@@ -39,7 +39,7 @@ async def get_current_user_id(
         logger.info(f"🔍 Processing JWT token: {token[:30]}...")
         
         # Используем правильный JWT секрет
-        jwt_secret = "super-secret-jwt-key-for-content-factory-2024"
+        jwt_secret = "your-jwt-secret"
         
         # Декодируем JWT токен
         payload = jwt.decode(
@@ -114,7 +114,7 @@ async def get_user_id_from_request(request: Request) -> int:
         jwt_secrets = [
             JWT_SECRET,  # Integration Service секрет
             "your-jwt-secret",  # API Gateway секрет
-            "super-secret-jwt-key-for-content-factory-2024",  # Fallback
+            "your-jwt-secret",  # Fallback
         ]
         
         payload = None
