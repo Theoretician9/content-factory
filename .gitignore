@@ -6,3 +6,10 @@ elasticsearch_data/
 
 # Logs
 *.log 
+# Python virtual environments
+venv/
+*/venv/
+.venv/
+*/.venv/
+__pycache__/
+*/__pycache__/
