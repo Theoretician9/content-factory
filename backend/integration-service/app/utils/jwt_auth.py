@@ -4,8 +4,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# JWT секрет (синхронизировано с docker-compose)
-JWT_SECRET = "super-secret-jwt-key-for-content-factory-2024"
+# JWT секреты для совместимости с основной системой
+JWT_SECRETS = [
+    "your-jwt-secret",  # API Gateway / основная система
+    "super-secret-jwt-key-for-content-factory-2024",  # Integration Service
+]
 
 class AuthenticationError(HTTPException):
     def __init__(self, detail: str = "Authentication failed"):
@@ -19,6 +22,7 @@ def extract_user_id_from_request(request: Request) -> int:
     """
     Извлекает user_id из JWT токена в заголовке Authorization.
     Обеспечивает изоляцию пользователей во всех endpoints.
+    Поддерживает множественные JWT секреты для совместимости.
     """
     # Получаем Authorization header
     auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
@@ -38,17 +42,11 @@ def extract_user_id_from_request(request: Request) -> int:
     
     try:
         # Попробуем несколько JWT секретов для совместимости с основной системой
-        jwt_secrets = [
-            "your-jwt-secret",  # API Gateway / основная система
-            JWT_SECRET,  # Integration Service секрет
-            "super-secret-jwt-key-for-content-factory-2024",  # Fallback
-        ]
-        
         payload = None
         used_secret = None
         last_error = None
         
-        for secret in jwt_secrets:
+        for secret in JWT_SECRETS:
             try:
                 payload = jwt.decode(token, secret, algorithms=["HS256"])
                 used_secret = secret
