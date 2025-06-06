@@ -39,7 +39,7 @@ async def get_current_user_id(
         logger.info(f"🔍 Processing JWT token: {token[:30]}...")
         
         # Используем правильный JWT секрет
-        jwt_secret = "super-secret-jwt-key-for-content-factory-2024"
+        jwt_secret = "your-jwt-secret"
         
         # Декодируем JWT токен
         payload = jwt.decode(
@@ -131,7 +131,7 @@ async def get_user_id_from_request(request: Request) -> int:
         logger.error("🚫 JWT token expired")
         raise AuthenticationError("Token expired")
     except jwt.InvalidTokenError as e:
-        logger.error(f"🚫 Invalid JWT token: {e}")
+        logger.error(f"�� Invalid JWT token: {e}")
         raise AuthenticationError("Invalid token")
     except ValueError:
         logger.error("🚫 Invalid user_id format in JWT")
@@ -139,8 +139,6 @@ async def get_user_id_from_request(request: Request) -> int:
     except Exception as e:
         logger.error(f"🚫 Authentication error: {e}")
         raise AuthenticationError("Authentication failed")
-    
-
 
 async def get_optional_user_id(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
