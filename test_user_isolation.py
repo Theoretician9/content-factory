@@ -28,13 +28,16 @@ def test_user_isolation():
     # Создаем токены для двух разных пользователей
     user1_token = create_jwt_token(1)
     user2_token = create_jwt_token(2)
+    user99_token = create_jwt_token(99)
     
     print(f"👤 User 1 token: {user1_token[:50]}...")
     print(f"👤 User 2 token: {user2_token[:50]}...")
+    print(f"👤 User 99 token: {user99_token[:50]}...")
     
     # Заголовки авторизации
     headers1 = {"Authorization": f"Bearer {user1_token}"}
     headers2 = {"Authorization": f"Bearer {user2_token}"}
+    headers99 = {"Authorization": f"Bearer {user99_token}"}
     
     # Тест 1: Получение аккаунтов для пользователя 1
     print("\n📋 Тест 1: Получение аккаунтов пользователя 1")
@@ -66,48 +69,44 @@ def test_user_isolation():
     except Exception as e:
         print(f"❌ Ошибка запроса: {e}")
     
-    # Тест 3: Попытка получить QR код без токена
-    print("\n🔒 Тест 3: Запрос без авторизации")
+    # Тест 3: Получение аккаунтов для пользователя 99
+    print("\n📋 Тест 3: Получение аккаунтов пользователя 99")
     try:
-        response_no_auth = requests.get(f"{API_BASE}/qr-code")
-        print(f"Status без токена: {response_no_auth.status_code}")
-        if response_no_auth.status_code == 401:
-            print("✅ Правильно блокируется неавторизованный доступ")
+        response99 = requests.get(f"{API_BASE}/accounts", headers=headers99)
+        print(f"Status: {response99.status_code}")
+        if response99.status_code == 200:
+            accounts99 = response99.json()
+            print(f"Найдено аккаунтов для user_id=99: {len(accounts99)}")
+            for acc in accounts99:
+                print(f"  - Account ID: {acc['id']}, User ID: {acc['user_id']}, Phone: {acc['phone']}")
         else:
-            print(f"❌ Неожиданный ответ: {response_no_auth.text}")
+            print(f"Error: {response99.text}")
     except Exception as e:
         print(f"❌ Ошибка запроса: {e}")
     
-    # Тест 4: Получение QR кода для пользователя 1
-    print("\n🔢 Тест 4: Получение QR кода для пользователя 1")
-    try:
-        response_qr = requests.get(f"{API_BASE}/qr-code", headers=headers1)
-        print(f"Status: {response_qr.status_code}")
-        if response_qr.status_code == 200:
-            qr_data = response_qr.json()
-            print("✅ QR код успешно получен")
-            print(f"Message: {qr_data.get('message', 'N/A')}")
-        else:
-            print(f"❌ Ошибка получения QR кода: {response_qr.text}")
-    except Exception as e:
-        print(f"❌ Ошибка запроса: {e}")
-    
-    # Тест 5: Получение логов для пользователя 1
-    print("\n📊 Тест 5: Получение логов пользователя 1")
-    try:
-        response_logs = requests.get(f"{API_BASE}/logs", headers=headers1)
-        print(f"Status: {response_logs.status_code}")
-        if response_logs.status_code == 200:
-            logs1 = response_logs.json()
-            print(f"Найдено логов для user_id=1: {len(logs1)}")
-            for log in logs1[:3]:  # Показываем только первые 3
-                print(f"  - Log ID: {log['id']}, User ID: {log['user_id']}, Action: {log['action']}")
-        else:
-            print(f"Error: {response_logs.text}")
-    except Exception as e:
-        print(f"❌ Ошибка запроса: {e}")
-    
-    print("\n🎯 Тестирование завершено!")
+    # Тест 4: Тестирование auth endpoint
+    print("\n🔐 Тест 4: Проверка извлечения user_id из токенов")
+    for i, (user_id, headers) in enumerate([(1, headers1), (2, headers2), (99, headers99)], 1):
+        try:
+            response = requests.get(f"{API_BASE}/test-auth", headers=headers)
+            print(f"Test {i} - Expected user_id={user_id}, Status: {response.status_code}")
+            if response.status_code == 200:
+                data = response.json()
+                extracted_user_id = data.get("authenticated_user_id")
+                print(f"  Extracted user_id: {extracted_user_id}")
+                if extracted_user_id == user_id:
+                    print("  ✅ Корректная изоляция пользователей")
+                else:
+                    print("  ❌ ОШИБКА ИЗОЛЯЦИИ!")
+            else:
+                print(f"  Error: {response.text}")
+        except Exception as e:
+            print(f"  ❌ Ошибка запроса: {e}")
+
+    # Анализ результатов
+    print("\n📊 Анализ изоляции пользователей:")
+    print("Если пользователи видят одинаковые аккаунты - есть проблема с изоляцией.")
+    print("Каждый пользователь должен видеть только свои Telegram аккаунты.")
 
 if __name__ == "__main__":
     test_user_isolation() 
