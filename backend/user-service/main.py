@@ -17,6 +17,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import logging
+from backend.common.vault_client import VaultClient
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -31,7 +32,15 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 # Security configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
+# SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
+
+# Получаем JWT секрет из Vault
+vault_client = VaultClient()
+try:
+    SECRET_KEY = vault_client.get_secret("kv/jwt")['secret_key']
+except Exception as e:
+    raise RuntimeError(f"Не удалось получить JWT секрет из Vault: {e}")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

@@ -2,6 +2,7 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 from functools import lru_cache
 from .vault import IntegrationVaultClient
+from backend.common.vault_client import VaultClient
 
 class Settings(BaseSettings):
     # Базовые настройки
@@ -31,8 +32,8 @@ class Settings(BaseSettings):
     RABBITMQ_USER: str = "user"
     RABBITMQ_PASSWORD: str = "password"
     
-    # JWT секреты (получаем из переменной окружения)
-    JWT_SECRET_KEY: str = "your-jwt-secret"
+    # JWT секреты (теперь только из Vault)
+    # JWT_SECRET_KEY: str = "your-jwt-secret"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_DELTA: int = 3600  # 1 час
     
@@ -51,6 +52,15 @@ class Settings(BaseSettings):
     # Мониторинг
     PROMETHEUS_ENABLED: bool = True
     HEALTH_CHECK_ENABLED: bool = True
+    
+    def __init__(self, **values):
+        super().__init__(**values)
+        # Получаем JWT секрет из Vault
+        vault_client = VaultClient()
+        try:
+            self.JWT_SECRET_KEY = vault_client.get_secret("kv/jwt")['secret_key']
+        except Exception as e:
+            raise RuntimeError(f"Не удалось получить JWT секрет из Vault: {e}")
     
     @property
     def database_url(self) -> str:
