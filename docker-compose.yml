@@ -437,7 +437,13 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    command: server -config=/vault/config/config.hcl
+    entrypoint: >
+      sh -c "
+        mkdir -p /vault/data &&
+        chown -R vault:vault /vault/data &&
+        chmod -R 700 /vault/data &&
+        exec vault server -config=/vault/config/config.hcl
+      "
 
   nginx:
     image: nginx:1.25
