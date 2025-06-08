@@ -430,6 +430,10 @@ services:
       - ./vault/config:/vault/config
     cap_add:
       - IPC_LOCK
+      - CAP_SETFCAP
+      - CAP_SETPCAP
+      - CAP_SYSLOG
+    privileged: true
     networks:
       - backend
     healthcheck:
