@@ -428,11 +428,6 @@ services:
     volumes:
       - ./vault/data:/vault/data
       - ./vault/config:/vault/config
-    cap_add:
-      - IPC_LOCK
-      - CAP_SETFCAP
-      - CAP_SETPCAP
-      - CAP_SYSLOG
     privileged: true
     networks:
       - backend
@@ -442,7 +437,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    user: "100:100"
     command: server -config=/vault/config/config.hcl
 
   nginx:
