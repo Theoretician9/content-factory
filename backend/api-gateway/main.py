@@ -24,6 +24,7 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, EmailStr, constr
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
+from backend.common.vault_client import VaultClient
 
 load_dotenv()
 
@@ -455,6 +456,13 @@ async def proxy_integration_service(request: Request, path: str):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 app.include_router(api_router)
+
+# Получаем JWT секрет из Vault
+vault_client = VaultClient()
+try:
+    JWT_SECRET_KEY = vault_client.get_secret("kv/jwt")['secret_key']
+except Exception as e:
+    raise RuntimeError(f"Не удалось получить JWT секрет из Vault: {e}")
 
 if __name__ == "__main__":
     import uvicorn
