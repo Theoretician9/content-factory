@@ -34,6 +34,8 @@ services:
       - vault
     networks:
       - backend
+    vault:
+      condition: service_healthy
 
   # User Service
   user-service:
@@ -54,6 +56,8 @@ services:
       - vault
     networks:
       - backend
+    vault:
+      condition: service_healthy
 
   # Billing Service
   billing-service:
@@ -173,6 +177,8 @@ services:
       - backend
       - app-network
     restart: unless-stopped
+    vault:
+      condition: service_healthy
 
   # PostgreSQL для Integration Service  
   integration-postgres:
@@ -435,7 +441,7 @@ services:
       test: ["CMD", "vault", "status"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 10s
     entrypoint: >
       sh -c "
