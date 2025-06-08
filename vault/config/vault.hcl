@@ -7,9 +7,11 @@ listener "tcp" {
   tls_disable = 1
 }
 
-ui = true
+api_addr = "http://vault:8201"
+cluster_addr = "https://vault:8201"
 
-api_addr = "http://0.0.0.0:8201"
+ui = true
+disable_mlock = true
 
 default_lease_ttl = "168h"
 max_lease_ttl = "720h" 

@@ -413,19 +413,31 @@ services:
 
   # Vault
   vault:
-    build: ./vault
-    ports:
-      - "127.0.0.1:8201:8201"
-    volumes:
-      - vault_data:/vault/data
+    image: vault:1.13.3
+    container_name: vault
+    environment:
+      - VAULT_LOG_LEVEL=info
+      - VAULT_ADDR=http://0.0.0.0:8201
+      - VAULT_LOCAL_CONFIG={"storage":{"file":{"path":"/vault/data"}},"listener":{"tcp":{"address":"0.0.0.0:8201","tls_disable":true}},"ui":true,"default_lease_ttl":"168h","max_lease_ttl":"720h"}
     cap_add:
       - IPC_LOCK
-    environment:
-      - VAULT_ADDR=http://vault:8201
+    ports:
+      - "127.0.0.1:8201:8201"
     networks:
       - backend
-    restart: unless-stopped
-    user: "1000:1000"  # Используем UID:GID хоста
+    volumes:
+      - vault_data:/vault/data
+      - ./vault/config:/vault/config
+    entrypoint: >
+      sh -c "
+        chown -R vault:vault /vault/data &&
+        exec docker-entrypoint.sh vault server -config=/vault/config/config.hcl
+      "
+    healthcheck:
+      test: ["CMD", "sh", "-c", "VAULT_ADDR=http://127.0.0.1:8201 vault status || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   nginx:
     image: nginx:1.25
