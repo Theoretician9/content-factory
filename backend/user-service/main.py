@@ -17,7 +17,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import logging
-from backend.common.vault_client import VaultClient
+from common.vault_client import VaultClient
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
