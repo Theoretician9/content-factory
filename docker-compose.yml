@@ -420,11 +420,13 @@ services:
       - vault_data:/vault/data
     cap_add:
       - IPC_LOCK
+      - SETFCAP
     environment:
       - VAULT_ADDR=http://vault:8201
     networks:
       - backend
     restart: unless-stopped
+    user: "1000:1000"  # Используем UID:GID хоста
 
   nginx:
     image: nginx:1.25
