@@ -18,6 +18,8 @@ services:
       - REDIS_PORT=6379
       - MYSQL_HOST=mysql
       - MYSQL_PORT=3306
+      - VAULT_ADDR=http://vault:8201
+      - VAULT_TOKEN=${VAULT_TOKEN}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-for-content-factory-2024}
     depends_on:
       - user-service
@@ -43,6 +45,8 @@ services:
       - MYSQL_DATABASE=user_service
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - VAULT_ADDR=http://vault:8201
+      - VAULT_TOKEN=${VAULT_TOKEN}
     depends_on:
       - mysql
       - redis
@@ -148,7 +152,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - VAULT_ADDR=http://vault:8201
-      - VAULT_TOKEN=${VAULT_ROOT_TOKEN}
+      - VAULT_TOKEN=${VAULT_TOKEN}
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=user
       - RABBITMQ_PASSWORD=password
