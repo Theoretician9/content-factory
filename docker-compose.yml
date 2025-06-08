@@ -24,15 +24,24 @@ services:
     depends_on:
       vault:
         condition: service_healthy
-      user-service
-      billing-service
-      scenario-service
-      content-service
-      invite-service
-      parsing-service
-      integration-service
-      redis
-      mysql
+      user-service:
+        condition: service_started
+      billing-service:
+        condition: service_started
+      scenario-service:
+        condition: service_started
+      content-service:
+        condition: service_started
+      invite-service:
+        condition: service_started
+      parsing-service:
+        condition: service_started
+      integration-service:
+        condition: service_started
+      redis:
+        condition: service_started
+      mysql:
+        condition: service_started
     networks:
       - backend
     vault:
@@ -63,8 +72,10 @@ services:
     depends_on:
       vault:
         condition: service_healthy
-      mysql
-      redis
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_started
     networks:
       - backend
     vault:
@@ -84,8 +95,10 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      mysql
-      redis
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_started
     networks:
       - backend
 
@@ -101,8 +114,10 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      mysql
-      redis
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_started
     networks:
       - backend
 
@@ -118,8 +133,10 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      mysql
-      redis
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_started
     networks:
       - backend
 
@@ -135,8 +152,10 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      mysql
-      redis
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_started
     networks:
       - backend
 
@@ -152,8 +171,10 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      mysql
-      redis
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_started
     networks:
       - backend
 
@@ -184,9 +205,12 @@ services:
     depends_on:
       vault:
         condition: service_healthy
-      integration-postgres
-      redis
-      rabbitmq
+      integration-postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
     networks:
       - backend
       - app-network
@@ -234,9 +258,12 @@ services:
     volumes:
       - ./backend/task-worker:/app
     depends_on:
-      mysql
-      redis
-      rabbitmq
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
     networks:
       - app-network
 
