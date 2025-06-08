@@ -24,7 +24,7 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, EmailStr, constr
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
-from backend.common.vault_client import VaultClient
+from common.vault_client import VaultClient
 
 load_dotenv()
 

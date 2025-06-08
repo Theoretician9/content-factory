@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 from functools import lru_cache
 from .vault import IntegrationVaultClient
-from backend.common.vault_client import VaultClient
+from common.vault_client import VaultClient
 
 class Settings(BaseSettings):
     # Базовые настройки
