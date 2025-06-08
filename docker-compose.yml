@@ -22,38 +22,30 @@ services:
       - VAULT_TOKEN=${VAULT_TOKEN}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-for-content-factory-2024}
     depends_on:
-      - user-service
-      - billing-service
-      - scenario-service
-      - content-service
-      - invite-service
-      - parsing-service
-      - integration-service
-      - redis
-      - mysql
-      - vault
+      vault:
+        condition: service_healthy
+      user-service
+      billing-service
+      scenario-service
+      content-service
+      invite-service
+      parsing-service
+      integration-service
+      redis
+      mysql
     networks:
       - backend
     vault:
       condition: service_healthy
     user-service:
-      condition: service_started
     billing-service:
-      condition: service_started
     scenario-service:
-      condition: service_started
     content-service:
-      condition: service_started
     invite-service:
-      condition: service_started
     parsing-service:
-      condition: service_started
     integration-service:
-      condition: service_started
     redis:
-      condition: service_started
     mysql:
-      condition: service_started
 
   # User Service
   user-service:
@@ -69,17 +61,16 @@ services:
       - VAULT_ADDR=http://vault:8201
       - VAULT_TOKEN=${VAULT_TOKEN}
     depends_on:
-      - mysql
-      - redis
-      - vault
+      vault:
+        condition: service_healthy
+      mysql
+      redis
     networks:
       - backend
     vault:
       condition: service_healthy
     mysql:
-      condition: service_started
     redis:
-      condition: service_started
 
   # Billing Service
   billing-service:
@@ -93,8 +84,8 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      - mysql
-      - redis
+      mysql
+      redis
     networks:
       - backend
 
@@ -110,8 +101,8 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      - mysql
-      - redis
+      mysql
+      redis
     networks:
       - backend
 
@@ -127,8 +118,8 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      - mysql
-      - redis
+      mysql
+      redis
     networks:
       - backend
 
@@ -144,8 +135,8 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      - mysql
-      - redis
+      mysql
+      redis
     networks:
       - backend
 
@@ -161,8 +152,8 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      - mysql
-      - redis
+      mysql
+      redis
     networks:
       - backend
 
@@ -191,10 +182,11 @@ services:
       - DEBUG=false
       - PYTHONPATH=/app
     depends_on:
-      - integration-postgres
-      - redis
-      - vault
-      - rabbitmq
+      vault:
+        condition: service_healthy
+      integration-postgres
+      redis
+      rabbitmq
     networks:
       - backend
       - app-network
@@ -202,11 +194,8 @@ services:
     vault:
       condition: service_healthy
     integration-postgres:
-      condition: service_healthy
     redis:
-      condition: service_started
     rabbitmq:
-      condition: service_healthy
 
   # PostgreSQL для Integration Service  
   integration-postgres:
@@ -245,9 +234,9 @@ services:
     volumes:
       - ./backend/task-worker:/app
     depends_on:
-      - mysql
-      - redis
-      - rabbitmq
+      mysql
+      redis
+      rabbitmq
     networks:
       - app-network
 
