@@ -295,6 +295,79 @@ Integration Service **полностью готов к эксплуатации*
 
 ---
 
+## 2025-06-08 — ВОССТАНОВЛЕНИЕ И НАСТРОЙКА VAULT (ПРОДАКШН)
+
+### Причина сбоя
+- Папка vault и все данные были случайно удалены, Vault перестал запускаться, все секреты инициализации были утеряны.
+- Были попытки восстановить Vault через кастомный Dockerfile и build, что привело к ошибкам с правами и невозможности запуска.
+- Рабочая схема была зафиксирована на скриншоте docker-compose.yml (использование официального образа, volume для data/config, entrypoint с chown и запуском vault server).
+
+### Восстановление рабочей конфигурации
+- Полностью удалён кастомный Dockerfile из папки vault (используется только официальный образ vault:1.13.3).
+- Восстановлена секция vault в docker-compose.yml:
+    - image: vault:1.13.3
+    - container_name: vault
+    - environment: VAULT_LOG_LEVEL=info, VAULT_ADDR=http://0.0.0.0:8201, VAULT_LOCAL_CONFIG=... (см. ниже)
+    - cap_add: IPC_LOCK
+    - ports: 127.0.0.1:8201:8201
+    - networks: backend
+    - volumes: vault_data:/vault/data, ./vault/config:/vault/config
+    - entrypoint: chown -R vault:vault /vault/data && exec docker-entrypoint.sh vault server -config=/vault/config/config.hcl
+    - healthcheck: VAULT_ADDR=http://127.0.0.1:8201 vault status
+- Проверено, что файл конфигурации Vault лежит по пути ./vault/config/config.hcl (переименован из vault.hcl).
+- Удалены все лишние и конфликтующие файлы (vault/Dockerfile, vault/config.hcl, backend/vault/config.hcl, vault/config/local.json, vault/config/vault.hcl).
+
+### Порядок запуска и инициализации
+1. Остановить и удалить старый контейнер и volume:
+   docker-compose rm -f vault
+   docker volume rm html_vault_data
+2. Запустить Vault:
+   docker-compose up -d vault
+3. Проверить логи:
+   docker-compose logs vault
+   (ожидать сообщения security barrier not initialized)
+4. Инициализировать Vault:
+   docker-compose exec vault vault operator init
+   (сохранить все 5 unseal ключей и root token в надёжном месте)
+5. Разблокировать Vault (unseal) тремя разными ключами:
+   docker-compose exec vault vault operator unseal <Unseal Key 1>
+   docker-compose exec vault vault operator unseal <Unseal Key 2>
+   docker-compose exec vault vault operator unseal <Unseal Key 3>
+6. Войти в Vault с root token:
+   docker-compose exec vault vault login <Initial Root Token>
+7. Проверить статус:
+   docker-compose exec vault vault status
+   (должно быть: Sealed: false)
+
+### Доступ к Vault UI
+- Для доступа к веб-интерфейсу Vault (UI) используется SSH-туннель:
+  ssh -i C:\Users\nikit\.ssh\server_key -L 8201:localhost:8201 admin@telegraminvi.vps.webdock.cloud
+- После этого открыть http://localhost:8201 в браузере и войти с root token.
+
+### Добавление секретов и структура KV
+- Для хранения секретов используется KV v2 engine (включён по умолчанию).
+- Секреты добавляются командами:
+  docker-compose exec vault vault kv put kv/<путь>/<секрет> ...
+- Пример для MySQL:
+  docker-compose exec vault vault kv put kv/mysql root_password=*** user=*** user_password=***
+- Пример для интеграций:
+  docker-compose exec vault vault kv put kv/integrations/telegram api_id=*** api_hash=***
+- Важно: структура путей может быть произвольной (например, kv/integrations/telegram), и сервисы должны быть настроены на правильный путь.
+- Сами значения секретов в PROJECT-STATUS.md не фиксируются.
+
+### Важные рекомендации
+- Всегда хранить все 5 unseal ключей и root token в надёжном месте (без них восстановление невозможно).
+- Не использовать кастомные Dockerfile для Vault — только официальный образ и volume для конфига.
+- Всегда проверять, что config.hcl лежит по пути ./vault/config/config.hcl и пробрасывается в контейнер.
+- Для доступа к UI использовать только SSH-туннель, порт 8201 наружу не открыт.
+- После восстановления обязательно проверить интеграцию всех сервисов с Vault и структуру KV.
+
+### Итог
+- Vault полностью восстановлен, работает в production-режиме с файловым backend, все секреты инициализации сохранены.
+- Структура docker-compose.yml и vault/config/config.hcl зафиксирована и воспроизводима.
+- Все сервисы могут получать секреты из Vault через правильные пути KV.
+- Прогресс и детали восстановления зафиксированы максимально подробно для будущего восстановления.
+
 ## Примечание по ролям пользователей
 
 В текущей версии проекта роли пользователей (admin, user и т.д.) не реализованы. После внедрения ролей необходимо будет реализовать и протестировать отображение Dashboard для разных ролей, а также обновить соответствующие пункты чек-листов и документации.
