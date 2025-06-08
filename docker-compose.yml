@@ -36,6 +36,24 @@ services:
       - backend
     vault:
       condition: service_healthy
+    user-service:
+      condition: service_started
+    billing-service:
+      condition: service_started
+    scenario-service:
+      condition: service_started
+    content-service:
+      condition: service_started
+    invite-service:
+      condition: service_started
+    parsing-service:
+      condition: service_started
+    integration-service:
+      condition: service_started
+    redis:
+      condition: service_started
+    mysql:
+      condition: service_started
 
   # User Service
   user-service:
@@ -58,6 +76,10 @@ services:
       - backend
     vault:
       condition: service_healthy
+    mysql:
+      condition: service_started
+    redis:
+      condition: service_started
 
   # Billing Service
   billing-service:
@@ -178,6 +200,12 @@ services:
       - app-network
     restart: unless-stopped
     vault:
+      condition: service_healthy
+    integration-postgres:
+      condition: service_healthy
+    redis:
+      condition: service_started
+    rabbitmq:
       condition: service_healthy
 
   # PostgreSQL для Integration Service  
@@ -430,7 +458,7 @@ services:
       - "8200:8200"
       - "8201:8201"
     environment:
-      - VAULT_ADDR=http://127.0.0.1:8200
+      - VAULT_ADDR=http://127.0.0.1:8201
     volumes:
       - ./vault/data:/vault/data
       - ./vault/config:/vault/config
