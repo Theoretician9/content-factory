@@ -70,25 +70,6 @@ services:
     mysql:
     redis:
 
-  # Billing Service
-  billing-service:
-    build: ./backend/billing-service
-    environment:
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_USER=user
-      - MYSQL_PASSWORD=password
-      - MYSQL_DATABASE=billing_service
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-    depends_on:
-      mysql:
-        condition: service_started
-      redis:
-        condition: service_started
-    networks:
-      - backend
-
   # Scenario Service
   scenario-service:
     build: ./backend/scenario-service
