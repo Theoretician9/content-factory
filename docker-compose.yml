@@ -439,11 +439,7 @@ services:
       retries: 5
       start_period: 10s
     user: "100:100"
-    entrypoint: >
-      sh -c "
-        chown -R vault:vault /vault/data &&
-        exec docker-entrypoint.sh vault server -config=/vault/config/config.hcl
-      "
+    command: server -config=/vault/config/config.hcl
 
   nginx:
     image: nginx:1.25
