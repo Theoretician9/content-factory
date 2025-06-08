@@ -460,7 +460,7 @@ app.include_router(api_router)
 # Получаем JWT секрет из Vault
 vault_client = VaultClient()
 try:
-    JWT_SECRET_KEY = vault_client.get_secret("kv/jwt")['secret_key']
+    JWT_SECRET_KEY = vault_client.get_secret("kv/data/jwt")['secret_key']
 except Exception as e:
     raise RuntimeError(f"Не удалось получить JWT секрет из Vault: {e}")
 
