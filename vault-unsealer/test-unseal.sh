@@ -28,17 +28,41 @@ if curl -s --connect-timeout 5 --max-time 10 "$VAULT_ADDR/v1/sys/health" >/dev/n
     echo "Sealed: $sealed"
     
     if [[ "$sealed" == "true" ]]; then
-        echo "🔒 Vault is sealed, attempting unseal..."
+        echo "🔒 Vault is sealed, attempting full unseal..."
         
-        # Try first key
-        eval "key1=\${VAULT_UNSEAL_KEY_1:-}"
-        if [[ -n "$key1" ]]; then
-            echo "Trying first unseal key..."
-            response=$(curl -s -X POST \
-                -H "Content-Type: application/json" \
-                -d "{\"key\":\"$key1\"}" \
-                "$VAULT_ADDR/v1/sys/unseal")
-            echo "Response: $response"
+        # Apply all 3 keys
+        for i in {1..3}; do
+            key_var="VAULT_UNSEAL_KEY_$i"
+            eval "key=\${$key_var:-}"
+            if [[ -n "$key" ]]; then
+                echo "Trying unseal key $i..."
+                response=$(curl -s -X POST \
+                    -H "Content-Type: application/json" \
+                    -d "{\"key\":\"$key\"}" \
+                    "$VAULT_ADDR/v1/sys/unseal")
+                echo "Response: $response"
+                
+                # Check if unsealed
+                sealed_status=$(echo "$response" | jq -r '.sealed // true')
+                progress=$(echo "$response" | jq -r '.progress // 0')
+                threshold=$(echo "$response" | jq -r '.t // 3')
+                echo "Progress: $progress/$threshold, Sealed: $sealed_status"
+                
+                if [[ "$sealed_status" == "false" ]]; then
+                    echo "🎉 SUCCESS! Vault unsealed with key $i"
+                    break
+                fi
+            fi
+        done
+        
+        # Final check
+        echo "Final status check..."
+        final_status=$(curl -s "$VAULT_ADDR/v1/sys/seal-status")
+        final_sealed=$(echo "$final_status" | jq -r '.sealed // true')
+        if [[ "$final_sealed" == "false" ]]; then
+            echo "✅ Vault is UNSEALED!"
+        else
+            echo "❌ Vault is still SEALED"
         fi
     else
         echo "🔓 Vault is already unsealed"
