@@ -25,5 +25,5 @@ USER unsealer
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://vault:8201/v1/sys/health || exit 1
 
-# Run unsealing script
-CMD ["/app/unseal.sh"] 
+# Run unsealing script or test script
+CMD ["/bin/sh", "-c", "if [ \"$UNSEALER_TEST_MODE\" = \"true\" ]; then /app/test-unseal.sh; else /app/unseal.sh; fi"] 
