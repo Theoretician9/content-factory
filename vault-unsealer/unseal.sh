@@ -156,7 +156,7 @@ unseal_vault() {
                 -d "{\"key\":\"$key\"}" \
                 "$VAULT_ADDR/v1/sys/unseal" 2>/dev/null); then
                 
-                local sealed=$(echo "$unseal_response" | jq -r '.sealed // true')
+                local sealed=$(echo "$unseal_response" | jq -r '.sealed')
                 local progress=$(echo "$unseal_response" | jq -r '.progress // 0')
                 local threshold=$(echo "$unseal_response" | jq -r '.t // 3')
                 
