@@ -89,18 +89,17 @@ app.add_middleware(
 # )
 
 # Prometheus метрики
-if settings.PROMETHEUS_ENABLED:
-    instrumentator = Instrumentator(
-        should_group_status_codes=False,
-        should_ignore_untemplated=True,
-        should_respect_env_var=True,
-        should_instrument_requests_inprogress=True,
-        excluded_handlers=["/health", "/metrics"],
-        env_var_name="ENABLE_METRICS",
-        inprogress_name="inprogress",
-        inprogress_labels=True,
-    )
-    instrumentator.instrument(app).expose(app)
+instrumentator = Instrumentator(
+    should_group_status_codes=False,
+    should_ignore_untemplated=True,
+    should_respect_env_var=True,
+    should_instrument_requests_inprogress=True,
+    excluded_handlers=["/health"],
+    env_var_name="ENABLE_METRICS",
+    inprogress_name="inprogress",
+    inprogress_labels=True,
+)
+instrumentator.instrument(app).expose(app)
 
 # Включение API роутеров
 app.include_router(api_router, prefix="/api")
