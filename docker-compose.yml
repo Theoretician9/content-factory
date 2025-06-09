@@ -34,17 +34,6 @@ services:
       - mysql
     networks:
       - backend
-    vault:
-      condition: service_healthy
-    user-service:
-    billing-service:
-    scenario-service:
-    content-service:
-    invite-service:
-    parsing-service:
-    integration-service:
-    redis:
-    mysql:
 
   # User Service
   user-service:
@@ -65,10 +54,6 @@ services:
       - redis
     networks:
       - backend
-    vault:
-      condition: service_healthy
-    mysql:
-    redis:
 
   # Scenario Service
   scenario-service:
@@ -179,11 +164,6 @@ services:
       - backend
       - app-network
     restart: unless-stopped
-    vault:
-      condition: service_healthy
-    integration-postgres:
-    redis:
-    rabbitmq:
 
   # PostgreSQL для Integration Service  
   integration-postgres:
