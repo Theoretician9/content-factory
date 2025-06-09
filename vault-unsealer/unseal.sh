@@ -94,7 +94,7 @@ get_vault_status() {
 is_vault_sealed() {
     local status
     if status=$(get_vault_status); then
-        local sealed=$(echo "$status" | jq -r '.sealed // true')
+        local sealed=$(echo "$status" | jq -r '.sealed')
         [[ "$sealed" == "true" ]]
     else
         return 1
@@ -105,7 +105,7 @@ is_vault_sealed() {
 is_vault_initialized() {
     local status
     if status=$(get_vault_status); then
-        local initialized=$(echo "$status" | jq -r '.initialized // false')
+        local initialized=$(echo "$status" | jq -r '.initialized')
         [[ "$initialized" == "true" ]]
     else
         return 1
