@@ -489,21 +489,21 @@ services:
       - VAULT_UNSEAL_KEY_3=${VAULT_UNSEAL_KEY_3}
       - VAULT_UNSEAL_KEY_4=${VAULT_UNSEAL_KEY_4:-}
       - VAULT_UNSEAL_KEY_5=${VAULT_UNSEAL_KEY_5:-}
-      - UNSEALER_MAX_RETRIES=${UNSEALER_MAX_RETRIES:-50}
-      - UNSEALER_RETRY_DELAY=${UNSEALER_RETRY_DELAY:-5}
+      - UNSEALER_MAX_RETRIES=${UNSEALER_MAX_RETRIES:-100}
+      - UNSEALER_RETRY_DELAY=${UNSEALER_RETRY_DELAY:-3}
       - UNSEALER_MONITOR_INTERVAL=${UNSEALER_MONITOR_INTERVAL:-30}
-      - UNSEALER_LOG_LEVEL=${UNSEALER_LOG_LEVEL:-INFO}
+      - UNSEALER_LOG_LEVEL=${UNSEALER_LOG_LEVEL:-DEBUG}
     depends_on:
       - vault
     networks:
       - backend
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://vault:8201/v1/sys/health"]
+      test: ["CMD", "sh", "-c", "curl -f http://vault:8201/v1/sys/health 2>/dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 60s
 
   nginx:
     image: nginx:1.25

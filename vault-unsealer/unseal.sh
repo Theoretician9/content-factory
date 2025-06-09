@@ -38,13 +38,19 @@ check_unseal_keys() {
     local keys_found=0
     for i in {1..5}; do
         local key_var="VAULT_UNSEAL_KEY_$i"
-        if [[ -n "${!key_var:-}" ]]; then
+        local key_value=""
+        eval "key_value=\${$key_var:-}"
+        if [[ -n "$key_value" ]]; then
             ((keys_found++))
+            log "DEBUG" "Found unseal key $i"
+        else
+            log "DEBUG" "Unseal key $i not set"
         fi
     done
     
     if [[ $keys_found -lt 3 ]]; then
         log "ERROR" "Insufficient unseal keys provided. Found: $keys_found, Required: at least 3"
+        log "ERROR" "Please set VAULT_UNSEAL_KEY_1, VAULT_UNSEAL_KEY_2, VAULT_UNSEAL_KEY_3 in .env file"
         exit 1
     fi
     
@@ -137,7 +143,8 @@ unseal_vault() {
     # Apply unseal keys
     for i in {1..5}; do
         local key_var="VAULT_UNSEAL_KEY_$i"
-        local key="${!key_var:-}"
+        local key=""
+        eval "key=\${$key_var:-}"
         
         if [[ -n "$key" ]]; then
             log "DEBUG" "Applying unseal key $i"
