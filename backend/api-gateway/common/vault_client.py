@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional
 
 class VaultClient:
     def __init__(self, vault_addr: str = None, vault_token: str = None):
-        self.vault_addr = vault_addr or os.getenv('VAULT_ADDR', 'http://vault:8200')
+        self.vault_addr = vault_addr or os.getenv('VAULT_ADDR', 'http://vault:8201')
         self.vault_token = vault_token or os.getenv('VAULT_TOKEN')
         if not self.vault_token:
             raise ValueError("Vault token is required")
