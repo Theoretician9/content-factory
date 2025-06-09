@@ -18,11 +18,7 @@ class IntegrationVaultClient:
             # Ждем инициализации Vault
             self._wait_for_vault()
             
-            # Инициализируем Vault если он еще не инициализирован
-            self._initialize_vault()
-            
-            # Проверяем и создаем необходимые пути для секретов
-            self._ensure_secrets_mount()
+            logger.info("Vault client initialized successfully")
         except Exception as e:
             logger.warning(f"Could not initialize Vault client: {e}")
             self.client = None
