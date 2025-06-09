@@ -8,9 +8,6 @@ from .config import get_settings
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)  # Не auto_error, проверяем вручную
 
-# Константа JWT секрета (синхронизировано с API Gateway)
-JWT_SECRET = "your-jwt-secret"
-
 class AuthenticationError(HTTPException):
     def __init__(self, detail: str = "Authentication failed"):
         super().__init__(
@@ -93,7 +90,7 @@ async def get_user_id_from_request(request: Request) -> int:
     
     # Извлекаем токен
     token = auth_header[7:]  # Убираем "Bearer "
-    logger.error(f"🔍 Processing JWT token from request: {token[:30]}...")
+    logger.info(f"🔍 Processing JWT token from request: {token[:30]}...")
     
     try:
         # Получаем JWT секрет из настроек (полученный из Vault)
