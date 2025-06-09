@@ -71,17 +71,27 @@ class IntegrationVaultClient:
             logger.error(f"Error initializing Vault: {e}")
 
     def _ensure_secrets_mount(self):
-        """Проверяет существование секретов (без системных операций)"""
+        """Проверяет и создает необходимые пути для секретов"""
         if not self.client:
             return
             
         try:
-            # Просто проверяем существование секрета Telegram без системных вызовов
+            # Проверяем, что KV v2 включен
+            mounted_secrets = self.client.sys.list_mounted_secrets_engines()
+            if 'kv/' not in mounted_secrets.get('data', {}):
+                self.client.sys.enable_secrets_engine(
+                    backend_type='kv',
+                    options={'version': '2'},
+                    path='kv'
+                )
+                logger.info("Enabled KV v2 secrets engine")
+            
+            # Проверяем существование секрета Telegram
             try:
                 secret = self.get_secret('integrations/telegram')
                 logger.info(f"Telegram credentials found in Vault: API ID {secret.get('api_id')}")
             except Exception as e:
-                logger.info(f"Telegram credentials not found in Vault: {e}")
+                logger.info(f"Telegram credentials not found in Vault, initializing: {e}")
                 
                 # Получаем реальные Telegram API credentials из переменных окружения
                 telegram_api_id = os.getenv('TELEGRAM_API_ID')
