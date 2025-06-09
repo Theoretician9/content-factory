@@ -58,7 +58,9 @@ class Settings(BaseSettings):
         # Получаем JWT секрет из Vault
         vault_client = VaultClient()
         try:
-            self.JWT_SECRET_KEY = vault_client.get_secret("kv/data/jwt")['secret_key']
+            # Правильный путь для KV v2: kv/data/jwt
+            secret_data = vault_client.get_secret("kv/data/jwt")
+            self.JWT_SECRET_KEY = secret_data['secret_key']
         except Exception as e:
             raise RuntimeError(f"Не удалось получить JWT секрет из Vault: {e}")
     
