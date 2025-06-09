@@ -30,6 +30,16 @@ load_dotenv()
 
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
+# Получаем JWT секрет из Vault в самом начале
+vault_client = VaultClient()
+try:
+    JWT_SECRET_KEY = vault_client.get_secret("kv/data/jwt")['secret_key']
+    print(f"✅ JWT секрет получен из Vault")
+except Exception as e:
+    # Fallback к environment variable
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-jwt-secret")
+    print(f"⚠️ Используется JWT секрет из ENV: {e}")
+
 app = FastAPI(
     title="Content Factory API Gateway",
     description="API Gateway for Content Factory SaaS Platform",
@@ -68,11 +78,11 @@ app.add_middleware(
 #     secret_key=os.getenv("CSRF_SECRET_KEY", "your-secret-key")
 # )
 
-# Refresh token middleware
+# Refresh token middleware  
 app.add_middleware(
     RefreshTokenMiddleware,
     redis_client=redis_client,
-    jwt_secret=os.getenv("JWT_SECRET_KEY", "your-jwt-secret")
+    jwt_secret=JWT_SECRET_KEY
 )
 
 # Prometheus metrics
