@@ -71,4 +71,19 @@ else
     echo "❌ Vault is not reachable"
 fi
 
-echo "=== Test Complete ===" 
+echo "=== Starting continuous monitoring (test mode) ==="
+
+# Continuous monitoring loop for test mode
+while true; do
+    sleep 30
+    echo "[$(date)] Checking Vault status..."
+    
+    status=$(curl -s "$VAULT_ADDR/v1/sys/seal-status")
+    sealed=$(echo "$status" | jq -r '.sealed')
+    
+    if [[ "$sealed" == "false" ]]; then
+        echo "✅ Vault is unsealed"
+    else
+        echo "⚠️  Vault became sealed, would attempt re-unseal..."
+    fi
+done 
