@@ -43,7 +43,7 @@ if curl -s --connect-timeout 5 --max-time 10 "$VAULT_ADDR/v1/sys/health" >/dev/n
                 echo "Response: $response"
                 
                 # Check if unsealed
-                sealed_status=$(echo "$response" | jq -r '.sealed // true')
+                sealed_status=$(echo "$response" | jq -r '.sealed')
                 progress=$(echo "$response" | jq -r '.progress // 0')
                 threshold=$(echo "$response" | jq -r '.t // 3')
                 echo "Progress: $progress/$threshold, Sealed: $sealed_status"
@@ -58,7 +58,7 @@ if curl -s --connect-timeout 5 --max-time 10 "$VAULT_ADDR/v1/sys/health" >/dev/n
         # Final check
         echo "Final status check..."
         final_status=$(curl -s "$VAULT_ADDR/v1/sys/seal-status")
-        final_sealed=$(echo "$final_status" | jq -r '.sealed // true')
+        final_sealed=$(echo "$final_status" | jq -r '.sealed')
         if [[ "$final_sealed" == "false" ]]; then
             echo "✅ Vault is UNSEALED!"
         else
