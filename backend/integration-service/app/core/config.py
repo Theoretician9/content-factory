@@ -59,8 +59,8 @@ class Settings(BaseSettings):
         # Получаем JWT секрет из Vault
         vault_client = VaultClient()
         try:
-            # Для KV v2 путь должен быть без /data/ в VaultClient
-            secret_data = vault_client.get_secret("kv/jwt")
+            # Для KV v2 правильный путь включает /data/
+            secret_data = vault_client.get_secret("kv/data/jwt")
             self.JWT_SECRET_KEY = secret_data['secret_key']
             print(f"✅ Integration Service: JWT секрет получен из Vault")
         except Exception as e:
