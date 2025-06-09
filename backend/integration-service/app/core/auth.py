@@ -96,26 +96,12 @@ async def get_user_id_from_request(request: Request) -> int:
     logger.error(f"🔍 Processing JWT token from request: {token[:30]}...")
     
     try:
-        # Попробуем несколько JWT секретов для совместимости
-        jwt_secrets = [
-            "your-jwt-secret",  # API Gateway секрет (приоритет)
-            "super-secret-jwt-key-for-content-factory-2024",  # Fallback
-        ]
+        # Получаем JWT секрет из настроек (полученный из Vault)
+        settings = get_settings()
+        jwt_secret = settings.JWT_SECRET_KEY
         
-        payload = None
-        used_secret = None
-        
-        for secret in jwt_secrets:
-            try:
-                payload = jwt.decode(token, secret, algorithms=["HS256"])
-                used_secret = secret
-                break
-            except jwt.InvalidTokenError:
-                continue
-        
-        if not payload:
-            logger.error(f"🚫 JWT token failed verification with all secrets")
-            raise AuthenticationError("Invalid token: signature verification failed")
+        # Декодируем JWT токен с секретом из Vault
+        payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
         
         # Извлекаем user_id
         user_id_str = payload.get("sub")
@@ -124,7 +110,7 @@ async def get_user_id_from_request(request: Request) -> int:
             raise AuthenticationError("Invalid token: missing user ID")
         
         user_id = int(user_id_str)
-        logger.error(f"✅ JWT Authentication successful - User ID: {user_id}, secret: {used_secret[:20]}...")
+        logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
         return user_id
         
     except jwt.ExpiredSignatureError:
