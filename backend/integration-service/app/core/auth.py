@@ -38,8 +38,8 @@ async def get_current_user_id(
         token = credentials.credentials
         logger.info(f"🔍 Processing JWT token: {token[:30]}...")
         
-        # Используем правильный JWT секрет
-        jwt_secret = "your-jwt-secret"
+        # Используем JWT секрет из настроек (полученный из Vault)
+        jwt_secret = settings.JWT_SECRET_KEY
         
         # Декодируем JWT токен
         payload = jwt.decode(
