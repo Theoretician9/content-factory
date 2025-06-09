@@ -221,15 +221,23 @@ main() {
     log "INFO" "Configuration: VAULT_ADDR=$VAULT_ADDR, MAX_RETRIES=$MAX_RETRIES, RETRY_DELAY=${RETRY_DELAY}s"
     
     # Validate environment
-    check_unseal_keys
+    log "DEBUG" "Checking unseal keys..."
+    if ! check_unseal_keys; then
+        log "ERROR" "❌ Unseal keys validation failed"
+        exit 1
+    fi
+    log "DEBUG" "Unseal keys validation passed"
     
     # Wait for Vault to be available
+    log "DEBUG" "Waiting for Vault..."
     if ! wait_for_vault; then
         log "ERROR" "❌ Failed to connect to Vault"
         exit 1
     fi
+    log "DEBUG" "Vault connection established"
     
     # Perform initial unseal
+    log "DEBUG" "Starting initial unseal..."
     if unseal_vault; then
         log "INFO" "✅ Initial unseal completed successfully"
     else
@@ -238,6 +246,7 @@ main() {
     fi
     
     # Start monitoring
+    log "DEBUG" "Starting monitoring loop..."
     monitor_vault
 }
 
