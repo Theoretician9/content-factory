@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     RABBITMQ_PASSWORD: str = "password"
     
     # JWT секреты (теперь только из Vault)
-    # JWT_SECRET_KEY: str = "your-jwt-secret"
+    JWT_SECRET_KEY: Optional[str] = None  # Будет установлен из Vault в __init__
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_DELTA: int = 3600  # 1 час
     

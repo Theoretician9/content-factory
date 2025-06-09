@@ -311,15 +311,70 @@ SaaS-платформа для автоматизации маркетинга, 
   - Перезапуск: `docker-compose restart vault`
   - Логи: `docker-compose logs vault --tail 100`
   - Войти в контейнер: `docker-compose exec vault sh`
-  - Разблокировка: `docker-compose exec vault vault operator unseal`
+  - ~~Разблокировка: `docker-compose exec vault vault operator unseal`~~ **БОЛЬШЕ НЕ ТРЕБУЕТСЯ**
 - **Особенности:**
   - **✅ Production режим с файловым хранением (storage "file")**
   - **✅ Данные сохраняются при перезагрузке контейнера**
   - **✅ Инициализация и unseal keys настроены**
   - **✅ Root token безопасно хранится в переменных окружения**
   - **✅ KV v2 secrets engine для хранения секретов интеграций**
+  - **✅ АВТОМАТИЧЕСКИЙ UNSEALING через Vault Unsealer Service**
+  - **✅ Self-healing: автоматическое восстановление от sealed state**
+  - **✅ Enhanced health checks с проверкой unsealed статуса**
   - Все секреты для сервисов хранятся здесь
   - Интеграция с Integration Service и API Gateway полностью работает
+
+### 10a. Vault Unsealer Service (vault-unsealer)
+- **Назначение:** Автоматический unsealing HashiCorp Vault при запуске и мониторинг 24/7
+- **Внутренний адрес:** vault-unsealer (сервисный контейнер)
+- **Зависимости:** vault (ждёт запуска Vault)
+- **Команды:**
+  - Перезапуск: `docker-compose restart vault-unsealer`
+  - Логи: `docker-compose logs vault-unsealer --tail 100`
+  - Тестовый режим: `UNSEALER_TEST_MODE=true docker-compose up vault vault-unsealer`
+- **Конфигурация (.env):**
+  ```bash
+  VAULT_UNSEAL_KEY_1=your-first-unseal-key
+  VAULT_UNSEAL_KEY_2=your-second-unseal-key  
+  VAULT_UNSEAL_KEY_3=your-third-unseal-key
+  UNSEALER_MAX_RETRIES=100
+  UNSEALER_RETRY_DELAY=3
+  UNSEALER_MONITOR_INTERVAL=30
+  UNSEALER_LOG_LEVEL=DEBUG
+  ```
+- **Возможности:**
+  - **🔄 Automatic Unsealing:** Vault автоматически разблокируется при каждом запуске
+  - **🔍 Continuous Monitoring:** Проверка статуса каждые 30 секунд
+  - **🩹 Self-Healing:** Автоматический re-unseal если Vault запечатается
+  - **📋 Structured Logging:** Детальные логи с timestamp и цветной индикацией
+  - **🔐 Security Compliant:** Unseal keys только в переменных окружения (не в логах)
+  - **⚡ Production Ready:** Retry logic, error handling, graceful shutdown
+  - **🧪 Test Mode:** Диагностический режим для отладки проблем
+- **Логи успешной работы:**
+  ```
+  [2025-06-09] INFO:  🚀 Vault Unsealer Service starting up
+  [2025-06-09] INFO:  Found 3 unseal keys
+  [2025-06-09] INFO:  Vault is reachable (attempt 1/100)
+  [2025-06-09] INFO:  Current unseal progress: 0/3
+  [2025-06-09] INFO:  Unseal progress: 1/3
+  [2025-06-09] INFO:  Unseal progress: 2/3
+  [2025-06-09] INFO:  Unseal progress: 0/3  ← sealed:false
+  [2025-06-09] INFO:  ✅ Vault successfully unsealed!
+  [2025-06-09] INFO:  Starting continuous Vault monitoring (interval: 30s)
+  [2025-06-09] DEBUG: 🔓 Vault status: unsealed
+  ```
+- **Архитектура:**
+  - **Alpine Linux** контейнер с minimal dependencies (bash, curl, jq)
+  - **Non-root user** для безопасности
+  - **Health checks** интеграция с Docker Compose
+  - **Environment validation** проверка наличия минимум 3 ключей
+  - **Progressive unsealing** с real-time отображением прогресса
+  - **Graceful shutdown** с обработкой SIGTERM/SIGINT
+- **Production Impact:**
+  - **✅ Zero Manual Intervention:** Проект полностью автономен после перезапусков
+  - **✅ Операционная готовность:** Vault никогда не остается sealed
+  - **✅ Monitoring Integration:** Structured logs для ELK/Prometheus
+  - **✅ Security Compliance:** No key exposure, minimal permissions
 
 ### 11. API Gateway (api-gateway)
 - **Назначение:** Единая точка входа для всех фронтов и сервисов, проксирование, аутентификация, лимиты, CSRF, логирование
@@ -352,7 +407,7 @@ SaaS-платформа для автоматизации маркетинга, 
 - **База данных:** integration-postgres:5432 (PostgreSQL)
 - **Команды:**
   - Перезапуск: `docker-compose restart integration-service`
-  - Логи: `docker-compose logs integration-service --tail 100`
+  - Логи: `docker-compose logs integration-service | tail 100`
   - Войти в контейнер: `docker-compose exec integration-service sh`
 - **Особенности:**
   - Полностью асинхронный FastAPI с PostgreSQL
@@ -400,7 +455,7 @@ SaaS-платформа для автоматизации маркетинга, 
   - integration_user/integration_password
 - **Команды:**
   - Перезапуск: `docker-compose restart integration-postgres`
-  - Логи: `docker-compose logs integration-postgres --tail 100`
+  - Логи: `docker-compose logs integration-postgres | tail 100`
   - Войти в контейнер: `docker-compose exec integration-postgres bash`
   - PostgreSQL shell: `docker-compose exec integration-postgres psql -U integration_user -d integration_db`
 - **Особенности:**
