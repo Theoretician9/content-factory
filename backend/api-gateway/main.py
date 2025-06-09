@@ -232,7 +232,7 @@ async def refresh_token(request: Request):
             "sub": user_id,
             "exp": datetime.utcnow() + timedelta(minutes=15)
         },
-        os.getenv("JWT_SECRET_KEY", "your-jwt-secret"),
+        JWT_SECRET_KEY,
         algorithm="HS256"
     )
     logger.info(json.dumps({"event": "refresh_token_success", "user_id": user_id.decode() if hasattr(user_id, 'decode') else str(user_id), "ip": request.client.host}))
@@ -466,13 +466,6 @@ async def proxy_integration_service(request: Request, path: str):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 app.include_router(api_router)
-
-# Получаем JWT секрет из Vault
-vault_client = VaultClient()
-try:
-    JWT_SECRET_KEY = vault_client.get_secret("kv/data/jwt")['secret_key']
-except Exception as e:
-    raise RuntimeError(f"Не удалось получить JWT секрет из Vault: {e}")
 
 if __name__ == "__main__":
     import uvicorn

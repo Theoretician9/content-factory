@@ -58,11 +58,14 @@ class Settings(BaseSettings):
         # Получаем JWT секрет из Vault
         vault_client = VaultClient()
         try:
-            # Правильный путь для KV v2: kv/data/jwt
-            secret_data = vault_client.get_secret("kv/data/jwt")
+            # Для KV v2 путь должен быть без /data/ в VaultClient
+            secret_data = vault_client.get_secret("kv/jwt")
             self.JWT_SECRET_KEY = secret_data['secret_key']
+            print(f"✅ Integration Service: JWT секрет получен из Vault")
         except Exception as e:
-            raise RuntimeError(f"Не удалось получить JWT секрет из Vault: {e}")
+            # Fallback к environment variable
+            self.JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret')
+            print(f"⚠️ Integration Service: используется JWT из ENV: {e}")
     
     @property
     def database_url(self) -> str:
