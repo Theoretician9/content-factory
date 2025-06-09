@@ -55,21 +55,14 @@ class Settings(BaseSettings):
     
     def __init__(self, **values):
         super().__init__(**values)
-        # Получаем JWT секрет из environment variable или Vault
-        jwt_from_env = os.getenv('JWT_SECRET_KEY')
-        if jwt_from_env:
-            self.JWT_SECRET_KEY = jwt_from_env
-            logger.info("Using JWT secret from environment variable")
-        else:
-            # Fallback к Vault
-            vault_client = VaultClient()
-            try:
-                # Правильный путь для KV v2: kv/data/jwt
-                secret_data = vault_client.get_secret("kv/data/jwt")
-                self.JWT_SECRET_KEY = secret_data['secret_key']
-                logger.info("Using JWT secret from Vault")
-            except Exception as e:
-                raise RuntimeError(f"Не удалось получить JWT секрет из Vault: {e}")
+        # Получаем JWT секрет из Vault
+        vault_client = VaultClient()
+        try:
+            # Правильный путь для KV v2: kv/data/jwt
+            secret_data = vault_client.get_secret("kv/data/jwt")
+            self.JWT_SECRET_KEY = secret_data['secret_key']
+        except Exception as e:
+            raise RuntimeError(f"Не удалось получить JWT секрет из Vault: {e}")
     
     @property
     def database_url(self) -> str:
