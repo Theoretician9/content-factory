@@ -15,7 +15,8 @@ WORKDIR /app
 
 # Copy unsealing script
 COPY unseal.sh /app/unseal.sh
-RUN chmod +x /app/unseal.sh
+COPY test-unseal.sh /app/test-unseal.sh
+RUN chmod +x /app/unseal.sh /app/test-unseal.sh
 
 # Switch to non-root user
 USER unsealer
