@@ -33,8 +33,8 @@ DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 # Получаем JWT секрет из Vault в самом начале  
 vault_client = VaultClient()
 try:
-    # Для KV v2 путь должен быть без /data/ в VaultClient
-    JWT_SECRET_KEY = vault_client.get_secret("kv/jwt")['secret_key']
+    # Для KV v2 правильный путь включает /data/
+    JWT_SECRET_KEY = vault_client.get_secret("kv/data/jwt")['secret_key']
     print(f"✅ API Gateway: JWT секрет получен из Vault")
 except Exception as e:
     # Fallback к environment variable
