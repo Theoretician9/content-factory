@@ -22,16 +22,28 @@ services:
       - VAULT_TOKEN=${VAULT_TOKEN}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-for-content-factory-2024}
     depends_on:
-      - vault
-      - user-service
-      - billing-service
-      - scenario-service
-      - content-service
-      - invite-service
-      - parsing-service
-      - integration-service
-      - redis
-      - mysql
+      vault:
+        condition: service_healthy
+      vault-unsealer:
+        condition: service_started
+      user-service:
+        condition: service_started
+      billing-service:
+        condition: service_started
+      scenario-service:
+        condition: service_started
+      content-service:
+        condition: service_started
+      invite-service:
+        condition: service_started
+      parsing-service:
+        condition: service_started
+      integration-service:
+        condition: service_started
+      redis:
+        condition: service_started
+      mysql:
+        condition: service_started
     networks:
       - backend
 
@@ -66,9 +78,14 @@ services:
       - VAULT_ADDR=http://vault:8201
       - VAULT_TOKEN=${VAULT_TOKEN}
     depends_on:
-      - vault
-      - mysql
-      - redis
+      vault:
+        condition: service_healthy
+      vault-unsealer:
+        condition: service_started
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_started
     networks:
       - backend
 
@@ -173,10 +190,16 @@ services:
       - DEBUG=false
       - PYTHONPATH=/app
     depends_on:
-      - vault
-      - integration-postgres
-      - redis
-      - rabbitmq
+      vault:
+        condition: service_healthy
+      vault-unsealer:
+        condition: service_started
+      integration-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
     networks:
       - backend
       - app-network
@@ -443,11 +466,11 @@ services:
     networks:
       - backend
     healthcheck:
-      test: ["CMD", "vault", "status"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
+      test: ["CMD", "sh", "-c", "vault status && vault status | grep 'Sealed.*false'"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
     entrypoint: >
       sh -c "
         mkdir -p /vault/data &&
@@ -455,6 +478,32 @@ services:
         chmod -R 700 /vault/data &&
         exec vault server -config=/vault/config/config.hcl
       "
+
+  # Vault Unsealer Service
+  vault-unsealer:
+    build: ./vault-unsealer
+    environment:
+      - VAULT_ADDR=http://vault:8201
+      - VAULT_UNSEAL_KEY_1=${VAULT_UNSEAL_KEY_1}
+      - VAULT_UNSEAL_KEY_2=${VAULT_UNSEAL_KEY_2}
+      - VAULT_UNSEAL_KEY_3=${VAULT_UNSEAL_KEY_3}
+      - VAULT_UNSEAL_KEY_4=${VAULT_UNSEAL_KEY_4:-}
+      - VAULT_UNSEAL_KEY_5=${VAULT_UNSEAL_KEY_5:-}
+      - UNSEALER_MAX_RETRIES=${UNSEALER_MAX_RETRIES:-50}
+      - UNSEALER_RETRY_DELAY=${UNSEALER_RETRY_DELAY:-5}
+      - UNSEALER_MONITOR_INTERVAL=${UNSEALER_MONITOR_INTERVAL:-30}
+      - UNSEALER_LOG_LEVEL=${UNSEALER_LOG_LEVEL:-INFO}
+    depends_on:
+      - vault
+    networks:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://vault:8201/v1/sys/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   nginx:
     image: nginx:1.25
@@ -464,7 +513,12 @@ services:
       - ./certbot/conf:/etc/letsencrypt
       - ./frontend-static:/usr/share/nginx/html:ro
     depends_on:
-      - api-gateway
+      vault:
+        condition: service_healthy
+      vault-unsealer:
+        condition: service_started
+      api-gateway:
+        condition: service_started
     ports:
       - "80:80"
       - "443:443"
