@@ -30,15 +30,16 @@ load_dotenv()
 
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
-# Получаем JWT секрет из Vault в самом начале
+# Получаем JWT секрет из Vault в самом начале  
 vault_client = VaultClient()
 try:
-    JWT_SECRET_KEY = vault_client.get_secret("kv/data/jwt")['secret_key']
-    print(f"✅ JWT секрет получен из Vault")
+    # Для KV v2 путь должен быть без /data/ в VaultClient
+    JWT_SECRET_KEY = vault_client.get_secret("kv/jwt")['secret_key']
+    print(f"✅ API Gateway: JWT секрет получен из Vault")
 except Exception as e:
     # Fallback к environment variable
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-jwt-secret")
-    print(f"⚠️ Используется JWT секрет из ENV: {e}")
+    print(f"⚠️ API Gateway: используется JWT секрет из ENV: {e}")
 
 app = FastAPI(
     title="Content Factory API Gateway",

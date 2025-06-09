@@ -3,6 +3,7 @@ from typing import Optional
 from functools import lru_cache
 from .vault import IntegrationVaultClient
 from common.vault_client import VaultClient
+import os
 
 class Settings(BaseSettings):
     # Базовые настройки
