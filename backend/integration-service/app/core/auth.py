@@ -106,7 +106,16 @@ async def get_user_id_from_request(request: Request) -> int:
             logger.error(f"🚫 JWT token missing 'sub' field: {payload}")
             raise AuthenticationError("Invalid token: missing user ID")
         
-        user_id = int(user_id_str)
+        # ДИАГНОСТИКА: выводим полный payload и user_id
+        logger.info(f"🔍 JWT PAYLOAD DEBUG: {payload}")
+        logger.info(f"🔍 USER_ID DEBUG: '{user_id_str}' (type: {type(user_id_str)})")
+        
+        try:
+            user_id = int(user_id_str)
+        except ValueError as e:
+            logger.error(f"🚫 Cannot convert user_id '{user_id_str}' to int: {e}")
+            raise AuthenticationError("Invalid token: invalid user ID format")
+        
         logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
         return user_id
         
