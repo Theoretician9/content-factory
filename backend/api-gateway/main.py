@@ -337,11 +337,16 @@ async def get_profile(request: Request):
 
 @api_router.get("/internal/users/by-email")
 async def proxy_get_user_by_email(email: str):
-    # Логируем email перед проксированием
     logger.info(f"🔍 API Gateway: проксирование запроса на поиск пользователя по email: '{email}'")
     user_service_url = SERVICE_URLS["user"]
+    logger.info(f"🔗 Отправка запроса: {user_service_url}/internal/users/by-email?email={email}")
     async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{user_service_url}/internal/users/by-email", params={"email": email})
+        try:
+            resp = await client.get(f"{user_service_url}/internal/users/by-email", params={"email": email})
+            logger.info(f"🔗 Ответ от user-service: {resp.status_code} {resp.text}")
+        except Exception as e:
+            logger.error(f"❌ Ошибка при запросе к user-service: {e}")
+            raise HTTPException(status_code=500, detail=f"Ошибка при запросе к user-service: {e}")
         if resp.status_code == 200:
             return resp.json()
         else:
