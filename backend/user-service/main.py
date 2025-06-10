@@ -272,9 +272,16 @@ async def metrics():
 
 @app.get("/internal/users/by-email")
 def get_user_by_email(email: str, db: Session = Depends(get_db)):
+    # Логируем email на входе
+    logger.info(f"🔍 User Service: получен запрос на поиск пользователя по email: '{email}'")
+    # Нормализуем email (убираем пробелы и приводим к нижнему регистру)
+    email = email.strip().lower()
+    logger.info(f"🔍 User Service: нормализованный email: '{email}'")
     user = db.query(User).filter(User.email == email).first()
     if not user:
+        logger.warning(f"⚠️ User Service: пользователь с email '{email}' не найден")
         raise HTTPException(status_code=404, detail="User not found")
+    logger.info(f"✅ User Service: пользователь найден, id={user.id}, email={user.email}")
     return {"id": user.id, "email": user.email}
 
 if __name__ == "__main__":
