@@ -7,7 +7,7 @@ from .config import get_settings
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.core.vault import get_vault_secret
+from app.core.vault import get_secret
 from app.database import get_db
 from app.models.user import User
 
@@ -177,7 +177,7 @@ async def get_current_user(
     """
     try:
         # Получаем JWT секрет из Vault
-        jwt_secret = await get_vault_secret("jwt_secret")
+        jwt_secret = await get_secret("jwt_secret")
         if not jwt_secret:
             logger.error("🚫 JWT secret not found in Vault")
             raise AuthenticationError("JWT secret not configured")
