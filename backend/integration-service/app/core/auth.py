@@ -30,6 +30,8 @@ class AuthenticationError(HTTPException):
         )
 
 async def get_user_id_by_email_via_api_gateway(email: str) -> int:
+    # Логируем email перед отправкой запроса
+    logger.info(f"🔍 Integration Service: отправка запроса на поиск пользователя по email: '{email}'")
     url = f"{API_GATEWAY_URL}/internal/users/by-email?email={email}"
     async with httpx.AsyncClient() as client:
         resp = await client.get(url, timeout=5)
