@@ -335,6 +335,16 @@ async def get_profile(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.get("/internal/users/by-email")
+async def proxy_get_user_by_email(email: str):
+    user_service_url = SERVICE_URLS["user"]
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(f"{user_service_url}/internal/users/by-email", params={"email": email})
+        if resp.status_code == 200:
+            return resp.json()
+        else:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+
 # Security schemes
 jwt_scheme = APIKeyHeader(name="Authorization", auto_error=False)
 csrf_scheme = APIKeyHeader(name="X-CSRF-Token", auto_error=False)
