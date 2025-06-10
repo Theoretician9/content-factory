@@ -7,12 +7,15 @@ from .config import get_settings
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.core.vault import get_secret
+from app.core.vault import IntegrationVaultClient
 from app.database import get_db
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)  # Не auto_error, проверяем вручную
+
+# Создаем экземпляр Vault клиента
+vault_client = IntegrationVaultClient()
 
 class AuthenticationError(HTTPException):
     def __init__(self, detail: str = "Authentication failed"):
@@ -177,7 +180,7 @@ async def get_current_user(
     """
     try:
         # Получаем JWT секрет из Vault
-        jwt_secret = await get_secret("jwt_secret")
+        jwt_secret = vault_client.get_secret("jwt_secret")
         if not jwt_secret:
             logger.error("🚫 JWT secret not found in Vault")
             raise AuthenticationError("JWT secret not configured")
