@@ -4,6 +4,12 @@ import jwt
 from typing import Optional
 import logging
 from .config import get_settings
+from jose import JWTError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.core.vault import get_vault_secret
+from app.database import get_db
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)  # Не auto_error, проверяем вручную
@@ -145,4 +151,76 @@ async def get_optional_user_id(
     try:
         return await get_current_user_id(credentials)
     except AuthenticationError:
-        return None 
+        return None
+
+async def get_user_by_email(email: str, db: AsyncSession) -> Optional[User]:
+    """Получить пользователя по email из базы данных"""
+    try:
+        result = await db.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
+        if user:
+            logger.info(f"✅ User found by email: {email}")
+        else:
+            logger.warning(f"⚠️ User not found by email: {email}")
+        return user
+    except Exception as e:
+        logger.error(f"🚫 Error getting user by email: {e}")
+        return None
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db)
+) -> int:
+    """
+    Получает текущего пользователя из JWT токена
+    Возвращает user_id
+    """
+    try:
+        # Получаем JWT секрет из Vault
+        jwt_secret = await get_vault_secret("jwt_secret")
+        if not jwt_secret:
+            logger.error("🚫 JWT secret not found in Vault")
+            raise AuthenticationError("JWT secret not configured")
+
+        # Получаем токен из заголовка
+        token = credentials.credentials
+        logger.info(f"🔍 Processing JWT token from request: {token[:20]}...")
+
+        # Валидируем токен
+        try:
+            payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
+            logger.info(f"🔍 JWT PAYLOAD DEBUG: {payload}")
+        except JWTError as e:
+            logger.error(f"🚫 JWT decode error: {e}")
+            raise AuthenticationError("Invalid token")
+
+        # Извлекаем email из токена
+        email = payload.get("sub")
+        if not email:
+            logger.error(f"🚫 JWT token missing 'sub' field: {payload}")
+            raise AuthenticationError("Invalid token: missing email")
+
+        logger.info(f"🔍 USER_EMAIL DEBUG: '{email}' (type: {type(email)})")
+
+        # Получаем пользователя из базы по email
+        user = await get_user_by_email(email, db)
+        if not user:
+            logger.error(f"🚫 User not found for email: {email}")
+            raise AuthenticationError("Invalid token: user not found")
+
+        logger.info(f"✅ JWT Authentication successful - User ID: {user.id}")
+        return user.id
+
+    except AuthenticationError as e:
+        logger.error(f"🚫 Authentication error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except Exception as e:
+        logger.error(f"🚫 Unexpected error in get_current_user: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
+        ) 
