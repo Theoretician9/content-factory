@@ -337,6 +337,8 @@ async def get_profile(request: Request):
 
 @api_router.get("/internal/users/by-email")
 async def proxy_get_user_by_email(email: str):
+    # Логируем email перед проксированием
+    logger.info(f"🔍 API Gateway: проксирование запроса на поиск пользователя по email: '{email}'")
     user_service_url = SERVICE_URLS["user"]
     async with httpx.AsyncClient() as client:
         resp = await client.get(f"{user_service_url}/internal/users/by-email", params={"email": email})
