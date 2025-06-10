@@ -8,7 +8,7 @@ from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.vault import IntegrationVaultClient
-from app.database import get_db
+from app.database import get_async_session
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -172,7 +172,7 @@ async def get_user_by_email(email: str, db: AsyncSession) -> Optional[User]:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ) -> int:
     """
     Получает текущего пользователя из JWT токена
