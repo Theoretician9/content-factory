@@ -26,50 +26,37 @@ class AuthenticationError(HTTPException):
         )
 
 async def get_current_user_id(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_async_session)
 ) -> int:
     """
     Извлекает user_id из JWT токена.
     Используется во всех защищенных endpoints.
     """
     settings = get_settings()
-    
-    # Принудительная проверка наличия токена
     if not credentials:
         logger.error("🚫 Missing Authorization header")
         raise AuthenticationError("Authorization header missing")
-    
     try:
-        # Получаем токен из заголовка Authorization
         token = credentials.credentials
         logger.info(f"🔍 Processing JWT token: {token[:30]}...")
-        
-        # Используем JWT секрет из настроек (полученный из Vault)
         jwt_secret = settings.JWT_SECRET_KEY
-        
-        # Декодируем JWT токен
-        payload = jwt.decode(
-            token, 
-            jwt_secret, 
-            algorithms=[settings.JWT_ALGORITHM]
-        )
-        
-        # Извлекаем user_id из поля 'sub' (subject)
+        payload = jwt.decode(token, jwt_secret, algorithms=[settings.JWT_ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
             logger.warning(f"JWT token missing 'sub' field: {payload}")
             raise AuthenticationError("Invalid token: missing user ID")
-        
-        # Конвертируем в int
-        try:
+        if "@" in user_id:
+            user = await get_user_by_email(user_id, db)
+            if not user:
+                logger.warning(f"User not found for email: {user_id}")
+                raise AuthenticationError("Invalid token: user not found")
+            logger.info(f"🔐 JWT Authentication successful - User ID: {user.id}, Token payload: {payload}")
+            return user.id
+        else:
             user_id_int = int(user_id)
-        except ValueError:
-            logger.warning(f"Invalid user_id format in JWT: {user_id}")
-            raise AuthenticationError("Invalid token: invalid user ID format")
-        
-        logger.info(f"🔐 JWT Authentication successful - User ID: {user_id_int}, Token payload: {payload}")
-        return user_id_int
-        
+            logger.info(f"🔐 JWT Authentication successful - User ID: {user_id_int}, Token payload: {payload}")
+            return user_id_int
     except jwt.ExpiredSignatureError:
         logger.warning("JWT token expired")
         raise AuthenticationError("Token expired")
@@ -80,54 +67,41 @@ async def get_current_user_id(
         logger.error(f"Authentication error: {e}")
         raise AuthenticationError("Authentication failed")
 
-async def get_user_id_from_request(request: Request) -> int:
+async def get_user_id_from_request(request: Request, db: AsyncSession = Depends(get_async_session)) -> int:
     """
     Функция авторизации - читает токен напрямую из заголовков.
     Обеспечивает изоляцию пользователей между разными user_id.
     """
-    # Получаем Authorization header напрямую
     auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
-    
     if not auth_header:
         logger.error("🚫 Missing Authorization header in request")
         raise AuthenticationError("Authorization header missing")
-    
-    # Проверяем формат Bearer token
     if not auth_header.startswith("Bearer "):
         logger.error("🚫 Invalid Authorization header format")
         raise AuthenticationError("Invalid Authorization header format")
-    
-    # Извлекаем токен
-    token = auth_header[7:]  # Убираем "Bearer "
+    token = auth_header[7:]
     logger.info(f"🔍 Processing JWT token from request: {token[:30]}...")
-    
     try:
-        # Получаем JWT секрет из настроек (полученный из Vault)
         settings = get_settings()
         jwt_secret = settings.JWT_SECRET_KEY
-        
-        # Декодируем JWT токен с секретом из Vault
         payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
-        
-        # Извлекаем user_id
         user_id_str = payload.get("sub")
         if not user_id_str:
             logger.error(f"🚫 JWT token missing 'sub' field: {payload}")
             raise AuthenticationError("Invalid token: missing user ID")
-        
-        # ДИАГНОСТИКА: выводим полный payload и user_id
         logger.info(f"🔍 JWT PAYLOAD DEBUG: {payload}")
         logger.info(f"🔍 USER_ID DEBUG: '{user_id_str}' (type: {type(user_id_str)})")
-        
-        try:
+        if "@" in user_id_str:
+            user = await get_user_by_email(user_id_str, db)
+            if not user:
+                logger.error(f"🚫 User not found for email: {user_id_str}")
+                raise AuthenticationError("Invalid token: user not found")
+            logger.info(f"✅ JWT Authentication successful - User ID: {user.id}")
+            return user.id
+        else:
             user_id = int(user_id_str)
-        except ValueError as e:
-            logger.error(f"🚫 Cannot convert user_id '{user_id_str}' to int: {e}")
-            raise AuthenticationError("Invalid token: invalid user ID format")
-        
-        logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
-        return user_id
-        
+            logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
+            return user_id
     except jwt.ExpiredSignatureError:
         logger.error("🚫 JWT token expired")
         raise AuthenticationError("Token expired")
