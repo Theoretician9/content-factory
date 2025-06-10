@@ -10,12 +10,16 @@ from sqlalchemy import select
 from app.core.vault import IntegrationVaultClient
 from app.database import get_async_session
 from app.models.user import User
+import os
+import httpx
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)  # Не auto_error, проверяем вручную
 
 # Создаем экземпляр Vault клиента
 vault_client = IntegrationVaultClient()
+
+API_GATEWAY_URL = os.getenv("API_GATEWAY_URL", "http://api-gateway:8000")
 
 class AuthenticationError(HTTPException):
     def __init__(self, detail: str = "Authentication failed"):
@@ -25,9 +29,21 @@ class AuthenticationError(HTTPException):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+async def get_user_id_by_email_via_api_gateway(email: str) -> int:
+    url = f"{API_GATEWAY_URL}/internal/users/by-email?email={email}"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data["id"]
+        elif resp.status_code == 404:
+            return None
+        else:
+            logger.error(f"API Gateway error: {resp.status_code} {resp.text}")
+            raise AuthenticationError("User service unavailable")
+
 async def get_current_user_id(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: AsyncSession = Depends(get_async_session)
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> int:
     """
     Извлекает user_id из JWT токена.
@@ -47,12 +63,12 @@ async def get_current_user_id(
             logger.warning(f"JWT token missing 'sub' field: {payload}")
             raise AuthenticationError("Invalid token: missing user ID")
         if "@" in user_id:
-            user = await get_user_by_email(user_id, db)
-            if not user:
+            user_id_val = await get_user_id_by_email_via_api_gateway(user_id)
+            if not user_id_val:
                 logger.warning(f"User not found for email: {user_id}")
                 raise AuthenticationError("Invalid token: user not found")
-            logger.info(f"🔐 JWT Authentication successful - User ID: {user.id}, Token payload: {payload}")
-            return user.id
+            logger.info(f"🔐 JWT Authentication successful - User ID: {user_id_val}, Token payload: {payload}")
+            return user_id_val
         else:
             user_id_int = int(user_id)
             logger.info(f"🔐 JWT Authentication successful - User ID: {user_id_int}, Token payload: {payload}")
@@ -67,7 +83,7 @@ async def get_current_user_id(
         logger.error(f"Authentication error: {e}")
         raise AuthenticationError("Authentication failed")
 
-async def get_user_id_from_request(request: Request, db: AsyncSession = Depends(get_async_session)) -> int:
+async def get_user_id_from_request(request: Request) -> int:
     """
     Функция авторизации - читает токен напрямую из заголовков.
     Обеспечивает изоляцию пользователей между разными user_id.
@@ -81,8 +97,8 @@ async def get_user_id_from_request(request: Request, db: AsyncSession = Depends(
         raise AuthenticationError("Invalid Authorization header format")
     token = auth_header[7:]
     logger.info(f"🔍 Processing JWT token from request: {token[:30]}...")
+    settings = get_settings()
     try:
-        settings = get_settings()
         jwt_secret = settings.JWT_SECRET_KEY
         payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
         user_id_str = payload.get("sub")
@@ -92,12 +108,12 @@ async def get_user_id_from_request(request: Request, db: AsyncSession = Depends(
         logger.info(f"🔍 JWT PAYLOAD DEBUG: {payload}")
         logger.info(f"🔍 USER_ID DEBUG: '{user_id_str}' (type: {type(user_id_str)})")
         if "@" in user_id_str:
-            user = await get_user_by_email(user_id_str, db)
-            if not user:
+            user_id_val = await get_user_id_by_email_via_api_gateway(user_id_str)
+            if not user_id_val:
                 logger.error(f"🚫 User not found for email: {user_id_str}")
                 raise AuthenticationError("Invalid token: user not found")
-            logger.info(f"✅ JWT Authentication successful - User ID: {user.id}")
-            return user.id
+            logger.info(f"✅ JWT Authentication successful - User ID: {user_id_val}")
+            return user_id_val
         else:
             user_id = int(user_id_str)
             logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
