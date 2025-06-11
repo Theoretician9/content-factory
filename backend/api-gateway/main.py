@@ -107,7 +107,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # Service URLs (in production, these should be environment variables)
 SERVICE_URLS = {
-    "user": os.getenv("USER_SERVICE_URL", "http://92.113.146.148:8001"),
+    "user": os.getenv("USER_SERVICE_URL", "http://user-service:8000"),
     "billing": os.getenv("BILLING_SERVICE_URL", "http://92.113.146.148:8002"),
     "admin": os.getenv("ADMIN_SERVICE_URL", "http://92.113.146.148:8003"),
     "scenario": os.getenv("SCENARIO_SERVICE_URL", "http://92.113.146.148:8004"),
