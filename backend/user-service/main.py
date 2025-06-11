@@ -215,10 +215,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        # Проверяем blacklist токенов
-        if redis_client.exists(f"blacklist:{token}"):
-            logger.warning("⚠️ Токен находится в blacklist")
-            raise credentials_exception
+        # Проверяем blacklist токенов только если Redis доступен
+        if redis_client:
+            try:
+                if redis_client.exists(f"blacklist:{token}"):
+                    logger.warning("⚠️ Токен находится в blacklist")
+                    raise credentials_exception
+            except Exception as e:
+                logger.warning(f"⚠️ Ошибка при проверке blacklist в Redis: {e}")
             
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
@@ -352,15 +356,20 @@ async def logout(request: Request):
         # Получаем refresh токен из cookies
         refresh_token = request.cookies.get("refresh_token")
         
-        if refresh_token:
-            # Проверяем существование токена в Redis
-            user_id = redis_client.get(f"refresh_token:{refresh_token}")
-            if user_id:
-                # Удаляем refresh токен из Redis
-                redis_client.delete(f"refresh_token:{refresh_token}")
-                logger.info(f"🔑 Refresh токен удален для пользователя {user_id}")
-            else:
-                logger.warning("⚠️ Refresh токен не найден в Redis")
+        if refresh_token and redis_client:
+            try:
+                # Проверяем существование токена в Redis
+                user_id = redis_client.get(f"refresh_token:{refresh_token}")
+                if user_id:
+                    # Удаляем refresh токен из Redis
+                    redis_client.delete(f"refresh_token:{refresh_token}")
+                    logger.info(f"🔑 Refresh токен удален для пользователя {user_id}")
+                else:
+                    logger.warning("⚠️ Refresh токен не найден в Redis")
+            except Exception as e:
+                logger.error(f"❌ Ошибка при работе с refresh токеном в Redis: {e}")
+        elif refresh_token and not redis_client:
+            logger.warning("⚠️ Redis недоступен, refresh токен не может быть удален")
         else:
             logger.warning("⚠️ Refresh токен отсутствует в cookies")
         
