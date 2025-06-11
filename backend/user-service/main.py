@@ -274,15 +274,45 @@ async def metrics():
 def get_user_by_email(email: str, db: Session = Depends(get_db)):
     # Логируем email на входе
     logger.info(f"🔍 User Service: получен запрос на поиск пользователя по email: '{email}'")
+    
+    # Проверяем подключение к базе данных
+    try:
+        db.execute(text("SELECT 1"))
+        logger.info(f"✅ User Service: подключение к базе данных работает")
+    except Exception as e:
+        logger.error(f"❌ User Service: ошибка подключения к базе данных: {e}")
+        raise HTTPException(status_code=500, detail="Database connection error")
+    
     # Нормализуем email (убираем пробелы и приводим к нижнему регистру)
     email = email.strip().lower()
     logger.info(f"🔍 User Service: нормализованный email: '{email}'")
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        logger.warning(f"⚠️ User Service: пользователь с email '{email}' не найден")
-        raise HTTPException(status_code=404, detail="User not found")
-    logger.info(f"✅ User Service: пользователь найден, id={user.id}, email={user.email}")
-    return {"id": user.id, "email": user.email}
+    
+    # Проверяем сколько пользователей всего в базе
+    try:
+        total_users = db.query(User).count()
+        logger.info(f"📊 User Service: всего пользователей в базе: {total_users}")
+        
+        # Выводим всех пользователей для отладки
+        all_users = db.query(User).all()
+        for u in all_users:
+            logger.info(f"👤 User Service: найден пользователь id={u.id}, email='{u.email}', username='{u.username}'")
+            
+    except Exception as e:
+        logger.error(f"❌ User Service: ошибка при запросе пользователей: {e}")
+    
+    # Ищем пользователя по email
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            logger.warning(f"⚠️ User Service: пользователь с email '{email}' не найден")
+            raise HTTPException(status_code=404, detail="User not found")
+        logger.info(f"✅ User Service: пользователь найден, id={user.id}, email={user.email}")
+        return {"id": user.id, "email": user.email}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ User Service: ошибка при поиске пользователя: {e}")
+        raise HTTPException(status_code=500, detail="Database query error")
 
 if __name__ == "__main__":
     import uvicorn
