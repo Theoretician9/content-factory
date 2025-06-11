@@ -278,7 +278,30 @@ async def login(request: Request, body: LoginRequest):
         
         if resp.status_code == 200:
             logger.info(json.dumps({"event": "login_success", "email": data.get("username"), "ip": request.client.host}))
-            return resp.json()
+            
+            # Получаем ответ от user-service
+            response_data = resp.json()
+            
+            # Создаем JSONResponse для установки cookies
+            response = JSONResponse(content={
+                "access_token": response_data["access_token"],
+                "token_type": response_data["token_type"]
+            })
+            
+            # Устанавливаем refresh token в httpOnly cookie, если он есть
+            if "refresh_token" in response_data:
+                response.set_cookie(
+                    key="refresh_token",
+                    value=response_data["refresh_token"],
+                    max_age=30 * 24 * 60 * 60,  # 30 дней
+                    httponly=True,
+                    secure=True,
+                    samesite="strict",
+                    path="/"
+                )
+                logger.info(json.dumps({"event": "refresh_token_set", "email": data.get("username"), "ip": request.client.host}))
+            
+            return response
         else:
             logger.warning(json.dumps({"event": "login_failed", "email": data.get("username"), "ip": request.client.host, "status": resp.status_code, "error": resp.text}))
             # НЕ превращаем 401 в 500! Возвращаем тот же статус код
@@ -293,17 +316,48 @@ async def login(request: Request, body: LoginRequest):
 @api_router.post("/auth/logout")
 async def logout(request: Request):
     """
-    Проксирует logout на user-service, логирует все попытки
+    Проксирует logout на user-service, передает все необходимые заголовки и cookies
     """
     try:
+        # Подготавливаем заголовки для передачи в user-service
+        headers = {}
+        if "authorization" in request.headers:
+            headers["authorization"] = str(request.headers["authorization"])
+        
+        logger.info(json.dumps({
+            "event": "logout_attempt", 
+            "ip": request.client.host,
+            "has_auth_header": "authorization" in headers,
+            "has_refresh_token": "refresh_token" in request.cookies
+        }))
+        
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(f"{SERVICE_URLS['user']}/auth/logout", cookies=request.cookies)
+            resp = await client.post(
+                f"{SERVICE_URLS['user']}/auth/logout", 
+                cookies=request.cookies,
+                headers=headers
+            )
+        
         if resp.status_code == 200:
             logger.info(json.dumps({"event": "logout_success", "ip": request.client.host}))
-            return resp.json()
+            
+            # Создаем ответ с удалением cookies
+            response = JSONResponse(resp.json())
+            
+            # Удаляем refresh_token cookie
+            response.delete_cookie(
+                key="refresh_token",
+                domain=None,
+                path="/",
+                secure=True,
+                httponly=True,
+                samesite="strict"
+            )
+            
+            return response
         else:
             logger.warning(json.dumps({"event": "logout_failed", "ip": request.client.host, "status": resp.status_code, "error": resp.text}))
-            raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", resp.text))
+            raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", resp.text) if resp.text else "Logout failed")
     except HTTPException:
         raise
     except Exception as e:
