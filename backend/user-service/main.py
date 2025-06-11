@@ -200,6 +200,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
+        # Проверяем blacklist токенов
+        if redis_client.exists(f"blacklist:{token}"):
+            logger.warning("⚠️ Токен находится в blacklist")
+            raise credentials_exception
+            
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
@@ -322,10 +327,51 @@ async def read_users_me(request: Request, current_user: User = Depends(get_curre
 @limiter.limit("10/minute")
 async def logout(request: Request):
     """
-    Logout endpoint
+    Logout endpoint - инвалидирует refresh токен
     """
     try:
         logger.info("🚪 User Service: logout request received")
+        
+        # Получаем refresh токен из cookies
+        refresh_token = request.cookies.get("refresh_token")
+        
+        if refresh_token:
+            # Проверяем существование токена в Redis
+            user_id = redis_client.get(f"refresh_token:{refresh_token}")
+            if user_id:
+                # Удаляем refresh токен из Redis
+                redis_client.delete(f"refresh_token:{refresh_token}")
+                logger.info(f"🔑 Refresh токен удален для пользователя {user_id}")
+            else:
+                logger.warning("⚠️ Refresh токен не найден в Redis")
+        else:
+            logger.warning("⚠️ Refresh токен отсутствует в cookies")
+        
+        # Получаем JWT токен из Authorization header
+        auth_header = request.headers.get("authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+            try:
+                # Декодируем токен для получения информации
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                user_email = payload.get("sub")
+                
+                # Добавляем токен в blacklist (сохраняем в Redis до истечения)
+                token_exp = payload.get("exp")
+                if token_exp:
+                    current_time = datetime.utcnow().timestamp()
+                    ttl = int(token_exp - current_time)
+                    if ttl > 0:
+                        redis_client.setex(f"blacklist:{token}", ttl, user_email)
+                        logger.info(f"🚫 JWT токен добавлен в blacklist для {user_email}")
+                
+            except jwt.ExpiredSignatureError:
+                logger.info("⏰ JWT токен уже истек")
+            except jwt.InvalidTokenError:
+                logger.warning("⚠️ Невалидный JWT токен")
+        else:
+            logger.warning("⚠️ Authorization header отсутствует или неверный формат")
+        
         return {"message": "Successfully logged out"}
     except Exception as e:
         logger.error(f"Logout error: {e}")
