@@ -6,7 +6,11 @@ export async function apiFetch(url: string, options: RequestInit = {}) {
     'Content-Type': 'application/json',
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
   };
-  let res = await fetch(url, { ...options, headers });
+  let res = await fetch(url, { 
+    ...options, 
+    headers,
+    credentials: 'include' // Важно для передачи cookies (refresh_token)
+  });
   if (res.status === 401 && refreshToken) {
     // Попробовать refresh
     const refreshRes = await fetch('/api/auth/refresh', {
@@ -23,7 +27,11 @@ export async function apiFetch(url: string, options: RequestInit = {}) {
         ...headers,
         Authorization: `Bearer ${data.access_token}`
       };
-      res = await fetch(url, { ...options, headers: retryHeaders });
+      res = await fetch(url, { 
+        ...options, 
+        headers: retryHeaders,
+        credentials: 'include'
+      });
     } else {
       // refresh не удался — logout
       localStorage.removeItem('access_token');
