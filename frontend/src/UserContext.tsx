@@ -77,12 +77,28 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => clearInterval(interval);
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    setUser(null);
-    setError('Вы вышли из аккаунта');
-    navigate('/login');
+  const logout = useCallback(async () => {
+    try {
+      // Отправляем запрос на сервер для инвалидации токенов
+      const response = await apiFetch('/api/auth/logout', {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        console.log('✅ Logout successful on server');
+      } else {
+        console.warn('⚠️ Server logout failed, but clearing local storage anyway');
+      }
+    } catch (error) {
+      console.warn('⚠️ Logout API call failed:', error);
+    } finally {
+      // Всегда очищаем локальное состояние, даже если сервер недоступен
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      setUser(null);
+      setError('Вы вышли из аккаунта');
+      navigate('/login');
+    }
   }, [navigate]);
 
   return (
