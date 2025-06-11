@@ -341,17 +341,24 @@ async def proxy_get_user_by_email(email: str):
     logger.info(f"🔍 API Gateway: проксирование запроса на поиск пользователя по email: '{email}'")
     user_service_url = SERVICE_URLS["user"]
     logger.info(f"🔗 Отправка запроса: {user_service_url}/internal/users/by-email?email={email}")
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             resp = await client.get(f"{user_service_url}/internal/users/by-email", params={"email": email})
             logger.info(f"🔗 Ответ от user-service: {resp.status_code} {resp.text}")
+            if resp.status_code == 200:
+                return resp.json()
+            else:
+                logger.warning(f"⚠️ User-service вернул {resp.status_code}: {resp.text}")
+                raise HTTPException(status_code=resp.status_code, detail=resp.text)
+        except httpx.ConnectError as e:
+            logger.error(f"❌ Ошибка подключения к user-service: {e}")
+            raise HTTPException(status_code=502, detail=f"User service недоступен: {e}")
+        except httpx.TimeoutException as e:
+            logger.error(f"❌ Тайм-аут при запросе к user-service: {e}")
+            raise HTTPException(status_code=504, detail=f"User service не отвечает: {e}")
         except Exception as e:
-            logger.error(f"❌ Ошибка при запросе к user-service: {e}")
+            logger.error(f"❌ Неожиданная ошибка при запросе к user-service: {e}")
             raise HTTPException(status_code=500, detail=f"Ошибка при запросе к user-service: {e}")
-        if resp.status_code == 200:
-            return resp.json()
-        else:
-            raise HTTPException(status_code=resp.status_code, detail=resp.text)
 
 # Security schemes
 jwt_scheme = APIKeyHeader(name="Authorization", auto_error=False)
