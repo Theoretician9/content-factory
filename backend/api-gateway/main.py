@@ -348,7 +348,8 @@ async def get_profile(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.get("/internal/users/by-email")
+# Internal endpoint (вне api_router, без префикса /api)
+@app.get("/internal/users/by-email")
 async def proxy_get_user_by_email(email: str):
     logger.info(f"🔍 API Gateway: проксирование запроса на поиск пользователя по email: '{email}'")
     user_service_url = SERVICE_URLS["user"]
