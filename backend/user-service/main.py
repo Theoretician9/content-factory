@@ -197,18 +197,63 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     start_time = time.time()
     try:
+        logger.info(f"🔐 User Service: попытка логина для пользователя '{form_data.username}'")
+        
+        # Проверяем подключение к базе данных
+        try:
+            db.execute(text("SELECT 1"))
+            logger.info(f"✅ User Service: подключение к базе данных работает")
+        except Exception as e:
+            logger.error(f"❌ User Service: ошибка подключения к базе данных: {e}")
+            raise HTTPException(status_code=500, detail="Database connection error")
+        
+        # Показываем всех пользователей для отладки
+        try:
+            total_users = db.query(User).count()
+            logger.info(f"📊 User Service: всего пользователей в базе: {total_users}")
+            
+            all_users = db.query(User).all()
+            for u in all_users:
+                logger.info(f"👤 User Service: пользователь id={u.id}, email='{u.email}', username='{u.username}'")
+        except Exception as e:
+            logger.error(f"❌ User Service: ошибка при запросе пользователей: {e}")
+        
+        # Ищем пользователя по username
         user = db.query(User).filter(User.username == form_data.username).first()
-        if not user or not verify_password(form_data.password, user.hashed_password):
+        logger.info(f"🔍 User Service: поиск пользователя по username='{form_data.username}', найден: {user is not None}")
+        
+        if not user:
+            logger.warning(f"⚠️ User Service: пользователь с username '{form_data.username}' не найден")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        
+        # Проверяем пароль
+        password_valid = verify_password(form_data.password, user.hashed_password)
+        logger.info(f"🔒 User Service: проверка пароля для пользователя '{user.username}': {password_valid}")
+        
+        if not password_valid:
+            logger.warning(f"⚠️ User Service: неверный пароль для пользователя '{form_data.username}'")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        logger.info(f"✅ User Service: успешная аутентификация для пользователя '{user.username}'")
+        
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": user.username}, expires_delta=access_token_expires
         )
         return {"access_token": access_token, "token_type": "bearer"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ User Service: неожиданная ошибка при логине: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
     finally:
         duration = time.time() - start_time
         DB_OPERATION_LATENCY.labels(operation="login").observe(duration)
