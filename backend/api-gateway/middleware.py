@@ -57,6 +57,12 @@ class RefreshTokenMiddleware(BaseHTTPMiddleware):
                 return await call_next(request)
                 
             token = auth_header.split(" ")[1]
+            
+            # Проверяем blacklist токенов
+            if self.redis.exists(f"blacklist:{token}"):
+                print(f"Token is blacklisted: {token[:20]}...")
+                return await call_next(request)
+            
             try:
                 jwt.decode(token, self.jwt_secret, algorithms=["HS256"])
             except jwt.ExpiredSignatureError:
