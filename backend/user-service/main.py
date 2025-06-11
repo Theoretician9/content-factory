@@ -331,6 +331,8 @@ async def logout(request: Request):
     """
     try:
         logger.info("🚪 User Service: logout request received")
+        logger.info(f"🚪 User Service: headers = {dict(request.headers)}")
+        logger.info(f"🚪 User Service: cookies = {dict(request.cookies)}")
         
         # Получаем refresh токен из cookies
         refresh_token = request.cookies.get("refresh_token")

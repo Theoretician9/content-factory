@@ -318,6 +318,7 @@ async def logout(request: Request):
     """
     Проксирует logout на user-service, передает все необходимые заголовки и cookies
     """
+    logger.info("🚪 API Gateway: получен запрос logout")
     try:
         # Подготавливаем заголовки для передачи в user-service
         headers = {}
