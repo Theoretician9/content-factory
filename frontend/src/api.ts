@@ -16,7 +16,8 @@ export async function apiFetch(url: string, options: RequestInit = {}) {
     const refreshRes = await fetch('/api/auth/refresh', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken })
+      body: JSON.stringify({ refresh_token: refreshToken }),
+      credentials: 'include'
     });
     if (refreshRes.ok) {
       const data = await refreshRes.json();

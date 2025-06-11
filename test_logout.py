@@ -11,6 +11,7 @@ def test_logout_flow():
     
     # 1. Логинимся для получения токенов
     print("\n1. Выполняем логин...")
+    # Используем JSON формат как в веб интерфейсе
     login_data = {
         "username": "nikita.f3d@gmail.com", 
         "password": "LTB8T9pFhDiipYm"
@@ -19,8 +20,8 @@ def test_logout_flow():
     try:
         login_response = requests.post(
             f"{BASE_URL}/auth/login",
-            data=login_data,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            json=login_data,  # Используем JSON вместо form data
+            headers={"Content-Type": "application/json"},
             timeout=10
         )
         

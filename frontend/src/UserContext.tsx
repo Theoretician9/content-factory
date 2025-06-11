@@ -60,7 +60,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const res = await fetch('/api/auth/refresh', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refresh_token: refreshToken })
+            body: JSON.stringify({ refresh_token: refreshToken }),
+            credentials: 'include'
           });
           if (res.ok) {
             const data = await res.json();
