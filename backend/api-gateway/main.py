@@ -222,7 +222,7 @@ async def get_csrf_token():
     return {"csrf_token": token}
 
 @api_router.post("/auth/refresh")
-@limiter.limit("5/minute")
+@limiter.limit("30/minute")
 async def refresh_token(request: Request):
     """
     Refresh access token using refresh token
@@ -270,7 +270,7 @@ class RegisterRequest(BaseModel):
     agree: bool
 
 @api_router.post("/auth/login")
-@limiter.limit("5/minute")
+@limiter.limit("20/minute")
 async def login(request: Request, body: LoginRequest):
     """
     Login user and return access token
@@ -384,7 +384,7 @@ async def logout(request: Request):
         raise HTTPException(status_code=500, detail="Internal error")
 
 @api_router.post("/auth/register")
-@limiter.limit("5/minute")
+@limiter.limit("10/minute")
 async def register(request: Request, body: RegisterRequest):
     """
     Register new user
