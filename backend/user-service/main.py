@@ -244,6 +244,22 @@ def create_user(request: Request, user: UserCreate, db: Session = Depends(get_db
 async def read_users_me(request: Request, current_user: User = Depends(get_current_user)):
     return current_user
 
+@app.post("/auth/logout")
+@limiter.limit("10/minute")
+async def logout(request: Request):
+    """
+    Logout endpoint
+    """
+    try:
+        logger.info("🚪 User Service: logout request received")
+        return {"message": "Successfully logged out"}
+    except Exception as e:
+        logger.error(f"Logout error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Logout failed"
+        )
+
 @app.get("/health")
 @limiter.limit("5/minute")
 async def health_check(request: Request):
