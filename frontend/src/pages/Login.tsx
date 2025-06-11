@@ -9,7 +9,7 @@ const Login = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const { clearError } = useUser();
+  const { clearError, refreshProfile } = useUser();
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -54,6 +54,9 @@ const Login = () => {
         localStorage.setItem('access_token', data.access_token);
         localStorage.setItem('refresh_token', data.refresh_token);
         setForm({ email: '', password: '' });
+        
+        // Принудительно обновляем UserContext перед навигацией
+        await refreshProfile();
         navigate('/dashboard');
       }
     } catch (e) {
