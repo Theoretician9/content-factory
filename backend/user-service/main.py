@@ -34,12 +34,19 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 # Redis configuration
-redis_client = redis.Redis(
-    host=os.getenv("REDIS_HOST", "redis"),
-    port=int(os.getenv("REDIS_PORT", 6379)),
-    db=int(os.getenv("REDIS_DB", 0)),
-    decode_responses=True
-)
+try:
+    redis_client = redis.Redis(
+        host=os.getenv("REDIS_HOST", "redis"),
+        port=int(os.getenv("REDIS_PORT", 6379)),
+        db=int(os.getenv("REDIS_DB", 0)),
+        decode_responses=True
+    )
+    # Проверяем подключение
+    redis_client.ping()
+    logger.info("✅ User Service: подключение к Redis успешно")
+except Exception as e:
+    logger.error(f"❌ User Service: не удалось подключиться к Redis: {e}")
+    redis_client = None
 
 # Security configuration
 # SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
@@ -167,10 +174,18 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 def create_refresh_token(user_id: int) -> str:
     """Создает refresh токен и сохраняет его в Redis"""
     refresh_token = secrets.token_urlsafe(32)
-    # Сохраняем в Redis с TTL в секундах
-    ttl_seconds = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
-    redis_client.setex(f"refresh_token:{refresh_token}", ttl_seconds, str(user_id))
-    logger.info(f"🔑 Refresh токен создан для пользователя {user_id}")
+    
+    if redis_client:
+        try:
+            # Сохраняем в Redis с TTL в секундах
+            ttl_seconds = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+            redis_client.setex(f"refresh_token:{refresh_token}", ttl_seconds, str(user_id))
+            logger.info(f"🔑 Refresh токен создан для пользователя {user_id}")
+        except Exception as e:
+            logger.error(f"❌ Ошибка при сохранении refresh токена в Redis: {e}")
+    else:
+        logger.warning("⚠️ Redis недоступен, refresh токен не сохранен")
+    
     return refresh_token
 
 @app.middleware("http")
