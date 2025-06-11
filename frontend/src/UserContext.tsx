@@ -31,6 +31,34 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  // Объявляем logout ПЕРЕД его использованием
+  const logout = useCallback(async () => {
+    try {
+      console.log('🚪 Frontend: Начинаем logout...');
+      
+      // Отправляем запрос на сервер для инвалидации токенов
+      const response = await apiFetch('/api/auth/logout', {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        console.log('✅ Logout successful on server');
+      } else {
+        console.warn('⚠️ Server logout failed, but clearing local storage anyway');
+      }
+    } catch (error) {
+      console.warn('⚠️ Logout API call failed:', error);
+    } finally {
+      // Всегда очищаем локальное состояние, даже если сервер недоступен
+      console.log('🧹 Frontend: Очищаем локальное состояние...');
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      setUser(null);
+      setError('Вы вышли из аккаунта');
+      navigate('/login');
+    }
+  }, [navigate]);
+
   const fetchProfile = useCallback(() => {
     setLoading(true);
     setError('');
@@ -76,31 +104,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }, 10 * 60 * 1000); // 10 минут
     return () => clearInterval(interval);
-  }, []);
-
-  const logout = useCallback(async () => {
-    try {
-      // Отправляем запрос на сервер для инвалидации токенов
-      const response = await apiFetch('/api/auth/logout', {
-        method: 'POST'
-      });
-      
-      if (response.ok) {
-        console.log('✅ Logout successful on server');
-      } else {
-        console.warn('⚠️ Server logout failed, but clearing local storage anyway');
-      }
-    } catch (error) {
-      console.warn('⚠️ Logout API call failed:', error);
-    } finally {
-      // Всегда очищаем локальное состояние, даже если сервер недоступен
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      setUser(null);
-      setError('Вы вышли из аккаунта');
-      navigate('/login');
-    }
-  }, [navigate]);
+  }, [logout]); // Добавляем logout в зависимости
 
   return (
     <UserContext.Provider value={{ user, loading, error, logout, refreshProfile: fetchProfile }}>
