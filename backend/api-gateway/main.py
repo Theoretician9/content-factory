@@ -86,12 +86,15 @@ app.add_middleware(
 #     secret_key=os.getenv("CSRF_SECRET_KEY", "your-secret-key")
 # )
 
-# Refresh token middleware  
-app.add_middleware(
-    RefreshTokenMiddleware,
-    redis_client=redis_client,
-    jwt_secret=JWT_SECRET_KEY
-)
+# Refresh token middleware (только если Redis доступен)
+if redis_client:
+    app.add_middleware(
+        RefreshTokenMiddleware,
+        redis_client=redis_client,
+        jwt_secret=JWT_SECRET_KEY
+    )
+else:
+    print("⚠️ API Gateway: RefreshTokenMiddleware пропущен из-за недоступности Redis")
 
 # Prometheus metrics
 Instrumentator().instrument(app).expose(app)
