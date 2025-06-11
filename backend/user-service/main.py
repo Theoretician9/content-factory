@@ -95,6 +95,7 @@ class UserResponse(UserBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    refresh_token: Optional[str] = None
 
 class TokenData(BaseModel):
     username: Optional[str] = None
@@ -162,6 +163,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+def create_refresh_token(user_id: int) -> str:
+    """Создает refresh токен и сохраняет его в Redis"""
+    refresh_token = secrets.token_urlsafe(32)
+    # Сохраняем в Redis с TTL в секундах
+    ttl_seconds = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+    redis_client.setex(f"refresh_token:{refresh_token}", ttl_seconds, str(user_id))
+    logger.info(f"🔑 Refresh токен создан для пользователя {user_id}")
+    return refresh_token
 
 @app.middleware("http")
 async def add_metrics(request: Request, call_next):
@@ -259,7 +269,15 @@ async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequ
         access_token = create_access_token(
             data={"sub": user.email}, expires_delta=access_token_expires
         )
-        return {"access_token": access_token, "token_type": "bearer"}
+        
+        # Создаем refresh токен
+        refresh_token = create_refresh_token(user.id)
+        
+        return {
+            "access_token": access_token, 
+            "token_type": "bearer",
+            "refresh_token": refresh_token
+        }
     except HTTPException:
         raise
     except Exception as e:
