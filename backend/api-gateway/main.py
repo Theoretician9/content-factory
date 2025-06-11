@@ -494,10 +494,21 @@ from fastapi.exceptions import RequestValidationError as FastAPIRequestValidatio
 
 @app.exception_handler(FastAPIRequestValidationError)
 async def validation_exception_handler(request: Request, exc: FastAPIRequestValidationError):
-    logger.warning(json.dumps({"event": "validation_error", "ip": request.client.host, "errors": exc.errors()}))
+    # Конвертируем errors в JSON-serializable формат
+    errors = []
+    for error in exc.errors():
+        error_dict = {}
+        for key, value in error.items():
+            if isinstance(value, bytes):
+                error_dict[key] = value.decode('utf-8')
+            else:
+                error_dict[key] = value
+        errors.append(error_dict)
+    
+    logger.warning(json.dumps({"event": "validation_error", "ip": request.client.host, "errors": errors}))
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors()}
+        content={"detail": errors}
     )
 
 # Security headers middleware
