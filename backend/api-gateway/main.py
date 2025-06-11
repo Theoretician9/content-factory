@@ -290,9 +290,10 @@ async def logout(request: Request):
             resp = await client.post(f"{SERVICE_URLS['user']}/auth/logout", cookies=request.cookies)
         if resp.status_code == 200:
             logger.info(json.dumps({"event": "logout_success", "ip": request.client.host}))
+            return resp.json()
         else:
             logger.warning(json.dumps({"event": "logout_failed", "ip": request.client.host, "status": resp.status_code, "error": resp.text}))
-        return resp.json(), resp.status_code
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
     except Exception as e:
         logger.error(json.dumps({"event": "logout_error", "ip": request.client.host, "error": str(e)}))
         raise HTTPException(status_code=500, detail="Internal error")
