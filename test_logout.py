@@ -13,7 +13,7 @@ def test_logout_flow():
     print("\n1. Выполняем логин...")
     # Используем тот же формат что работает в веб интерфейсе
     login_data = {
-        "email": "nikita.f3d@gmail.com",  # Добавляем email поле
+        "email": "nikita.f3d@gmail.com",
         "username": "nikita.f3d@gmail.com", 
         "password": "LTB8T9pFhDiipYm"
     }
