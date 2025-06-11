@@ -13,6 +13,7 @@ interface UserContextType {
   error: string;
   logout: () => void;
   refreshProfile: () => void;
+  clearError: () => void;
 }
 
 const UserContext = createContext<UserContextType>({
@@ -21,6 +22,7 @@ const UserContext = createContext<UserContextType>({
   error: '',
   logout: () => {},
   refreshProfile: () => {},
+  clearError: () => {},
 });
 
 export const useUser = () => useContext(UserContext);
@@ -58,6 +60,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       navigate('/login');
     }
   }, [navigate]);
+
+  const clearError = useCallback(() => {
+    setError('');
+  }, []);
 
   const fetchProfile = useCallback(() => {
     setLoading(true);
@@ -107,7 +113,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [logout]); // Добавляем logout в зависимости
 
   return (
-    <UserContext.Provider value={{ user, loading, error, logout, refreshProfile: fetchProfile }}>
+    <UserContext.Provider value={{ user, loading, error, logout, refreshProfile: fetchProfile, clearError }}>
       {children}
     </UserContext.Provider>
   );

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useUser } from '../UserContext';
 
 const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
@@ -8,6 +9,7 @@ const Login = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const { clearError } = useUser();
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -17,9 +19,13 @@ const Login = () => {
     if (location.state && location.state.error) {
       setError(location.state.error);
     }
-  }, [location.state]);
+    clearError();
+  }, [location.state, clearError]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (error) {
+      setError('');
+    }
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
