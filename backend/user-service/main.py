@@ -383,13 +383,19 @@ async def logout(request: Request):
                 user_email = payload.get("sub")
                 
                 # Добавляем токен в blacklist (сохраняем в Redis до истечения)
-                token_exp = payload.get("exp")
-                if token_exp:
-                    current_time = datetime.utcnow().timestamp()
-                    ttl = int(token_exp - current_time)
-                    if ttl > 0:
-                        redis_client.setex(f"blacklist:{token}", ttl, user_email)
-                        logger.info(f"🚫 JWT токен добавлен в blacklist для {user_email}")
+                if redis_client:
+                    try:
+                        token_exp = payload.get("exp")
+                        if token_exp:
+                            current_time = datetime.utcnow().timestamp()
+                            ttl = int(token_exp - current_time)
+                            if ttl > 0:
+                                redis_client.setex(f"blacklist:{token}", ttl, user_email)
+                                logger.info(f"🚫 JWT токен добавлен в blacklist для {user_email}")
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка при добавлении токена в blacklist: {e}")
+                else:
+                    logger.warning("⚠️ Redis недоступен, JWT токен не добавлен в blacklist")
                 
             except jwt.ExpiredSignatureError:
                 logger.info("⏰ JWT токен уже истек")

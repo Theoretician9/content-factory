@@ -51,11 +51,18 @@ app = FastAPI(
 )
 
 # Redis client
-redis_client = Redis(
-    host=os.getenv("REDIS_HOST", "localhost"),
-    port=int(os.getenv("REDIS_PORT", 6379)),
-    db=int(os.getenv("REDIS_DB", 0))
-)
+try:
+    redis_client = Redis(
+        host=os.getenv("REDIS_HOST", "localhost"),
+        port=int(os.getenv("REDIS_PORT", 6379)),
+        db=int(os.getenv("REDIS_DB", 0))
+    )
+    # Проверяем подключение
+    redis_client.ping()
+    print("✅ API Gateway: подключение к Redis успешно")
+except Exception as e:
+    print(f"❌ API Gateway: не удалось подключиться к Redis: {e}")
+    redis_client = None
 
 # Rate limiter setup
 limiter = Limiter(key_func=get_remote_address)
@@ -221,11 +228,19 @@ async def refresh_token(request: Request):
     if not refresh_token:
         logger.warning(json.dumps({"event": "refresh_token_missing", "ip": request.client.host}))
         raise HTTPException(status_code=401, detail="Refresh token missing")
-        
-    user_id = redis_client.get(f"refresh_token:{refresh_token}")
-    if not user_id:
-        logger.warning(json.dumps({"event": "invalid_refresh_token", "ip": request.client.host}))
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    
+    if not redis_client:
+        logger.error(json.dumps({"event": "redis_unavailable", "ip": request.client.host}))
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+    
+    try:
+        user_id = redis_client.get(f"refresh_token:{refresh_token}")
+        if not user_id:
+            logger.warning(json.dumps({"event": "invalid_refresh_token", "ip": request.client.host}))
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+    except Exception as e:
+        logger.error(json.dumps({"event": "redis_error", "ip": request.client.host, "error": str(e)}))
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
         
     # Generate new JWT token
     new_token = jwt.encode(
