@@ -47,8 +47,12 @@ class RefreshTokenMiddleware(BaseHTTPMiddleware):
             
         try:
             # Проверяем refresh token в Redis
-            user_id = self.redis.get(f"refresh_token:{refresh_token}")
-            if not user_id:
+            try:
+                user_id = self.redis.get(f"refresh_token:{refresh_token}")
+                if not user_id:
+                    return await call_next(request)
+            except Exception as e:
+                print(f"Redis error in refresh token check: {e}")
                 return await call_next(request)
                 
             # Проверяем JWT токен
@@ -59,25 +63,32 @@ class RefreshTokenMiddleware(BaseHTTPMiddleware):
             token = auth_header.split(" ")[1]
             
             # Проверяем blacklist токенов
-            if self.redis.exists(f"blacklist:{token}"):
-                print(f"Token is blacklisted: {token[:20]}...")
-                return await call_next(request)
+            try:
+                if self.redis.exists(f"blacklist:{token}"):
+                    print(f"Token is blacklisted: {token[:20]}...")
+                    return await call_next(request)
+            except Exception as e:
+                print(f"Redis error in blacklist check: {e}")
             
             try:
                 jwt.decode(token, self.jwt_secret, algorithms=["HS256"])
             except jwt.ExpiredSignatureError:
                 # Если JWT истек, генерируем новый
-                new_token = jwt.encode(
-                    {
-                        "sub": user_id,
-                        "exp": datetime.utcnow() + timedelta(minutes=15)
-                    },
-                    self.jwt_secret,
-                    algorithm="HS256"
-                )
-                response = await call_next(request)
-                response.headers["X-New-Token"] = new_token
-                return response
+                try:
+                    new_token = jwt.encode(
+                        {
+                            "sub": user_id.decode() if hasattr(user_id, 'decode') else str(user_id),
+                            "exp": datetime.utcnow() + timedelta(minutes=15)
+                        },
+                        self.jwt_secret,
+                        algorithm="HS256"
+                    )
+                    response = await call_next(request)
+                    response.headers["X-New-Token"] = new_token
+                    return response
+                except Exception as e:
+                    print(f"Error generating new token: {e}")
+                    return await call_next(request)
                 
         except Exception as e:
             print(f"Error in refresh token middleware: {e}")
