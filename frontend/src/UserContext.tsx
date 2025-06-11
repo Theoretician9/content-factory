@@ -12,7 +12,7 @@ interface UserContextType {
   loading: boolean;
   error: string;
   logout: () => void;
-  refreshProfile: () => void;
+  refreshProfile: () => Promise<void>;
   clearError: () => void;
 }
 
@@ -21,7 +21,7 @@ const UserContext = createContext<UserContextType>({
   loading: true,
   error: '',
   logout: () => {},
-  refreshProfile: () => {},
+  refreshProfile: async () => {},
   clearError: () => {},
 });
 
@@ -65,24 +65,24 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError('');
   }, []);
 
-  const fetchProfile = useCallback(() => {
+  const fetchProfile = useCallback(async () => {
     setLoading(true);
     setError('');
-    apiFetch('/api/auth/me')
-      .then(async (res) => {
-        if (!res.ok) throw new Error('Ошибка получения профиля');
-        const data = await res.json();
-        setUser(data);
-      })
-      .catch((e) => {
-        setUser(null);
-        setError('Сессия истекла или ошибка авторизации');
-      })
-      .finally(() => setLoading(false));
+    try {
+      const res = await apiFetch('/api/auth/me');
+      if (!res.ok) throw new Error('Ошибка получения профиля');
+      const data = await res.json();
+      setUser(data);
+    } catch (e) {
+      setUser(null);
+      setError('Сессия истекла или ошибка авторизации');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    fetchProfile();
+    fetchProfile().catch(console.error);
   }, [fetchProfile]);
 
   // Автоматическое обновление токена по таймеру (каждые 10 минут)
@@ -102,10 +102,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             localStorage.setItem('access_token', data.access_token);
             localStorage.setItem('refresh_token', data.refresh_token);
           } else {
-            logout();
+            logout().catch(console.error);
           }
         } catch {
-          logout();
+          logout().catch(console.error);
         }
       }
     }, 10 * 60 * 1000); // 10 минут
