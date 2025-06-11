@@ -303,7 +303,9 @@ async def logout(request: Request):
             return resp.json()
         else:
             logger.warning(json.dumps({"event": "logout_failed", "ip": request.client.host, "status": resp.status_code, "error": resp.text}))
-            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+            raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", resp.text))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(json.dumps({"event": "logout_error", "ip": request.client.host, "error": str(e)}))
         raise HTTPException(status_code=500, detail="Internal error")
