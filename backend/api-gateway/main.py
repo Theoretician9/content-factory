@@ -264,18 +264,28 @@ async def login(request: Request, body: LoginRequest):
             data["username"] = data["email"]
         # Удаляем email, если он не нужен user-service
         data.pop("email", None)
+        
+        logger.info(f"🔐 API Gateway: попытка логина для пользователя '{data.get('username')}'")
+        
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
                 f"{SERVICE_URLS['user']}/token",
                 data=data,
                 headers={"Content-Type": "application/x-www-form-urlencoded"}
             )
+        
+        logger.info(f"🔐 API Gateway: user-service ответил {resp.status_code}")
+        
         if resp.status_code == 200:
             logger.info(json.dumps({"event": "login_success", "email": data.get("username"), "ip": request.client.host}))
             return resp.json()
         else:
             logger.warning(json.dumps({"event": "login_failed", "email": data.get("username"), "ip": request.client.host, "status": resp.status_code, "error": resp.text}))
-            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+            # НЕ превращаем 401 в 500! Возвращаем тот же статус код
+            raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", resp.text))
+    except HTTPException:
+        # Проброс HTTPException как есть
+        raise
     except Exception as e:
         logger.error(json.dumps({"event": "login_error", "ip": request.client.host, "error": str(e)}))
         raise HTTPException(status_code=500, detail="Internal error")
