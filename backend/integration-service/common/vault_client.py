@@ -15,8 +15,10 @@ class VaultClient:
         :param path: путь к секрету (например, 'secret/data/db')
         :return: данные секрета
         """
+        url = f"{self.vault_addr}/v1/{path}"
+        print(f"DEBUG: Requesting Vault URL: {url}")
         response = requests.get(
-            f"{self.vault_addr}/v1/{path}",
+            url,
             headers={"X-Vault-Token": self.vault_token}
         )
         response.raise_for_status()
