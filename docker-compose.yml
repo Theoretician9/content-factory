@@ -20,6 +20,8 @@ services:
       - MYSQL_PORT=3306
       - VAULT_ADDR=http://vault:8201
       - VAULT_TOKEN=${VAULT_TOKEN}
+      - VAULT_ROLE_ID=${VAULT_ROLE_ID}
+      - VAULT_SECRET_ID=${VAULT_SECRET_ID}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-for-content-factory-2024}
     depends_on:
       vault:

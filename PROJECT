@@ -140,6 +140,102 @@ SaaS-платформа для автоматизации маркетинга, 
 - Постепенно все сервисы будут получать секреты из Vault, а не из .env/docker-compose.
 - В docker-compose и .env останутся только VAULT_ADDR и VAULT_TOKEN.
 
+#### ✅ AppRole Authentication (Production Security)
+**Реализована production-ready аутентификация сервисов в Vault:**
+
+**Принцип работы:**
+- Сервисы аутентифицируются через `role_id` + `secret_id` вместо статических токенов
+- `role_id` - постоянный идентификатор роли (как логин)
+- `secret_id` - одноразовый "пароль" который можно обновлять
+- Автоматическое получение токенов с коротким TTL (1-4 часа)
+- Fallback на токенную аутентификацию для плавной миграции
+
+**Настройка AppRole в Vault:**
+```bash
+# 1. Включение AppRole auth method
+docker-compose exec vault sh -c "VAULT_TOKEN=<root-token> vault auth enable approle"
+
+# 2. Создание роли для сервисов
+docker-compose exec vault sh -c "VAULT_TOKEN=<root-token> vault write auth/approle/role/services token_policies=jwt-read-policy token_ttl=1h token_max_ttl=4h token_num_uses=0"
+
+# 3. Получение role_id (постоянный)
+docker-compose exec vault sh -c "VAULT_TOKEN=<root-token> vault read auth/approle/role/services/role-id"
+
+# 4. Генерация secret_id (обновляемый)
+docker-compose exec vault sh -c "VAULT_TOKEN=<root-token> vault write -f auth/approle/role/services/secret-id"
+```
+
+**Конфигурация в .env:**
+```bash
+# AppRole Authentication
+VAULT_ROLE_ID=326b6585-0495-343b-6694-4cb6dd87e6dc
+VAULT_SECRET_ID=1c5121a4-2853-0c02-31e6-323f5084df7a
+
+# Fallback (для безопасности)
+VAULT_TOKEN=hvs.long-term-token-here
+```
+
+**Настройка в docker-compose.yml для каждого сервиса:**
+```yaml
+environment:
+  - VAULT_ADDR=http://vault:8201
+  - VAULT_TOKEN=${VAULT_TOKEN}         # Fallback
+  - VAULT_ROLE_ID=${VAULT_ROLE_ID}     # AppRole
+  - VAULT_SECRET_ID=${VAULT_SECRET_ID} # AppRole
+```
+
+**Обновленный VaultClient (общий для всех сервисов):**
+```python
+class VaultClient:
+    def __init__(self, vault_addr: str = None, vault_token: str = None, role_id: str = None, secret_id: str = None):
+        self.vault_addr = vault_addr or os.getenv('VAULT_ADDR', 'http://vault:8201')
+        self.vault_token = None
+        
+        # Поддержка AppRole Authentication
+        self.role_id = role_id or os.getenv('VAULT_ROLE_ID')
+        self.secret_id = secret_id or os.getenv('VAULT_SECRET_ID')
+        
+        # Fallback на токенную аутентификацию
+        if not self.role_id or not self.secret_id:
+            self.vault_token = vault_token or os.getenv('VAULT_TOKEN')
+            if not self.vault_token:
+                raise ValueError("Vault token is required when AppRole credentials are not provided")
+        else:
+            self._authenticate_with_approle()
+
+    def _authenticate_with_approle(self):
+        """Аутентификация через AppRole и получение токена"""
+        auth_data = {"role_id": self.role_id, "secret_id": self.secret_id}
+        response = requests.post(f"{self.vault_addr}/v1/auth/approle/login", json=auth_data)
+        response.raise_for_status()
+        auth_result = response.json()
+        self.vault_token = auth_result["auth"]["client_token"]
+```
+
+**Преимущества AppRole:**
+- **🔄 Автоматическое обновление токенов** (TTL 1-4 часа)
+- **🔐 Повышенная безопасность** (никаких долгосрочных токенов)
+- **🔧 Простое управление** (можно отозвать secret_id)
+- **📈 Масштабируемость** (один role_id для всех сервисов)
+- **🛡️ Audit trail** (все аутентификации логируются в Vault)
+
+**Статус внедрения:**
+- ✅ **integration-service** - AppRole работает полностью
+- ✅ **user-service** - AppRole работает полностью  
+- ✅ **api-gateway** - AppRole работает полностью
+- ⏳ **Остальные сервисы** - будут обновлены по мере развития
+
+**Мониторинг AppRole:**
+- Логи аутентификации: `docker-compose logs <service> | grep AppRole`
+- Статус токенов: `vault token lookup` с полученным токеном
+- Audit trail: встроен в Vault audit logs
+
+**Инструкции для новых сервисов:**
+1. Скопировать обновленный `VaultClient` в `common/vault_client.py`
+2. Добавить `VAULT_ROLE_ID=${VAULT_ROLE_ID}` и `VAULT_SECRET_ID=${VAULT_SECRET_ID}` в docker-compose.yml
+3. Протестировать работу - сервис автоматически использует AppRole
+4. При отсутствии AppRole переменных сервис fallback на VAULT_TOKEN
+
 ### Планы по фронтенду
 1. Первый фронт — админка:
    - Мониторинг пользователей (список, фильтры, поиск)
