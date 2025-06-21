@@ -7,6 +7,7 @@ const resources = {
       // Общие
       welcome: 'Welcome to Content Factory!',
       login: 'Login',
+      logout: 'Logout',
       register: 'Register',
       dashboard: 'Dashboard',
       
@@ -62,6 +63,7 @@ const resources = {
       // Общие
       welcome: 'Добро пожаловать в Content Factory!',
       login: 'Войти',
+      logout: 'Выход',
       register: 'Регистрация',
       dashboard: 'Кабинет',
       
