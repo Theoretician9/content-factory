@@ -22,14 +22,18 @@ SaaS-платформа для автоматизации маркетинга, 
 - Nginx
 - Prometheus
 - Grafana
-- Vault
+- Vault (с AppRole Authentication)
 - Elasticsearch
 - Kibana
 - Logstash
-- Docker Compose
+- Docker 28.2.2 (latest)
+- Docker Compose v2.36.2
+- Docker BuildX v0.24.0 (BuildKit enabled)
 
 ## Инфраструктура
-- ✅ Docker Compose настроен и работает
+- ✅ **Modern Docker Stack**: Docker 28.2.2, Compose v2.36.2, BuildX v0.24.0
+- ✅ **BuildKit enabled**: Ускоренная сборка контейнеров, умное кеширование слоев
+- ✅ **Docker Compose v2**: Современный CLI, параллельная сборка сервисов
 - ✅ Единая сеть backend для всех сервисов
 - ✅ Volume для хранения данных (MySQL, PostgreSQL, Redis, RabbitMQ, Elasticsearch, Vault)
 - ✅ Все базовые сервисы (MySQL, PostgreSQL, Redis, RabbitMQ, Vault, Prometheus, Grafana, ELK) работают и доступны
@@ -66,23 +70,28 @@ SaaS-платформа для автоматизации маркетинга, 
 - ❌ Не настроены пользовательские дашборды в Grafana (можно создавать)
 
 ## Сервисы
-- ✅ API Gateway запущен и доступен на порту 8000
-- ✅ Integration Service запущен и полностью функционален (порт 8001)
-- ✅ User Service запущен и работает
+- ✅ API Gateway запущен и доступен на порту 8000 (с AppRole Authentication)
+- ✅ Integration Service запущен и полностью функционален (порт 8001, с AppRole Authentication)
+- ✅ User Service запущен и работает (с AppRole Authentication)
 - ❌ Остальные микросервисы (Billing, Scenario, Content, Invite, Parsing) ещё не протестированы
 - ❌ Не настроено взаимодействие между сервисами
 - ❌ Не протестированы API эндпоинты остальных сервисов
 
 ## Безопасность
-- ✅ Vault запущен в production режиме с файловым хранением (только во внутренней сети)
+- ✅ **Production Vault**: запущен в production режиме с файловым хранением (только во внутренней сети)
+- ✅ **AppRole Authentication**: внедрено в integration-service, user-service, api-gateway
+- ✅ **Автоматические токены**: обновление каждые 1-4 часа без ручного вмешательства
+- ✅ **Vault Unsealer**: автоматическое unsealing 24/7, self-healing при sealed state
 - ✅ Настроены unseal keys и инициализация для Vault
 - ✅ Данные Vault сохраняются при перезагрузке (volume vault_data:/vault/data)
 - ✅ Проброс портов для админских сервисов убран, доступ только через внутреннюю сеть или SSH-туннель
 - ✅ Integration Service полностью интегрирован с Vault для хранения секретов
 - ✅ API Gateway интегрирован с Vault (CSRF_SECRET_KEY, JWT_SECRET_KEY)
+- ✅ User Service интегрирован с Vault для JWT секретов
 - ✅ HTTPS настроен и работает через Let's Encrypt
 - ✅ GitHub push protection: секреты не попадают в репозиторий, токены в переменных окружения
-- ❌ Не настроено хранение секретов в Vault для остальных сервисов
+- ✅ **Audit Trail**: все AppRole аутентификации логируются в Vault
+- ⏳ Остальные сервисы будут переведены на AppRole по мере развития
 - ❌ Не настроен firewall
 
 ## Очереди и кэширование
