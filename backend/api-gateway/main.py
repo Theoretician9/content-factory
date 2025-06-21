@@ -396,11 +396,15 @@ async def register(request: Request, body: RegisterRequest):
             data["username"] = data["email"]
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(f"{SERVICE_URLS['user']}/users/", json=data)
+        
         if resp.status_code == 200:
             logger.info(json.dumps({"event": "register_success", "email": data.get("email"), "ip": request.client.host}))
+            return resp.json()
         else:
             logger.warning(json.dumps({"event": "register_failed", "email": data.get("email"), "ip": request.client.host, "status": resp.status_code, "error": resp.text}))
-        return resp.json(), resp.status_code
+            raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", resp.text) if resp.text else "Registration failed")
+    except HTTPException:
+        raise
     except httpx.ConnectError:
         raise HTTPException(status_code=502, detail="User service unavailable")
     except Exception as e:
