@@ -333,8 +333,8 @@ const Integrations = () => {
           {activeTab === 'platforms' && (
             <div className="space-y-6">
               {/* Выбор платформы */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold mb-4">Подключить платформу</h3>
+              <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-8 backdrop-blur-sm">
+                <h3 className="text-xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent mb-6">Подключить платформу</h3>
                 <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
                   {[
                     { 
@@ -440,26 +440,35 @@ const Integrations = () => {
               {selectedPlatform === 'telegram' && (
                 <>
                   {/* Подключение элементов Telegram */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-8 backdrop-blur-sm">
                   {/* Табы для типа подключения */}
-                  <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
-                    <nav className="flex space-x-8">
+                  <div className="mb-8">
+                    <nav className="flex gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
                       {[
-                        { key: 'account', label: t('connect_telegram_account'), icon: '👤' },
-                        { key: 'bot', label: t('connect_telegram_bot'), icon: '🤖' },
-                        { key: 'public', label: t('connect_telegram_public'), icon: '📢' }
+                        { key: 'account', label: t('connect_telegram_account'), icon: '👤', color: 'from-blue-500 to-cyan-500' },
+                        { key: 'bot', label: t('connect_telegram_bot'), icon: '🤖', color: 'from-purple-500 to-pink-500' },
+                        { key: 'public', label: t('connect_telegram_public'), icon: '📢', color: 'from-orange-500 to-red-500' }
                       ].map(tab => (
                         <button
                           key={tab.key}
                           onClick={() => setTelegramConnectTab(tab.key as any)}
-                          className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
-                            telegramConnectTab === tab.key
-                              ? 'border-blue-500 text-blue-600'
-                              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                          }`}
+                          className={`
+                            relative flex items-center gap-3 px-6 py-3 rounded-lg font-medium text-sm transition-all duration-300 ease-out
+                            ${telegramConnectTab === tab.key
+                              ? `bg-gradient-to-r ${tab.color} text-white shadow-lg shadow-${tab.color.split('-')[1]}-500/25 transform scale-105`
+                              : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-white dark:hover:bg-gray-700 hover:shadow-md'
+                            }
+                          `}
                         >
-                          <span>{tab.icon}</span>
-                          {tab.label}
+                          <span className={`text-lg transition-transform duration-300 ${
+                            telegramConnectTab === tab.key ? 'scale-110' : ''
+                          }`}>
+                            {tab.icon}
+                          </span>
+                          <span className="whitespace-nowrap">{tab.label}</span>
+                          {telegramConnectTab === tab.key && (
+                            <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent rounded-lg pointer-events-none" />
+                          )}
                         </button>
                       ))}
                     </nav>
@@ -628,30 +637,67 @@ const Integrations = () => {
                 </div>
 
                 {/* Подключенные элементы */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-8 backdrop-blur-sm">
                   {/* Табы для списков */}
-                  <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
-                    <nav className="flex space-x-8">
+                  <div className="mb-8">
+                    <nav className="flex gap-3 p-2 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 rounded-2xl border border-gray-200 dark:border-gray-600">
                       {[
-                        { key: 'accounts', label: t('connected_accounts'), icon: '👤', count: telegramAccounts.length },
-                        { key: 'bots', label: t('connected_bots'), icon: '🤖', count: telegramBots.length },
-                        { key: 'publics', label: t('connected_publics'), icon: '📢', count: telegramPublics.length }
+                        { key: 'accounts', label: t('connected_accounts'), icon: '👤', count: telegramAccounts.length, gradient: 'from-emerald-500 to-teal-600' },
+                        { key: 'bots', label: t('connected_bots'), icon: '🤖', count: telegramBots.length, gradient: 'from-violet-500 to-purple-600' },
+                        { key: 'publics', label: t('connected_publics'), icon: '📢', count: telegramPublics.length, gradient: 'from-rose-500 to-pink-600' }
                       ].map(tab => (
                         <button
                           key={tab.key}
                           onClick={() => setTelegramListTab(tab.key as any)}
-                          className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
-                            telegramListTab === tab.key
-                              ? 'border-blue-500 text-blue-600'
-                              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                          }`}
+                          className={`
+                            group relative flex items-center gap-3 px-5 py-3 rounded-xl font-semibold text-sm 
+                            transition-all duration-500 ease-out transform
+                            ${telegramListTab === tab.key
+                              ? `bg-gradient-to-br ${tab.gradient} text-white shadow-xl shadow-${tab.gradient.split('-')[1]}-500/30 scale-105 -translate-y-0.5`
+                              : 'text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-600 hover:shadow-lg hover:scale-102 hover:-translate-y-0.5'
+                            }
+                          `}
                         >
-                          <span>{tab.icon}</span>
-                          {tab.label}
-                          {tab.count > 0 && (
-                            <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                              {tab.count}
+                          <div className={`
+                            flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-300
+                            ${telegramListTab === tab.key
+                              ? 'bg-white/20 backdrop-blur-sm'
+                              : 'bg-gray-200 dark:bg-gray-700 group-hover:bg-gray-300 dark:group-hover:bg-gray-600'
+                            }
+                          `}>
+                            <span className={`text-lg transition-all duration-300 ${
+                              telegramListTab === tab.key ? 'scale-110 filter drop-shadow-sm' : 'group-hover:scale-110'
+                            }`}>
+                              {tab.icon}
                             </span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <span className="whitespace-nowrap">{tab.label}</span>
+                            {tab.count > 0 && (
+                              <div className={`
+                                relative flex items-center justify-center min-w-[20px] h-5 px-2 rounded-full text-xs font-bold
+                                transition-all duration-300 transform
+                                ${telegramListTab === tab.key
+                                  ? 'bg-white/25 text-white backdrop-blur-sm scale-110'
+                                  : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white group-hover:scale-110'
+                                }
+                              `}>
+                                <span className="relative z-10">{tab.count}</span>
+                                {telegramListTab === tab.key && (
+                                  <div className="absolute inset-0 bg-white/10 rounded-full animate-pulse" />
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Активный индикатор */}
+                          {telegramListTab === tab.key && (
+                            <div className="absolute inset-0 rounded-xl overflow-hidden">
+                              <div className="absolute inset-0 bg-gradient-to-r from-white/10 via-transparent to-white/5" />
+                              <div className="absolute top-0 left-1/4 w-1/2 h-px bg-white/30" />
+                              <div className="absolute bottom-0 right-1/4 w-1/2 h-px bg-white/20" />
+                            </div>
                           )}
                         </button>
                       ))}
