@@ -68,7 +68,9 @@ class Settings(BaseSettings):
         except Exception as e:
             # Fallback к environment variable
             self.JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret')
-            print(f"⚠️ Integration Service: используется JWT из ENV: {e}")
+            print(f"⚠️ Integration Service: используется JWT из ENV")
+            print(f"⚠️ Причина: {type(e).__name__}: {str(e)}")
+            print(f"⚠️ Возможное решение: docker-compose exec vault vault kv put kv/jwt secret_key='your-secret-key'")
     
     @property
     def database_url(self) -> str:
