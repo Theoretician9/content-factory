@@ -557,77 +557,78 @@ const Integrations = () => {
                     <img src={`data:image/png;base64,${qrCode}`} alt="QR Code" className="mx-auto" />
                   </div>
                 )}
+                    </div>
+                  )}
+
+                  {/* Форма подключения бота */}
+                  {telegramConnectTab === 'bot' && (
+                    <div>
+                      <h3 className="text-lg font-semibold mb-4">{t('connect_telegram_bot')}</h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium mb-2">{t('bot_token')}</label>
+                          <input
+                            type="text"
+                            placeholder={t('bot_token_placeholder')}
+                            value={botForm.token}
+                            onChange={(e) => setBotForm(prev => ({ ...prev, token: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-2">{t('bot_name')}</label>
+                          <input
+                            type="text"
+                            placeholder="Мой бот"
+                            value={botForm.name}
+                            onChange={(e) => setBotForm(prev => ({ ...prev, name: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        {botError && <ErrorMessage message={botError} />}
+                        <Button onClick={() => console.log('Connect bot')} loading={connectingBot}>
+                          {t('connect_button')}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Форма подключения паблика */}
+                  {telegramConnectTab === 'public' && (
+                    <div>
+                      <h3 className="text-lg font-semibold mb-4">{t('connect_telegram_public')}</h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium mb-2">{t('public_username')}</label>
+                          <input
+                            type="text"
+                            placeholder={t('public_username_placeholder')}
+                            value={publicForm.username}
+                            onChange={(e) => setPublicForm(prev => ({ ...prev, username: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-2">{t('public_name')}</label>
+                          <input
+                            type="text"
+                            placeholder="Мой паблик"
+                            value={publicForm.name}
+                            onChange={(e) => setPublicForm(prev => ({ ...prev, name: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        {publicError && <ErrorMessage message={publicError} />}
+                        <Button onClick={() => console.log('Connect public')} loading={connectingPublic}>
+                          {t('connect_button')}
+                        </Button>
+                      </div>
+                  </div>
+                )}
               </div>
 
-              {/* Форма подключения бота */}
-              {telegramConnectTab === 'bot' && (
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">{t('connect_telegram_bot')}</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">{t('bot_token')}</label>
-                      <input
-                        type="text"
-                        placeholder={t('bot_token_placeholder')}
-                        value={botForm.token}
-                        onChange={(e) => setBotForm(prev => ({ ...prev, token: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">{t('bot_name')}</label>
-                      <input
-                        type="text"
-                        placeholder="Мой бот"
-                        value={botForm.name}
-                        onChange={(e) => setBotForm(prev => ({ ...prev, name: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    {botError && <ErrorMessage message={botError} />}
-                    <Button onClick={() => console.log('Connect bot')} loading={connectingBot}>
-                      {t('connect_button')}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Форма подключения паблика */}
-              {telegramConnectTab === 'public' && (
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">{t('connect_telegram_public')}</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">{t('public_username')}</label>
-                      <input
-                        type="text"
-                        placeholder={t('public_username_placeholder')}
-                        value={publicForm.username}
-                        onChange={(e) => setPublicForm(prev => ({ ...prev, username: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">{t('public_name')}</label>
-                      <input
-                        type="text"
-                        placeholder="Мой паблик"
-                        value={publicForm.name}
-                        onChange={(e) => setPublicForm(prev => ({ ...prev, name: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    {publicError && <ErrorMessage message={publicError} />}
-                    <Button onClick={() => console.log('Connect public')} loading={connectingPublic}>
-                      {t('connect_button')}
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Подключенные элементы */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
               {/* Табы для списков */}
               <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
                 <nav className="flex space-x-8">
@@ -661,38 +662,38 @@ const Integrations = () => {
               {telegramListTab === 'accounts' && (
                 <div>
                   <h3 className="text-lg font-semibold mb-4">{t('connected_accounts')}</h3>
-                  {telegramAccounts.length === 0 ? (
-                    <p className="text-gray-500">Нет подключенных аккаунтов</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {telegramAccounts.map(account => (
-                        <div key={account.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-3 h-3 rounded-full ${account.is_active ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                            <div>
-                              <div className="font-medium">{account.phone}</div>
-                              <div className="text-sm text-gray-500">
-                                Подключен: {formatDate(account.created_at)}
-                              </div>
+                {telegramAccounts.length === 0 ? (
+                  <p className="text-gray-500">Нет подключенных аккаунтов</p>
+                ) : (
+                  <div className="space-y-3">
+                    {telegramAccounts.map(account => (
+                      <div key={account.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-3 h-3 rounded-full ${account.is_active ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                          <div>
+                            <div className="font-medium">{account.phone}</div>
+                            <div className="text-sm text-gray-500">
+                              Подключен: {formatDate(account.created_at)}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-1 text-xs rounded-full ${account.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                              {account.is_active ? 'Активен' : 'Неактивен'}
-                            </span>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => handleDisconnectAccount(account.id)}
-                            >
-                              Отключить
-                            </Button>
-                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 text-xs rounded-full ${account.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {account.is_active ? 'Активен' : 'Неактивен'}
+                          </span>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleDisconnectAccount(account.id)}
+                          >
+                            Отключить
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               )}
 
               {/* Список ботов */}
@@ -783,27 +784,27 @@ const Integrations = () => {
               
               {selectedPlatform === 'telegram' ? (
                 telegramLogs.length === 0 ? (
-                  <p className="text-gray-500">Нет записей в логах</p>
-                ) : (
-                  <div className="space-y-3">
-                    {telegramLogs.map(log => (
-                      <div key={log.id} className="p-4 border border-gray-200 rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(log.status)}`}>
-                              {log.status}
-                            </span>
-                            <span className="font-medium">{log.action}</span>
-                          </div>
-                          <span className="text-sm text-gray-500">{formatDate(log.created_at)}</span>
+                <p className="text-gray-500">Нет записей в логах</p>
+              ) : (
+                <div className="space-y-3">
+                  {telegramLogs.map(log => (
+                    <div key={log.id} className="p-4 border border-gray-200 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                          <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(log.status)}`}>
+                            {log.status}
+                          </span>
+                          <span className="font-medium">{log.action}</span>
                         </div>
-                        {log.error_message && (
-                          <div className="text-sm text-red-600 mt-2">
-                            Ошибка: {log.error_message}
-                          </div>
-                        )}
+                        <span className="text-sm text-gray-500">{formatDate(log.created_at)}</span>
                       </div>
-                    ))}
+                      {log.error_message && (
+                        <div className="text-sm text-red-600 mt-2">
+                          Ошибка: {log.error_message}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                   </div>
                 )
               ) : (
@@ -819,31 +820,31 @@ const Integrations = () => {
 
           {activeTab === 'stats' && (
             selectedPlatform === 'telegram' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {errorStats && (
-                  <>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                      <h4 className="text-sm font-medium text-gray-500 mb-2">Всего операций</h4>
-                      <div className="text-2xl font-bold">{errorStats.total_actions}</div>
-                    </div>
-                    
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                      <h4 className="text-sm font-medium text-gray-500 mb-2">Успешные</h4>
-                      <div className="text-2xl font-bold text-green-600">{errorStats.success_count}</div>
-                    </div>
-                    
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                      <h4 className="text-sm font-medium text-gray-500 mb-2">Ошибки</h4>
-                      <div className="text-2xl font-bold text-red-600">{errorStats.error_count}</div>
-                    </div>
-                    
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                      <h4 className="text-sm font-medium text-gray-500 mb-2">Процент ошибок</h4>
-                      <div className="text-2xl font-bold">{errorStats.error_rate}%</div>
-                    </div>
-                  </>
-                )}
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {errorStats && (
+                <>
+                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                    <h4 className="text-sm font-medium text-gray-500 mb-2">Всего операций</h4>
+                    <div className="text-2xl font-bold">{errorStats.total_actions}</div>
+                  </div>
+                  
+                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                    <h4 className="text-sm font-medium text-gray-500 mb-2">Успешные</h4>
+                    <div className="text-2xl font-bold text-green-600">{errorStats.success_count}</div>
+                  </div>
+                  
+                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                    <h4 className="text-sm font-medium text-gray-500 mb-2">Ошибки</h4>
+                    <div className="text-2xl font-bold text-red-600">{errorStats.error_count}</div>
+                  </div>
+                  
+                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                    <h4 className="text-sm font-medium text-gray-500 mb-2">Процент ошибок</h4>
+                    <div className="text-2xl font-bold">{errorStats.error_rate}%</div>
+                  </div>
+                </>
+              )}
+            </div>
             ) : (
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
                 <div className="text-center py-12">
