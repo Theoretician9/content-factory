@@ -415,10 +415,19 @@ async def get_profile(request: Request):
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(f"{SERVICE_URLS['user']}/users/me", headers=headers)
-        return resp.json(), resp.status_code
+        
+        if resp.status_code == 200:
+            logger.info(json.dumps({"event": "profile_success", "ip": request.client.host}))
+            return resp.json()
+        else:
+            logger.warning(json.dumps({"event": "profile_failed", "ip": request.client.host, "status": resp.status_code, "error": resp.text}))
+            raise HTTPException(status_code=resp.status_code, detail=resp.json().get("detail", resp.text) if resp.text else "Profile fetch failed")
+    except HTTPException:
+        raise
     except httpx.ConnectError:
         raise HTTPException(status_code=502, detail="User service unavailable")
     except Exception as e:
+        logger.error(json.dumps({"event": "profile_error", "ip": request.client.host, "error": str(e)}))
         raise HTTPException(status_code=500, detail=str(e))
 
 # Internal endpoint (вне api_router, без префикса /api)
