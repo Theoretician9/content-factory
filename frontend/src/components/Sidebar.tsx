@@ -17,6 +17,11 @@ const menu = [
 const Sidebar: React.FC<{ isOpen?: boolean; onClose?: () => void }> = ({ isOpen = true, onClose }) => {
   const location = useLocation();
   const { user } = useUser();
+  
+  // Добавляем логирование для отладки
+  console.log('🔍 Sidebar: user объект:', user);
+  console.log('🔍 Sidebar: user?.email:', user?.email);
+  console.log('🔍 Sidebar: user?.name:', user?.name);
   return (
     <>
       {/* Overlay для мобильных */}

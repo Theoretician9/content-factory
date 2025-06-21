@@ -69,11 +69,22 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     setError('');
     try {
+      console.log('🔍 UserContext: Запрашиваем профиль пользователя...');
       const res = await apiFetch('/api/auth/me');
-      if (!res.ok) throw new Error('Ошибка получения профиля');
+      console.log('🔍 UserContext: Ответ от API:', res);
+      console.log('🔍 UserContext: res.ok:', res.ok);
+      console.log('🔍 UserContext: res.status:', res.status);
+      
+      if (!res.ok) {
+        console.log('❌ UserContext: Ошибка HTTP статуса:', res.status);
+        throw new Error('Ошибка получения профиля');
+      }
+      
       const data = await res.json();
+      console.log('🔍 UserContext: Данные пользователя:', data);
       setUser(data);
     } catch (e) {
+      console.log('❌ UserContext: Ошибка при получении профиля:', e);
       setUser(null);
       setError('Сессия истекла или ошибка авторизации');
     } finally {
