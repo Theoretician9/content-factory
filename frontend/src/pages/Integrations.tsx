@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import { integrationApi } from '../api';
@@ -39,6 +40,7 @@ interface ErrorStats {
 
 const Integrations = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -47,8 +49,14 @@ const Integrations = () => {
   // Платформы состояние
   const [selectedPlatform, setSelectedPlatform] = useState<'telegram' | 'instagram' | 'whatsapp' | 'youtube' | 'tiktok' | 'threads'>('telegram');
   
+  // Telegram табы состояние
+  const [telegramConnectTab, setTelegramConnectTab] = useState<'account' | 'bot' | 'public'>('account');
+  const [telegramListTab, setTelegramListTab] = useState<'accounts' | 'bots' | 'publics'>('accounts');
+  
   // Telegram состояние
   const [telegramAccounts, setTelegramAccounts] = useState<TelegramAccount[]>([]);
+  const [telegramBots, setTelegramBots] = useState<any[]>([]);
+  const [telegramPublics, setTelegramPublics] = useState<any[]>([]);
   const [telegramLogs, setTelegramLogs] = useState<IntegrationLog[]>([]);
   const [errorStats, setErrorStats] = useState<ErrorStats | null>(null);
   const [activeTab, setActiveTab] = useState<'platforms' | 'logs' | 'stats'>('platforms');
@@ -63,6 +71,22 @@ const Integrations = () => {
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState('');
   const [qrCode, setQrCode] = useState('');
+  
+  // Подключение бота
+  const [botForm, setBotForm] = useState({
+    token: '',
+    name: ''
+  });
+  const [connectingBot, setConnectingBot] = useState(false);
+  const [botError, setBotError] = useState('');
+  
+  // Подключение паблика
+  const [publicForm, setPublicForm] = useState({
+    username: '',
+    name: ''
+  });
+  const [connectingPublic, setConnectingPublic] = useState(false);
+  const [publicError, setPublicError] = useState('');
 
   useEffect(() => {
     const handleResize = () => {
