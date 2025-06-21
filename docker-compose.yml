@@ -77,6 +77,8 @@ services:
       - REDIS_PORT=6379
       - VAULT_ADDR=http://vault:8201
       - VAULT_TOKEN=${VAULT_TOKEN}
+      - VAULT_ROLE_ID=${VAULT_ROLE_ID}
+      - VAULT_SECRET_ID=${VAULT_SECRET_ID}
     depends_on:
       vault:
         condition: service_healthy
