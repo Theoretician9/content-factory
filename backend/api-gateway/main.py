@@ -398,12 +398,9 @@ async def register(request: Request, body: RegisterRequest):
             resp = await client.post(f"{SERVICE_URLS['user']}/users/", json=data)
         if resp.status_code == 200:
             logger.info(json.dumps({"event": "register_success", "email": data.get("email"), "ip": request.client.host}))
-            return resp.json()
         else:
             logger.warning(json.dumps({"event": "register_failed", "email": data.get("email"), "ip": request.client.host, "status": resp.status_code, "error": resp.text}))
-            raise HTTPException(status_code=resp.status_code, detail=resp.text)
-    except HTTPException:
-        raise
+        return resp.json(), resp.status_code
     except httpx.ConnectError:
         raise HTTPException(status_code=502, detail="User service unavailable")
     except Exception as e:
