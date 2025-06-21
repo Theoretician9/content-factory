@@ -418,12 +418,7 @@ async def get_profile(request: Request):
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(f"{SERVICE_URLS['user']}/users/me", headers=headers)
-        if resp.status_code == 200:
-            return resp.json()
-        else:
-            raise HTTPException(status_code=resp.status_code, detail=resp.text)
-    except HTTPException:
-        raise
+        return resp.json(), resp.status_code
     except httpx.ConnectError:
         raise HTTPException(status_code=502, detail="User service unavailable")
     except Exception as e:
