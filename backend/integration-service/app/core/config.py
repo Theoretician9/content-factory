@@ -57,7 +57,9 @@ class Settings(BaseSettings):
     def __init__(self, **values):
         super().__init__(**values)
         # Получаем JWT секрет из Vault
+        print(f"DEBUG Config: VAULT_ADDR from env = {os.getenv('VAULT_ADDR')}")
         vault_client = VaultClient()
+        print(f"DEBUG Config: vault_client.vault_addr = {vault_client.vault_addr}")
         try:
             # Для KV v2 правильный путь включает /data/
             secret_data = vault_client.get_secret("kv/data/jwt")
