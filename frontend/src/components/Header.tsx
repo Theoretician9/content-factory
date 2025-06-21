@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useUser } from '../UserContext';
 
 const Header: React.FC<{ title?: string; onMenuClick?: () => void }> = ({ title = 'Главная', onMenuClick }) => {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { logout } = useUser();
 
   const handleLangChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -32,7 +32,7 @@ const Header: React.FC<{ title?: string; onMenuClick?: () => void }> = ({ title 
           onClick={logout}
           className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-lg font-semibold hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900 transition-all duration-200"
         >
-          Выход
+          {t('logout')}
         </button>
         <select
           value={i18n.language}
