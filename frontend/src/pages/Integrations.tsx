@@ -44,11 +44,14 @@ const Integrations = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768);
   
+  // Платформы состояние
+  const [selectedPlatform, setSelectedPlatform] = useState<'telegram' | 'instagram' | 'whatsapp' | 'youtube' | 'tiktok' | 'threads'>('telegram');
+  
   // Telegram состояние
   const [telegramAccounts, setTelegramAccounts] = useState<TelegramAccount[]>([]);
   const [telegramLogs, setTelegramLogs] = useState<IntegrationLog[]>([]);
   const [errorStats, setErrorStats] = useState<ErrorStats | null>(null);
-  const [activeTab, setActiveTab] = useState<'accounts' | 'logs' | 'stats'>('accounts');
+  const [activeTab, setActiveTab] = useState<'platforms' | 'logs' | 'stats'>('platforms');
   
   // Подключение аккаунта
   const [connectForm, setConnectForm] = useState({
@@ -282,7 +285,7 @@ const Integrations = () => {
           <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
             <nav className="flex space-x-8">
               {[
-                { key: 'accounts', label: 'Аккаунты Telegram', icon: '👤' },
+                { key: 'platforms', label: 'Платформы', icon: '🔗' },
                 { key: 'logs', label: 'Логи операций', icon: '📋' },
                 { key: 'stats', label: 'Статистика', icon: '📊' }
               ].map(tab => (
@@ -303,9 +306,56 @@ const Integrations = () => {
           </div>
 
           {/* Контент вкладок */}
-          {activeTab === 'accounts' && (
+          {activeTab === 'platforms' && (
             <div className="space-y-6">
-              {/* Подключение нового аккаунта */}
+              {/* Выбор платформы */}
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">Подключить платформу</h3>
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+                  {[
+                    { key: 'telegram', name: 'Telegram', icon: '📱', bgColor: 'bg-blue-500', available: true },
+                    { key: 'instagram', name: 'Instagram', icon: '📷', bgColor: 'bg-gradient-to-r from-purple-500 to-pink-500', available: false },
+                    { key: 'whatsapp', name: 'WhatsApp', icon: '💬', bgColor: 'bg-green-500', available: false },
+                    { key: 'youtube', name: 'YouTube', icon: '🎥', bgColor: 'bg-red-500', available: false },
+                    { key: 'tiktok', name: 'TikTok', icon: '🎵', bgColor: 'bg-black', available: false },
+                    { key: 'threads', name: 'Threads', icon: '🧵', bgColor: 'bg-gray-800', available: false }
+                  ].map(platform => (
+                    <button
+                      key={platform.key}
+                      onClick={() => platform.available && setSelectedPlatform(platform.key as any)}
+                      className={`
+                        relative flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200
+                        ${selectedPlatform === platform.key 
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                        }
+                        ${!platform.available ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-md'}
+                      `}
+                      disabled={!platform.available}
+                    >
+                      <div className={`w-12 h-12 rounded-full ${platform.bgColor} flex items-center justify-center text-white text-xl mb-2`}>
+                        {platform.icon}
+                      </div>
+                      <span className="text-sm font-medium text-center">{platform.name}</span>
+                      {!platform.available && (
+                        <div className="absolute -top-1 -right-1 bg-yellow-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                          Soon
+                        </div>
+                      )}
+                      {selectedPlatform === platform.key && (
+                        <div className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+                          ✓
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Контент выбранной платформы */}
+              {selectedPlatform === 'telegram' && (
+                <>
+                  {/* Подключение нового аккаунта */}
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
                 <h3 className="text-lg font-semibold mb-4">Подключить Telegram аккаунт</h3>
                 
@@ -434,66 +484,112 @@ const Integrations = () => {
                   </div>
                 )}
               </div>
+                </>
+              )}
+
+              {/* Заглушки для других платформ */}
+              {selectedPlatform !== 'telegram' && (
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                  <h3 className="text-lg font-semibold mb-4">
+                    {selectedPlatform === 'instagram' && 'Instagram интеграция'}
+                    {selectedPlatform === 'whatsapp' && 'WhatsApp интеграция'} 
+                    {selectedPlatform === 'youtube' && 'YouTube интеграция'}
+                    {selectedPlatform === 'tiktok' && 'TikTok интеграция'}
+                    {selectedPlatform === 'threads' && 'Threads интеграция'}
+                  </h3>
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4">🚧</div>
+                    <h4 className="text-xl font-semibold mb-2">Скоро будет доступно</h4>
+                    <p className="text-gray-500">
+                      Интеграция с {selectedPlatform} находится в разработке. 
+                      Мы добавим эту функцию в ближайшее время.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {activeTab === 'logs' && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4">Логи операций (последние 7 дней)</h3>
+              <h3 className="text-lg font-semibold mb-4">
+                Логи операций {selectedPlatform === 'telegram' ? 'Telegram' : selectedPlatform} (последние 7 дней)
+              </h3>
               
-              {telegramLogs.length === 0 ? (
-                <p className="text-gray-500">Нет записей в логах</p>
-              ) : (
-                <div className="space-y-3">
-                  {telegramLogs.map(log => (
-                    <div key={log.id} className="p-4 border border-gray-200 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-3">
-                          <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(log.status)}`}>
-                            {log.status}
-                          </span>
-                          <span className="font-medium">{log.action}</span>
+              {selectedPlatform === 'telegram' ? (
+                telegramLogs.length === 0 ? (
+                  <p className="text-gray-500">Нет записей в логах</p>
+                ) : (
+                  <div className="space-y-3">
+                    {telegramLogs.map(log => (
+                      <div key={log.id} className="p-4 border border-gray-200 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(log.status)}`}>
+                              {log.status}
+                            </span>
+                            <span className="font-medium">{log.action}</span>
+                          </div>
+                          <span className="text-sm text-gray-500">{formatDate(log.created_at)}</span>
                         </div>
-                        <span className="text-sm text-gray-500">{formatDate(log.created_at)}</span>
+                        {log.error_message && (
+                          <div className="text-sm text-red-600 mt-2">
+                            Ошибка: {log.error_message}
+                          </div>
+                        )}
                       </div>
-                      {log.error_message && (
-                        <div className="text-sm text-red-600 mt-2">
-                          Ошибка: {log.error_message}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                )
+              ) : (
+                <div className="text-center py-12">
+                  <div className="text-4xl mb-4">📊</div>
+                  <p className="text-gray-500">
+                    Логи для {selectedPlatform} будут доступны после подключения
+                  </p>
                 </div>
               )}
             </div>
           )}
 
           {activeTab === 'stats' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {errorStats && (
-                <>
-                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h4 className="text-sm font-medium text-gray-500 mb-2">Всего операций</h4>
-                    <div className="text-2xl font-bold">{errorStats.total_actions}</div>
-                  </div>
-                  
-                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h4 className="text-sm font-medium text-gray-500 mb-2">Успешные</h4>
-                    <div className="text-2xl font-bold text-green-600">{errorStats.success_count}</div>
-                  </div>
-                  
-                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h4 className="text-sm font-medium text-gray-500 mb-2">Ошибки</h4>
-                    <div className="text-2xl font-bold text-red-600">{errorStats.error_count}</div>
-                  </div>
-                  
-                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h4 className="text-sm font-medium text-gray-500 mb-2">Процент ошибок</h4>
-                    <div className="text-2xl font-bold">{errorStats.error_rate}%</div>
-                  </div>
-                </>
-              )}
-            </div>
+            selectedPlatform === 'telegram' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {errorStats && (
+                  <>
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                      <h4 className="text-sm font-medium text-gray-500 mb-2">Всего операций</h4>
+                      <div className="text-2xl font-bold">{errorStats.total_actions}</div>
+                    </div>
+                    
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                      <h4 className="text-sm font-medium text-gray-500 mb-2">Успешные</h4>
+                      <div className="text-2xl font-bold text-green-600">{errorStats.success_count}</div>
+                    </div>
+                    
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                      <h4 className="text-sm font-medium text-gray-500 mb-2">Ошибки</h4>
+                      <div className="text-2xl font-bold text-red-600">{errorStats.error_count}</div>
+                    </div>
+                    
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                      <h4 className="text-sm font-medium text-gray-500 mb-2">Процент ошибок</h4>
+                      <div className="text-2xl font-bold">{errorStats.error_rate}%</div>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <div className="text-center py-12">
+                  <div className="text-4xl mb-4">📈</div>
+                  <h4 className="text-xl font-semibold mb-2">Статистика {selectedPlatform}</h4>
+                  <p className="text-gray-500">
+                    Статистика будет доступна после подключения и активности на платформе
+                  </p>
+                </div>
+              </div>
+            )
           )}
         </main>
       </div>
