@@ -82,7 +82,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       const data = await res.json();
       console.log('🔍 UserContext: Данные пользователя:', data);
-      setUser(data);
+      
+      // ВРЕМЕННОЕ ИСПРАВЛЕНИЕ: если API возвращает массив [data, status], берем первый элемент
+      const userData = Array.isArray(data) ? data[0] : data;
+      console.log('🔍 UserContext: Обработанные данные пользователя:', userData);
+      setUser(userData);
     } catch (e) {
       console.log('❌ UserContext: Ошибка при получении профиля:', e);
       setUser(null);
