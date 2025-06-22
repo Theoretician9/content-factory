@@ -152,20 +152,105 @@ services:
   parsing-service:
     build: ./backend/parsing-service
     environment:
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_USER=user
-      - MYSQL_PASSWORD=password
-      - MYSQL_DATABASE=parsing_service
+      - POSTGRES_HOST=parsing-postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=parsing_user
+      - POSTGRES_PASSWORD=parsing_password
+      - POSTGRES_DATABASE=parsing_db
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=user
+      - RABBITMQ_PASSWORD=password
+      - VAULT_ADDR=http://vault:8201
+      - VAULT_TOKEN=${VAULT_TOKEN}
+      - VAULT_ROLE_ID=${VAULT_ROLE_ID}
+      - VAULT_SECRET_ID=${VAULT_SECRET_ID}
+      - INTEGRATION_SERVICE_URL=http://integration-service:8000
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-for-content-factory-2024}
+      - LOG_LEVEL=INFO
+      - DEBUG=false
+      - PYTHONPATH=/app
     depends_on:
-      mysql:
+      vault:
+        condition: service_healthy
+      vault-unsealer:
         condition: service_started
+      parsing-postgres:
+        condition: service_healthy
       redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+      integration-service:
         condition: service_started
     networks:
       - backend
+      - app-network
+    restart: unless-stopped
+
+  # PostgreSQL для Parsing Service
+  parsing-postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=parsing_user
+      - POSTGRES_PASSWORD=parsing_password
+      - POSTGRES_DB=parsing_db
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - parsing_postgres_data:/var/lib/postgresql/data
+      - ./backend/parsing-service/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parsing_user -d parsing_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Parsing Worker - Telegram
+  parsing-worker-telegram:
+    build: ./backend/parsing-service
+    command: celery -A app.workers.celery_app worker -Q telegram_parsing -n telegram_worker@%h --loglevel=info
+    environment:
+      - POSTGRES_HOST=parsing-postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=parsing_user
+      - POSTGRES_PASSWORD=parsing_password
+      - POSTGRES_DATABASE=parsing_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=user
+      - RABBITMQ_PASSWORD=password
+      - VAULT_ADDR=http://vault:8201
+      - VAULT_TOKEN=${VAULT_TOKEN}
+      - VAULT_ROLE_ID=${VAULT_ROLE_ID}
+      - VAULT_SECRET_ID=${VAULT_SECRET_ID}
+      - INTEGRATION_SERVICE_URL=http://integration-service:8000
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-for-content-factory-2024}
+      - LOG_LEVEL=INFO
+      - DEBUG=false
+      - PYTHONPATH=/app
+      - CELERY_WORKER_TYPE=telegram
+    depends_on:
+      vault:
+        condition: service_healthy
+      vault-unsealer:
+        condition: service_started
+      parsing-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+      parsing-service:
+        condition: service_started
+    networks:
+      - backend
+      - app-network
+    restart: unless-stopped
 
   # Integration Service
   integration-service:
@@ -547,6 +632,7 @@ volumes:
     driver: local
   frontend-static:
   integration_postgres_data:
+  parsing_postgres_data:
 
 networks:
   app-network:
