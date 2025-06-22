@@ -258,4 +258,4 @@ export const parsingApi = {
     platform: (platform: 'telegram' | 'instagram' | 'whatsapp') => 
       apiFetch(`/api/parsing/stats/${platform}`)
   }
-}; 
+};
