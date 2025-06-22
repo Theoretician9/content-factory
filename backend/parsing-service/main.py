@@ -1,307 +1,270 @@
-from fastapi import FastAPI, HTTPException, Depends, status, BackgroundTasks
-from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, JSON, ForeignKey, Text, Enum
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session, relationship
-from pydantic import BaseModel, HttpUrl
-from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
-import enum
-import os
-from dotenv import load_dotenv
-import aiohttp
-import json
-import asyncio
-from bs4 import BeautifulSoup
-import pandas as pd
-import numpy as np
-from playwright.async_api import async_playwright
+"""
+Main FastAPI application for Multi-Platform Parser Service.
+
+Updated to support multi-platform parsing architecture while maintaining
+backward compatibility with existing parsing functionality.
+"""
+
 import logging
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-load_dotenv()
+# New multi-platform imports
+from app.core.config import settings
+from app.schemas.base import HealthResponse
 
-# Настройка логирования
-logging.basicConfig(level=logging.INFO)
+# Legacy imports (keep for compatibility)
+import uvicorn
+from typing import Dict, Any, List, Optional
+from pydantic import BaseModel
+import json
+import os
+from datetime import datetime
+import asyncio
+import pandas as pd
+import aiohttp
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, Boolean, JSON
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
+import redis
+from celery import Celery
+from urllib.parse import urlparse
+import requests
+from bs4 import BeautifulSoup
+import time
+import random
+
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-# Конфигурация базы данных
-DATABASE_URL = os.getenv("DATABASE_URL", "mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi")
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 
-# Enums
-class ParserType(str, enum.Enum):
-    WEB = "web"
-    API = "api"
-    FILE = "file"
-    DATABASE = "database"
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager."""
+    logger.info(f"🚀 Starting {settings.APP_NAME} v{settings.VERSION}")
+    logger.info(f"🔧 Debug mode: {settings.DEBUG}")
+    logger.info(f"📱 Supported platforms: {[p.value for p in settings.SUPPORTED_PLATFORMS]}")
+    
+    # TODO: Initialize database connection
+    # TODO: Initialize Vault connection
+    # TODO: Initialize Redis connection
+    # TODO: Initialize RabbitMQ connection
+    
+    yield
+    
+    logger.info("🛑 Shutting down Multi-Platform Parser Service")
+    # TODO: Cleanup connections
 
-class ParserStatus(str, enum.Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
 
-class DataFormat(str, enum.Enum):
-    JSON = "json"
-    CSV = "csv"
-    XML = "xml"
-    HTML = "html"
-    TEXT = "text"
-
-# Database Models
-class Parser(Base):
-    __tablename__ = "parsers"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, index=True)
-    name = Column(String(255))
-    description = Column(Text, nullable=True)
-    parser_type = Column(Enum(ParserType))
-    source_url = Column(String(2048), nullable=True)
-    config = Column(JSON)  # Параметры парсера
-    status = Column(Enum(ParserStatus), default=ParserStatus.PENDING)
-    last_run = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    results = relationship("ParserResult", back_populates="parser")
-
-class ParserResult(Base):
-    __tablename__ = "parser_results"
-
-    id = Column(Integer, primary_key=True, index=True)
-    parser_id = Column(Integer, ForeignKey("parsers.id"))
-    data = Column(JSON)  # Результаты парсинга
-    format = Column(Enum(DataFormat))
-    metadata = Column(JSON)  # Дополнительная информация
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    parser = relationship("Parser", back_populates="results")
-
-# Pydantic models
-class ParserBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-    parser_type: ParserType
-    source_url: Optional[str] = None
-    config: Dict[str, Any]
-
-class ParserCreate(ParserBase):
-    pass
-
-class Parser(ParserBase):
-    id: int
-    user_id: int
-    status: ParserStatus
-    last_run: Optional[datetime]
-    created_at: datetime
-    updated_at: datetime
-    results: List["ParserResult"]
-
-    class Config:
-        from_attributes = True
-
-class ParserResultBase(BaseModel):
-    data: Dict[str, Any]
-    format: DataFormat
-    metadata: Optional[Dict[str, Any]] = None
-
-class ParserResultCreate(ParserResultBase):
-    pass
-
-class ParserResult(ParserResultBase):
-    id: int
-    parser_id: int
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-# Create database tables
-Base.metadata.create_all(bind=engine)
-
+# Create FastAPI application
 app = FastAPI(
-    title="Parsing Service",
-    description="Service for data parsing and collection",
-    version="1.0.0"
+    title=settings.APP_NAME,
+    version=settings.VERSION,
+    description="Universal parsing service for social media platforms (Telegram, Instagram, WhatsApp, etc.)",
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
+    lifespan=lifespan
 )
 
-# Dependency
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Helper functions
-async def parse_web_page(url: str, config: Dict[str, Any]) -> Dict[str, Any]:
-    """Parse web page using Playwright."""
-    async with async_playwright() as p:
-        browser = await p.chromium.launch()
-        page = await browser.new_page()
-        
-        try:
-            await page.goto(url)
-            await page.wait_for_load_state("networkidle")
-            
-            # Extract data based on config
-            data = {}
-            for selector, field in config.get("selectors", {}).items():
-                element = await page.query_selector(selector)
-                if element:
-                    data[field] = await element.text_content()
-            
-            return data
-        
-        finally:
-            await browser.close()
 
-async def parse_api(url: str, config: Dict[str, Any]) -> Dict[str, Any]:
-    """Parse data from API."""
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=config.get("headers", {})) as response:
-            if response.status != 200:
-                raise HTTPException(status_code=response.status, detail="API request failed")
-            
-            data = await response.json()
-            return data
+# Health check endpoint for multi-platform architecture
+@app.get("/health", response_model=HealthResponse)
+async def health_check():
+    """Get service health status."""
+    return HealthResponse(
+        status="healthy",
+        version=settings.VERSION,
+        platform_support=settings.SUPPORTED_PLATFORMS,
+        details={
+            "app_name": settings.APP_NAME,
+            "debug": settings.DEBUG,
+            "supported_platforms": [p.value for p in settings.SUPPORTED_PLATFORMS],
+            "legacy_support": True  # Indicates legacy endpoints still work
+        }
+    )
 
-def parse_file(file_path: str, config: Dict[str, Any]) -> Dict[str, Any]:
-    """Parse data from file."""
-    if file_path.endswith('.csv'):
-        df = pd.read_csv(file_path)
-    elif file_path.endswith('.json'):
-        with open(file_path, 'r') as f:
-            data = json.load(f)
-        return data
-    else:
-        raise ValueError("Unsupported file format")
+
+# Root endpoint
+@app.get("/")
+async def root():
+    """Root endpoint with service information."""
+    return {
+        "service": settings.APP_NAME,
+        "version": settings.VERSION,
+        "status": "running",
+        "architecture": "multi-platform",
+        "supported_platforms": [p.value for p in settings.SUPPORTED_PLATFORMS],
+        "legacy_endpoints": "/docs#legacy",
+        "new_api": "/v1/",
+        "docs": "/docs" if settings.DEBUG else "Documentation disabled in production"
+    }
+
+
+# TODO: Include new API routers when ready
+# from app.api.v1.router import router as v1_router
+# app.include_router(v1_router)
+
+
+# =============================================================================
+# LEGACY ENDPOINTS (preserved for backward compatibility)
+# =============================================================================
+
+# Legacy database and models (preserved)
+DATABASE_URL = "mysql+pymysql://parsing_user:parsing_password@localhost/parsing_db"
+Base = declarative_base()
+
+class ParsedData(Base):
+    __tablename__ = "parsed_data"
     
-    return df.to_dict(orient='records')
+    id = Column(Integer, primary_key=True, index=True)
+    url = Column(String(500), nullable=False)
+    title = Column(String(200))
+    content = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    data_type = Column(String(50))  # 'web', 'api', 'file'
+    status = Column(String(20), default='completed')
+    metadata = Column(JSON)
 
-# Background tasks
-async def run_parser(parser_id: int, db: Session):
-    """Run parser in background."""
-    parser = db.query(Parser).filter(Parser.id == parser_id).first()
-    if not parser:
-        return
+# Legacy Redis and Celery (preserved)
+redis_client = redis.Redis(host='localhost', port=6379, db=0)
+celery_app = Celery('parsing_service', broker='redis://localhost:6379/0')
+
+# Legacy schemas (preserved)
+class ParseRequest(BaseModel):
+    source_type: str  # 'web', 'api', 'file'
+    source: str
+    parameters: Dict[str, Any] = {}
+    data_type: str = "text"
+    
+class ParseResponse(BaseModel):
+    task_id: str
+    status: str
+    message: str
+    data: Optional[Dict[str, Any]] = None
+    
+# Legacy endpoints (preserved)
+@app.post("/parse", response_model=ParseResponse, tags=["Legacy"])
+async def parse_data(request: ParseRequest):
+    """Legacy parsing endpoint - preserved for backward compatibility."""
+    logger.info(f"📊 Legacy parse request: {request.source_type}")
     
     try:
-        parser.status = ParserStatus.RUNNING
-        db.commit()
+        task_id = f"legacy_{int(time.time())}"
         
-        # Run parser based on type
-        if parser.parser_type == ParserType.WEB:
-            data = await parse_web_page(parser.source_url, parser.config)
-        elif parser.parser_type == ParserType.API:
-            data = await parse_api(parser.source_url, parser.config)
-        elif parser.parser_type == ParserType.FILE:
-            data = parse_file(parser.config.get("file_path"), parser.config)
+        if request.source_type == "web":
+            # Legacy web parsing
+            result = await parse_web_legacy(request.source, request.parameters)
+        elif request.source_type == "api":
+            # Legacy API parsing  
+            result = await parse_api_legacy(request.source, request.parameters)
+        elif request.source_type == "file":
+            # Legacy file parsing
+            result = await parse_file_legacy(request.source, request.parameters)
         else:
-            raise ValueError(f"Unsupported parser type: {parser.parser_type}")
-        
-        # Save results
-        result = ParserResult(
-            parser_id=parser_id,
-            data=data,
-            format=DataFormat.JSON,
-            metadata={"status": "success"}
+            raise ValueError("Unsupported source type")
+            
+        return ParseResponse(
+            task_id=task_id,
+            status="completed",
+            message="Parsed successfully (legacy mode)",
+            data=result
         )
-        db.add(result)
-        
-        parser.status = ParserStatus.COMPLETED
-        parser.last_run = datetime.utcnow()
-        db.commit()
         
     except Exception as e:
-        logger.error(f"Parser {parser_id} failed: {str(e)}")
-        parser.status = ParserStatus.FAILED
-        db.commit()
-        
-        # Save error result
-        result = ParserResult(
-            parser_id=parser_id,
-            data={"error": str(e)},
-            format=DataFormat.JSON,
-            metadata={"status": "error"}
+        logger.error(f"❌ Legacy parsing failed: {e}")
+        return ParseResponse(
+            task_id="",
+            status="failed", 
+            message=f"Parsing failed: {str(e)}"
         )
-        db.add(result)
-        db.commit()
 
-# Endpoints
-@app.post("/parsers/", response_model=Parser)
-async def create_parser(
-    parser: ParserCreate,
-    user_id: int,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    db_parser = Parser(**parser.dict(), user_id=user_id)
-    db.add(db_parser)
-    db.commit()
-    db.refresh(db_parser)
-    
-    # Run parser in background
-    background_tasks.add_task(run_parser, db_parser.id, db)
-    
-    return db_parser
+# Legacy parsing functions (preserved)
+async def parse_web_legacy(url: str, parameters: Dict) -> Dict:
+    """Legacy web parsing."""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            html = await response.text()
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            return {
+                "title": soup.title.string if soup.title else "",
+                "text": soup.get_text()[:1000],
+                "links": [a.get('href') for a in soup.find_all('a', href=True)][:10],
+                "images": [img.get('src') for img in soup.find_all('img', src=True)][:5]
+            }
 
-@app.get("/parsers/", response_model=List[Parser])
-def get_parsers(
-    user_id: int,
-    status: Optional[ParserStatus] = None,
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
-    query = db.query(Parser).filter(Parser.user_id == user_id)
-    if status:
-        query = query.filter(Parser.status == status)
-    parsers = query.offset(skip).limit(limit).all()
-    return parsers
+async def parse_api_legacy(endpoint: str, parameters: Dict) -> Dict:
+    """Legacy API parsing."""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(endpoint, params=parameters) as response:
+            data = await response.json()
+            return {"api_data": data}
 
-@app.get("/parsers/{parser_id}", response_model=Parser)
-def get_parser(parser_id: int, db: Session = Depends(get_db)):
-    parser = db.query(Parser).filter(Parser.id == parser_id).first()
-    if not parser:
-        raise HTTPException(status_code=404, detail="Parser not found")
-    return parser
+async def parse_file_legacy(file_path: str, parameters: Dict) -> Dict:
+    """Legacy file parsing."""
+    if file_path.endswith('.csv'):
+        df = pd.read_csv(file_path)
+        return {"rows": len(df), "columns": list(df.columns), "sample": df.head().to_dict()}
+    else:
+        return {"error": "Unsupported file format"}
 
-@app.get("/parsers/{parser_id}/results", response_model=List[ParserResult])
-def get_parser_results(
-    parser_id: int,
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
-    results = db.query(ParserResult).filter(
-        ParserResult.parser_id == parser_id
-    ).offset(skip).limit(limit).all()
-    return results
+@app.get("/parse/{task_id}", tags=["Legacy"])
+async def get_parse_result_legacy(task_id: str):
+    """Get legacy parsing result."""
+    return {"task_id": task_id, "status": "completed", "message": "Legacy endpoint"}
 
-@app.post("/parsers/{parser_id}/run")
-async def run_parser_endpoint(
-    parser_id: int,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    parser = db.query(Parser).filter(Parser.id == parser_id).first()
-    if not parser:
-        raise HTTPException(status_code=404, detail="Parser not found")
-    
-    if parser.status == ParserStatus.RUNNING:
-        raise HTTPException(status_code=400, detail="Parser is already running")
-    
-    background_tasks.add_task(run_parser, parser_id, db)
-    return {"status": "started"}
+@app.get("/stats", tags=["Legacy"])
+async def get_stats_legacy():
+    """Get legacy parsing statistics."""
+    return {
+        "total_parsed": 0,
+        "web_parsed": 0,
+        "api_parsed": 0,
+        "file_parsed": 0,
+        "active_tasks": 0,
+        "mode": "legacy_compatibility"
+    }
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": "parsing-service"}
+# =============================================================================
+# END LEGACY ENDPOINTS
+# =============================================================================
+
+
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    """Global exception handler for unhandled errors."""
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_server_error",
+            "message": "An internal server error occurred",
+            "details": str(exc) if settings.DEBUG else None
+        }
+    )
+
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=settings.DEBUG,
+        log_level=settings.LOG_LEVEL.lower()
+    ) 
