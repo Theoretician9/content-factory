@@ -123,7 +123,7 @@ SERVICE_URLS = {
     "scenario": os.getenv("SCENARIO_SERVICE_URL", "http://92.113.146.148:8004"),
     "content": os.getenv("CONTENT_SERVICE_URL", "http://92.113.146.148:8005"),
     "invite": os.getenv("INVITE_SERVICE_URL", "http://92.113.146.148:8006"),
-    "parsing": os.getenv("PARSING_SERVICE_URL", "http://92.113.146.148:8007"),
+    "parsing": os.getenv("PARSING_SERVICE_URL", "http://parsing-service:8000"),
     "integration": os.getenv("INTEGRATION_SERVICE_URL", "http://integration-service:8000"),
 }
 
@@ -592,6 +592,70 @@ async def proxy_integration_service(request: Request, path: str):
         raise HTTPException(status_code=504, detail="Integration service timeout")
     except Exception as e:
         logger.error(json.dumps({"event": "integration_service_error", "url": target_url, "error": str(e)}))
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# Parsing Service proxy router
+@app.api_route("/api/parsing/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def proxy_parsing_service(request: Request, path: str):
+    """
+    Проксирование всех запросов к Parsing Service
+    """
+    # Подготовка URL
+    target_url = f"{SERVICE_URLS['parsing']}/api/v1/{path}"
+    
+    # Копирование headers (включая Authorization)
+    headers = {}
+    for name, value in request.headers.items():
+        if name.lower() not in ["host", "content-length"]:
+            headers[name] = value
+    
+    # Логирование для отладки авторизации
+    auth_header = headers.get("authorization", "MISSING")
+    logger.info(json.dumps({
+        "event": "proxy_to_parsing_service", 
+        "path": path, 
+        "method": request.method,
+        "auth_header": auth_header[:50] + "..." if len(auth_header) > 50 else auth_header,
+        "target_url": target_url
+    }))
+    
+    # Копирование query parameters
+    query_params = str(request.url.query)
+    if query_params:
+        target_url += f"?{query_params}"
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Получение body для POST/PUT запросов
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+            
+            # Выполнение запроса к Parsing Service
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=headers,
+                content=body
+            )
+            
+            # Возврат ответа с оригинальными headers
+            response_headers = dict(response.headers)
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers=response_headers,
+                media_type=response_headers.get("content-type")
+            )
+            
+    except httpx.ConnectError:
+        logger.error(json.dumps({"event": "parsing_service_connection_error", "url": target_url}))
+        raise HTTPException(status_code=502, detail="Parsing service unavailable")
+    except httpx.TimeoutException:
+        logger.error(json.dumps({"event": "parsing_service_timeout", "url": target_url}))
+        raise HTTPException(status_code=504, detail="Parsing service timeout")
+    except Exception as e:
+        logger.error(json.dumps({"event": "parsing_service_error", "url": target_url, "error": str(e)}))
         raise HTTPException(status_code=500, detail="Internal server error")
 
 app.include_router(api_router)
