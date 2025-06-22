@@ -60,59 +60,40 @@ class CreateParseTaskRequest(BaseSchema):
     
     platform: Platform = Field(..., description="Platform to parse")
     task_type: str = Field(..., description="Type of parsing task")
-    title: str = Field(..., min_length=1, max_length=255, description="Task title")
+    title: str = Field(..., description="Task title")
     description: Optional[str] = Field(None, description="Task description")
     config: Dict[str, Any] = Field(..., description="Platform-specific configuration")
     priority: TaskPriority = Field(TaskPriority.NORMAL, description="Task priority")
-    scheduled_at: Optional[datetime] = Field(None, description="Schedule task for later execution")
-    output_format: str = Field("json", description="Output format (json, csv, xlsx)")
-    include_metadata: bool = Field(True, description="Include metadata in results")
-    
-    @validator('task_type')
-    def validate_task_type(cls, v):
-        allowed_types = ['parse_group', 'parse_channel', 'search_communities', 'export_members']
-        if v not in allowed_types:
-            raise ValueError(f'Task type must be one of: {", ".join(allowed_types)}')
-        return v
-    
-    @validator('output_format')
-    def validate_output_format(cls, v):
-        allowed_formats = ['json', 'csv', 'xlsx']
-        if v not in allowed_formats:
-            raise ValueError(f'Output format must be one of: {", ".join(allowed_formats)}')
-        return v
+    output_format: str = Field("json", description="Output format")
 
 
 class ParseTaskResponse(BaseSchema):
     """Response schema for parse tasks."""
     
-    id: int = Field(..., description="Task database ID")
-    task_id: str = Field(..., description="Unique task identifier")
-    user_id: int = Field(..., description="User ID who created the task")
-    platform: Platform = Field(..., description="Platform being parsed")
-    task_type: str = Field(..., description="Type of parsing task")
-    title: str = Field(..., description="Task title")
-    description: Optional[str] = Field(None, description="Task description")
-    config: Dict[str, Any] = Field(..., description="Task configuration")
-    status: TaskStatus = Field(..., description="Current task status")
-    priority: TaskPriority = Field(..., description="Task priority")
-    progress: int = Field(..., description="Completion progress (0-100)")
-    total_items: int = Field(..., description="Total items to process")
-    processed_items: int = Field(..., description="Items processed so far")
-    created_at: datetime = Field(..., description="Task creation timestamp")
-    started_at: Optional[datetime] = Field(None, description="Task start timestamp")
-    completed_at: Optional[datetime] = Field(None, description="Task completion timestamp")
-    error_message: Optional[str] = Field(None, description="Error message if failed")
-    result_count: int = Field(..., description="Number of results found")
-    output_format: str = Field(..., description="Output format")
+    id: int
+    task_id: str
+    user_id: int
+    platform: Platform
+    task_type: str
+    title: str
+    description: Optional[str]
+    status: TaskStatus
+    priority: TaskPriority
+    progress: int
+    total_items: int
+    processed_items: int
+    created_at: datetime
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    error_message: Optional[str]
+    result_count: int
 
 
 class UpdateParseTaskRequest(BaseSchema):
     """Request schema for updating parse tasks."""
     
-    status: Optional[TaskStatus] = Field(None, description="New task status")
-    priority: Optional[TaskPriority] = Field(None, description="New task priority")
-    scheduled_at: Optional[datetime] = Field(None, description="Reschedule task")
+    status: Optional[TaskStatus] = None
+    priority: Optional[TaskPriority] = None
 
 
 class ParseTaskListParams(BaseSchema):
