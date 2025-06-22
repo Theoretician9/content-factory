@@ -159,23 +159,42 @@
 - **Platform-specific данные**: JSON поле для специфичных атрибутов платформы
 - **Mapping система**: преобразование данных платформы в универсальный формат
 
-### 5. **Обработка ошибок и лимитов**
-- **Telegram ошибки**: FloodWaitError, SessionExpiredError, AuthKeyError, ChannelPrivateError
-- **Rate limiting**: 200-300 запросов без задержки, затем адаптивная пауза
-- **Безопасные лимиты**: 100 сообщений/сек, dynamic backoff при превышении
-- **Resume functionality**: Сохранение offset и позиции в Redis
+### 5. **Обработка ошибок и лимитов (платформо-зависимая)**
 
-### 6. **Поиск сообществ**
-- **Endpoint**: `GET /parser/search?q=keywords&offset=0`
-- **Методы поиска**: Telethon search_public_chats, GetDialogs
+#### 5.1. **Telegram ошибки**
+- FloodWaitError, SessionExpiredError, AuthKeyError, ChannelPrivateError
+- Rate limiting: 200-300 запросов без задержки, затем адаптивная пауза
+- Безопасные лимиты: 100 сообщений/сек, dynamic backoff при превышении
+
+#### 5.2. **Instagram ошибки (планируется)**
+- Instagram API rate limits, Account banned, Content unavailable
+- Rate limiting: Instagram Graph API лимиты
+- Безопасные лимиты: согласно Instagram API документации
+
+#### 5.3. **Универсальная обработка**
+- **Классификация ошибок**: recoverable vs fatal для каждой платформы
+- **Resume functionality**: Сохранение offset и позиции в Redis для всех платформ
+- **Platform-specific retry**: Индивидуальные стратегии повторов для каждой платформы
+
+### 6. **Поиск сообществ (мультиплатформенный)**
+- **Endpoint**: `GET /parser/search?q=keywords&platform=telegram&offset=0`
+- **Поддерживаемые платформы**: telegram, instagram, whatsapp и др.
+- **Методы поиска**:
+  - **Telegram**: Telethon search_public_chats, GetDialogs
+  - **Instagram**: Instagram Basic Display API (планируется)
+  - **WhatsApp**: WhatsApp Business API (планируется)
 - **Пагинация**: По 100 результатов, поддержка скролла
-- **Фильтрация**: Исключение приватных, пустых, недоступных чатов
+- **Фильтрация**: Исключение приватных, пустых, недоступных объектов
+- **Унифицированный ответ**: Общий формат результатов для всех платформ
 
-### 7. **Выгрузка результатов**
-- **Endpoint**: `GET /parser/result/{task_id}`
+### 7. **Выгрузка результатов (универсальная)**
+- **Endpoint**: `GET /parser/result/{task_id}?format=json`
 - **Форматы**: CSV, JSON, NDJSON
-- **Структура данных**: user_id, username, full_name, status, join_date, source_link
-- **Метаданные**: дата парсинга, используемый аккаунт, статус задачи
+- **Универсальная структура данных**:
+  - platform, platform_id, username, display_name, status, join_date, source_link
+  - platform_specific_data (JSON с уникальными для платформы полями)
+- **Метаданные**: дата парсинга, используемый аккаунт, статус задачи, платформа
+- **Platform filtering**: Возможность фильтрации результатов по платформе
 
 ## Безопасность и мониторинг
 
@@ -199,13 +218,18 @@
 ## Технологический стек
 
 - **Язык**: Python 3.11+
-- **API Framework**: FastAPI
-- **Очереди**: Celery + RabbitMQ
-- **Telegram клиент**: Telethon (основной), Pyrogram (fallback)
-- **Базы данных**: PostgreSQL (основная), Redis (состояния)
-- **Безопасность**: Vault (сессии), HTTPS, JWT
-- **Мониторинг**: Prometheus, Grafana, ELK Stack
+- **API Framework**: FastAPI с модульной системой роутеров
+- **Очереди**: Celery + RabbitMQ (с разделением по платформам)
+- **Platform клиенты**:
+  - **Telegram**: Telethon (основной), Pyrogram (fallback)
+  - **Instagram**: Instagram Basic Display API (планируется)
+  - **WhatsApp**: WhatsApp Business API (планируется)
+- **Базы данных**: PostgreSQL (универсальная схема), Redis (состояния с namespacing)
+- **Архитектурные паттерны**: Strategy pattern для платформ, Factory pattern для адаптеров
+- **Безопасность**: Vault (сессии всех платформ), HTTPS, JWT
+- **Мониторинг**: Prometheus, Grafana, ELK Stack (с метриками по платформам)
 - **Контейнеризация**: Docker, docker-compose
+- **Plugin система**: Динамическая загрузка модулей платформ
 
 ## Текущее состояние реализации
 
