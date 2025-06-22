@@ -155,7 +155,7 @@ Base = declarative_base()
 
 class ParsedData(Base):
     __tablename__ = "parsed_data"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     url = Column(String(500), nullable=False)
     title = Column(String(200))

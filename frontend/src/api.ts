@@ -147,7 +147,7 @@ export const integrationApi = {
     getErrorStats: (daysBack = 7) => 
       apiFetch(`/api/integrations/telegram/stats/errors?days_back=${daysBack}`)
   }
-};
+}; 
 
 // API функции для Parsing Service (мультиплатформенный)
 export const parsingApi = {
