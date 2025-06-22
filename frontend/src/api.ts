@@ -147,4 +147,115 @@ export const integrationApi = {
     getErrorStats: (daysBack = 7) => 
       apiFetch(`/api/integrations/telegram/stats/errors?days_back=${daysBack}`)
   }
+};
+
+// API функции для Parsing Service (мультиплатформенный)
+export const parsingApi = {
+  // Health checks
+  health: () => apiFetch('/api/parsing/health'),
+  
+  // Задачи парсинга
+  tasks: {
+    // Создание задачи парсинга
+    create: (data: {
+      platform: 'telegram' | 'instagram' | 'whatsapp';
+      links: string[];
+      priority?: 'low' | 'normal' | 'high';
+      settings?: {
+        max_depth?: number;
+        include_media?: boolean;
+        date_from?: string;
+        date_to?: string;
+      };
+    }) => apiFetch('/api/parsing/tasks', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+    
+    // Получение списка задач
+    list: (params: {
+      platform?: 'telegram' | 'instagram' | 'whatsapp';
+      status?: 'pending' | 'running' | 'completed' | 'failed' | 'paused';
+      page?: number;
+      limit?: number;
+    } = {}) => {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, value.toString());
+        }
+      });
+      return apiFetch(`/api/parsing/tasks?${searchParams}`);
+    },
+    
+    // Получение конкретной задачи
+    get: (taskId: string) => apiFetch(`/api/parsing/tasks/${taskId}`),
+    
+    // Пауза задачи
+    pause: (taskId: string) => apiFetch(`/api/parsing/tasks/${taskId}/pause`, {
+      method: 'POST'
+    }),
+    
+    // Возобновление задачи  
+    resume: (taskId: string) => apiFetch(`/api/parsing/tasks/${taskId}/resume`, {
+      method: 'POST'
+    }),
+    
+    // Удаление задачи
+    delete: (taskId: string) => apiFetch(`/api/parsing/tasks/${taskId}`, {
+      method: 'DELETE'
+    })
+  },
+  
+  // Результаты парсинга
+  results: {
+    // Получение результатов задачи
+    get: (taskId: string, params: {
+      format?: 'json' | 'csv' | 'ndjson';
+      platform_filter?: string;
+      limit?: number;
+      offset?: number;
+    } = {}) => {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, value.toString());
+        }
+      });
+      return apiFetch(`/api/parsing/results/${taskId}?${searchParams}`);
+    },
+    
+    // Экспорт результатов
+    export: (taskId: string, format: 'json' | 'csv' | 'ndjson') => 
+      apiFetch(`/api/parsing/results/${taskId}/export?format=${format}`)
+  },
+  
+  // Поиск сообществ
+  search: {
+    // Поиск сообществ по ключевым словам
+    communities: (params: {
+      platform: 'telegram' | 'instagram' | 'whatsapp';
+      query: string;
+      offset?: number;
+      limit?: number;
+    }) => {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, value.toString());
+        }
+      });
+      return apiFetch(`/api/parsing/search?${searchParams}`);
+    }
+  },
+  
+  // Статистика
+  stats: {
+    // Общая статистика по платформам
+    overview: () => apiFetch('/api/parsing/stats'),
+    
+    // Статистика по конкретной платформе
+    platform: (platform: 'telegram' | 'instagram' | 'whatsapp') => 
+      apiFetch(`/api/parsing/stats/${platform}`)
+  }
 }; 
