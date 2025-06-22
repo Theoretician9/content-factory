@@ -13,7 +13,12 @@ from fastapi.responses import JSONResponse
 
 # New multi-platform imports
 from app.core.config import settings
+from app.core.metrics import start_metrics_server, get_metrics_collector
+from app.database import init_database
 from app.schemas.base import HealthResponse
+
+# API routers
+from app.api.v1.endpoints import health
 
 # Legacy imports (keep for compatibility)
 import uvicorn
@@ -51,15 +56,22 @@ async def lifespan(app: FastAPI):
     logger.info(f"🔧 Debug mode: {settings.DEBUG}")
     logger.info(f"📱 Supported platforms: {[p.value for p in settings.SUPPORTED_PLATFORMS]}")
     
-    # TODO: Initialize database connection
-    # TODO: Initialize Vault connection
-    # TODO: Initialize Redis connection
-    # TODO: Initialize RabbitMQ connection
+    # Initialize database
+    db_initialized = await init_database()
+    if not db_initialized:
+        logger.error("❌ Failed to initialize database")
+    
+    # Start metrics server
+    metrics_started = start_metrics_server()
+    if metrics_started:
+        logger.info(f"📊 Metrics available at http://localhost:{settings.METRICS_PORT}")
+    
+    # Initialize metrics
+    metrics = get_metrics_collector()
     
     yield
     
     logger.info("🛑 Shutting down Multi-Platform Parser Service")
-    # TODO: Cleanup connections
 
 
 # Create FastAPI application
@@ -109,15 +121,28 @@ async def root():
         "status": "running",
         "architecture": "multi-platform",
         "supported_platforms": [p.value for p in settings.SUPPORTED_PLATFORMS],
-        "legacy_endpoints": "/docs#legacy",
-        "new_api": "/v1/",
-        "docs": "/docs" if settings.DEBUG else "Documentation disabled in production"
+        "api": {
+            "health": "/health",
+            "v1": "/v1/",
+            "docs": "/docs" if settings.DEBUG else "disabled"
+        },
+        "legacy_endpoints": {
+            "parse": "/parse",
+            "stats": "/stats"
+        },
+        "monitoring": {
+            "metrics": f"http://localhost:{settings.METRICS_PORT}" if settings.PROMETHEUS_METRICS_ENABLED else "disabled"
+        }
     }
 
 
-# TODO: Include new API routers when ready
-# from app.api.v1.router import router as v1_router
-# app.include_router(v1_router)
+# Include new API routers
+app.include_router(health.router, prefix="/v1/health", tags=["Health"])
+
+# TODO: Include other routers when ready
+# from app.api.v1.endpoints import tasks, results
+# app.include_router(tasks.router, prefix="/v1/tasks", tags=["Parse Tasks"])
+# app.include_router(results.router, prefix="/v1/results", tags=["Parse Results"])
 
 
 # =============================================================================
