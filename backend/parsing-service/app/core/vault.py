@@ -21,50 +21,33 @@ logger = logging.getLogger(__name__)
 class VaultClient:
     """Client for HashiCorp Vault integration with AppRole authentication."""
     
-    def __init__(
-        self, 
-        vault_addr: str = None,
-        vault_token: str = None, 
-        role_id: str = None,
-        secret_id: str = None
-    ):
-        self.vault_addr = vault_addr or settings.VAULT_ADDR
-        self.vault_token = None
+    def __init__(self):
+        self.vault_addr = settings.VAULT_ADDR
         self.client = hvac.Client(url=self.vault_addr)
+        self.vault_token = None
         
-        # AppRole Authentication (preferred)
-        self.role_id = role_id or settings.VAULT_ROLE_ID
-        self.secret_id = secret_id or settings.VAULT_SECRET_ID
+        # AppRole Authentication
+        self.role_id = settings.VAULT_ROLE_ID
+        self.secret_id = settings.VAULT_SECRET_ID
         
-        # Fallback token authentication
-        if not self.role_id or not self.secret_id:
-            self.vault_token = vault_token or settings.VAULT_TOKEN
-            if not self.vault_token:
-                raise ValueError("Vault token is required when AppRole credentials are not provided")
-        else:
+        if self.role_id and self.secret_id:
             self._authenticate_with_approle()
+        else:
+            self.vault_token = settings.VAULT_TOKEN
+            self.client.token = self.vault_token
     
     def _authenticate_with_approle(self):
         """Authenticate with Vault using AppRole."""
         try:
-            logger.info("🔐 Authenticating with Vault using AppRole...")
-            auth_data = {
-                "role_id": self.role_id,
-                "secret_id": self.secret_id
-            }
+            auth_data = {"role_id": self.role_id, "secret_id": self.secret_id}
             response = self.client.auth.approle.login(**auth_data)
             self.vault_token = response["auth"]["client_token"]
             self.client.token = self.vault_token
             logger.info("✅ AppRole authentication successful")
         except Exception as e:
             logger.error(f"❌ AppRole authentication failed: {e}")
-            # Fallback to token auth if available
-            if settings.VAULT_TOKEN:
-                logger.info("🔄 Falling back to token authentication...")
-                self.vault_token = settings.VAULT_TOKEN
-                self.client.token = self.vault_token
-            else:
-                raise
+            self.vault_token = settings.VAULT_TOKEN
+            self.client.token = self.vault_token
     
     def get_secret(self, path: str) -> Optional[Dict[str, Any]]:
         """
