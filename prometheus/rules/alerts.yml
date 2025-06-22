@@ -66,4 +66,33 @@ groups:
           severity: warning
         annotations:
           summary: "Проблемы с интеграциями"
-          description: "Обнаружены проблемы при проверке здоровья интеграций" 
+          description: "Обнаружены проблемы при проверке здоровья интеграций"
+
+  - name: parsing_alerts
+    rules:
+      - alert: ParsingTaskQueueHigh
+        expr: parsing_queue_size{platform="telegram"} > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Большая очередь задач парсинга {{ $labels.platform }}"
+          description: "Размер очереди задач парсинга {{ $labels.platform }} превышает 100"
+
+      - alert: ParsingTasksFailed
+        expr: rate(parsing_tasks_failed_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокий уровень ошибок в задачах парсинга"
+          description: "Более 10% задач парсинга завершаются с ошибкой"
+
+      - alert: ParsingWorkerDown
+        expr: up{job="parsing-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Сервис парсинга недоступен"
+          description: "Parsing Service не отвечает более 2 минут" 

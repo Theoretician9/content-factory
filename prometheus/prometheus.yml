@@ -36,6 +36,11 @@ scrape_configs:
       - targets: ['integration-service:8000']
     metrics_path: '/metrics'
 
+  - job_name: 'parsing-service'
+    static_configs:
+      - targets: ['parsing-service:8000']
+    metrics_path: '/metrics'
+
   - job_name: 'task-worker'
     static_configs:
       - targets: ['task-worker:8000']
