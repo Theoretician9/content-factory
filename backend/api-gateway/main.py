@@ -600,8 +600,16 @@ async def proxy_parsing_service(request: Request, path: str):
     """
     Проксирование всех запросов к Parsing Service
     """
-    # Подготовка URL
-    target_url = f"{SERVICE_URLS['parsing']}/api/v1/{path}"
+    # Правильная логика роутинга для parsing-service
+    if path == "health":
+        # Health check на корневом уровне
+        target_url = f"{SERVICE_URLS['parsing']}/health"
+    elif path.startswith("v1/"):
+        # API v1 endpoints
+        target_url = f"{SERVICE_URLS['parsing']}/{path}"
+    else:
+        # Остальные endpoints направляем в v1
+        target_url = f"{SERVICE_URLS['parsing']}/v1/{path}"
     
     # Копирование headers (включая Authorization)
     headers = {}
