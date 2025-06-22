@@ -212,7 +212,7 @@ services:
   # Parsing Worker - Telegram
   parsing-worker-telegram:
     build: ./backend/parsing-service
-    command: celery -A app.workers.celery_app worker -Q telegram_parsing -n telegram_worker@%h --loglevel=info
+    command: python -m celery -A app.workers.celery_app worker -Q telegram_parsing -n telegram_worker@%h --loglevel=info
     environment:
       - POSTGRES_HOST=parsing-postgres
       - POSTGRES_PORT=5432
