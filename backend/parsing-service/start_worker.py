@@ -16,6 +16,8 @@ if __name__ == "__main__":
     queue = f"{worker_type}_parsing"
     worker_name = f"{worker_type}_worker@%h"
     
+    print(f"🚀 Starting {worker_type} worker for queue: {queue}")
+    
     # Start worker
     celery_app.worker_main([
         'worker',
