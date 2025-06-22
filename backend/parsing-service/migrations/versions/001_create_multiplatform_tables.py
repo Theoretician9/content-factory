@@ -19,13 +19,43 @@ depends_on = None
 def upgrade() -> None:
     """Create multi-platform parsing tables."""
     
-    # Create Platform enum
-    platform_enum = postgresql.ENUM(
-        'telegram', 'instagram', 'whatsapp', 'facebook', 
-        'twitter', 'linkedin', 'tiktok', 'youtube',
-        name='platform', create_type=False
+    # Create enums
+    op.execute("CREATE TYPE platform AS ENUM ('telegram', 'instagram', 'whatsapp', 'facebook')")
+    op.execute("CREATE TYPE taskstatus AS ENUM ('pending', 'running', 'completed', 'failed')")
+    op.execute("CREATE TYPE taskpriority AS ENUM ('low', 'normal', 'high')")
+    
+    # Parse Tasks table
+    op.create_table(
+        'parse_tasks',
+        sa.Column('id', sa.Integer(), primary_key=True),
+        sa.Column('created_at', sa.DateTime(), nullable=False),
+        sa.Column('updated_at', sa.DateTime(), nullable=False),
+        sa.Column('task_id', sa.String(36), nullable=False, unique=True),
+        sa.Column('user_id', sa.Integer(), nullable=False),
+        sa.Column('platform', postgresql.ENUM('telegram', 'instagram', 'whatsapp', 'facebook', name='platform'), nullable=False),
+        sa.Column('task_type', sa.String(50), nullable=False),
+        sa.Column('title', sa.String(255), nullable=False),
+        sa.Column('description', sa.Text()),
+        sa.Column('config', sa.JSON(), nullable=False),
+        sa.Column('status', postgresql.ENUM('pending', 'running', 'completed', 'failed', name='taskstatus'), nullable=False),
+        sa.Column('priority', postgresql.ENUM('low', 'normal', 'high', name='taskpriority'), nullable=False),
+        sa.Column('progress', sa.Integer(), default=0),
+        sa.Column('result_count', sa.Integer(), default=0)
     )
-    platform_enum.create(op.get_bind())
+    
+    # Parse Results table
+    op.create_table(
+        'parse_results',
+        sa.Column('id', sa.Integer(), primary_key=True),
+        sa.Column('created_at', sa.DateTime(), nullable=False),
+        sa.Column('task_id', sa.Integer(), sa.ForeignKey('parse_tasks.id')),
+        sa.Column('platform', postgresql.ENUM('telegram', 'instagram', 'whatsapp', 'facebook', name='platform'), nullable=False),
+        sa.Column('source_id', sa.String(255), nullable=False),
+        sa.Column('content_text', sa.Text()),
+        sa.Column('author_username', sa.String(255)),
+        sa.Column('content_created_at', sa.DateTime()),
+        sa.Column('raw_data', sa.JSON())
+    )
     
     # Create TaskStatus enum
     task_status_enum = postgresql.ENUM(
