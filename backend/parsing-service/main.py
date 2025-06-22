@@ -139,10 +139,10 @@ async def root():
 # Include new API routers
 app.include_router(health.router, prefix="/v1/health", tags=["Health"])
 
-# TODO: Include other routers when ready
-# from app.api.v1.endpoints import tasks, results
-# app.include_router(tasks.router, prefix="/v1/tasks", tags=["Parse Tasks"])
-# app.include_router(results.router, prefix="/v1/results", tags=["Parse Results"])
+# Include other routers
+from app.api.v1.endpoints import tasks, results
+app.include_router(tasks.router, prefix="/v1/tasks", tags=["Parse Tasks"])
+app.include_router(results.router, prefix="/v1/results", tags=["Parse Results"])
 
 
 # =============================================================================
