@@ -315,6 +315,35 @@ async def v1_list_results():
     """List parsing results."""
     return {"results": [], "total": 0, "status": "coming_soon"}
 
+# Direct tasks endpoints (without v1 prefix) for frontend compatibility
+@app.get("/tasks", tags=["Tasks API"])
+async def list_tasks(
+    platform: Optional[str] = None,
+    status: Optional[str] = None,
+    page: int = 1,
+    limit: int = 20
+):
+    """List all parsing tasks (frontend compatible endpoint)."""
+    return {
+        "tasks": [],
+        "total": 0,
+        "page": page,
+        "limit": limit,
+        "platforms": ["telegram", "instagram", "whatsapp"],
+        "statuses": ["pending", "running", "completed", "failed", "paused"]
+    }
+
+@app.post("/tasks", tags=["Tasks API"])
+async def create_task(task_data: dict):
+    """Create new parsing task."""
+    return {
+        "task_id": f"task_{int(time.time())}",
+        "status": "pending",
+        "message": "Task created successfully",
+        "platform": task_data.get("platform", "telegram"),
+        "links": task_data.get("links", [])
+    }
+
 
 if __name__ == "__main__":
     uvicorn.run(

@@ -628,6 +628,9 @@ async def proxy_parsing_service(request: Request, path: str):
     elif path.startswith("v1/"):
         # API v1 endpoints
         target_url = f"{SERVICE_URLS['parsing']}/{path}"
+    elif path in ["tasks", "results", "search", "stats"]:
+        # Прямые endpoints без v1 префикса
+        target_url = f"{SERVICE_URLS['parsing']}/{path}"
     else:
         # Остальные endpoints направляем в v1
         target_url = f"{SERVICE_URLS['parsing']}/v1/{path}"
@@ -688,6 +691,32 @@ async def proxy_parsing_service(request: Request, path: str):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 app.include_router(api_router)
+
+# Заглушки для сервисов которые еще не реализованы
+@app.get("/api/billing/tariff")
+async def get_billing_tariff():
+    """Заглушка для billing service."""
+    return {"plan": "free", "status": "active", "limits": {"parsing": 100}}
+
+@app.get("/api/mailing/status") 
+async def get_mailing_status():
+    """Заглушка для mailing service."""
+    return {"status": "inactive", "campaigns": 0}
+
+@app.get("/api/autocall/status")
+async def get_autocall_status():
+    """Заглушка для autocall service."""
+    return {"status": "inactive", "calls": 0}
+
+@app.get("/api/funnels/status")
+async def get_funnels_status():
+    """Заглушка для funnels service."""
+    return {"status": "inactive", "funnels": 0}
+
+@app.get("/api/analytics/summary")
+async def get_analytics_summary():
+    """Заглушка для analytics service."""
+    return {"users": 1, "tasks": 0, "integrations": 1}
 
 if __name__ == "__main__":
     import uvicorn
