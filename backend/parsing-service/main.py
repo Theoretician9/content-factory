@@ -62,12 +62,12 @@ async def lifespan(app: FastAPI):
         logger.error("❌ Failed to initialize database")
     
     # Start metrics server
-    metrics_started = start_metrics_server()
-    if metrics_started:
-        logger.info(f"📊 Metrics available at http://localhost:{settings.METRICS_PORT}")
+    # metrics_started = start_metrics_server()  # Временно отключено
+    # if metrics_started:
+    #     logger.info(f"📊 Metrics available at http://localhost:{settings.METRICS_PORT}")
     
     # Initialize metrics
-    metrics = get_metrics_collector()
+    # metrics = get_metrics_collector()  # Временно отключено
     
     yield
     
