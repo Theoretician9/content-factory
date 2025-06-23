@@ -212,6 +212,27 @@ async def services_health_check(request: Request) -> Dict[str, Dict[str, str]]:
                 }
     return health_status
 
+@api_router.get("/parsing/health")
+async def parsing_health_direct():
+    """
+    Direct health check for parsing service (debug)
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(f"{SERVICE_URLS['parsing']}/health")
+            return {
+                "status": "healthy" if response.status_code == 200 else "unhealthy", 
+                "status_code": response.status_code,
+                "url": SERVICE_URLS['parsing'],
+                "response": response.json() if response.status_code == 200 else response.text
+            }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "url": SERVICE_URLS['parsing']
+        }
+
 @api_router.get("/csrf-token")
 async def get_csrf_token():
     """
