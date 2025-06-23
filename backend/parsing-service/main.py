@@ -318,6 +318,67 @@ async def v1_list_results():
 # In-memory storage for created tasks (for demo purposes)
 created_tasks = []
 
+# Function to check available Telegram accounts from integration-service
+async def check_telegram_accounts():
+    """Check available Telegram accounts from integration-service."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Проверяем через API Gateway
+            async with session.get("http://api-gateway:8000/api/integrations/telegram/accounts?active_only=true") as response:
+                if response.status == 200:
+                    accounts = await response.json()
+                    return len(accounts) > 0
+                else:
+                    logger.warning(f"⚠️ Не удалось получить Telegram аккаунты: {response.status}")
+                    return False
+    except Exception as e:
+        logger.error(f"❌ Ошибка проверки Telegram аккаунтов: {e}")
+        return False
+
+# Background task to process pending tasks
+async def process_pending_tasks():
+    """Process pending tasks if Telegram accounts are available."""
+    telegram_available = await check_telegram_accounts()
+    
+    if not telegram_available:
+        logger.warning("⚠️ Нет доступных Telegram аккаунтов для запуска задач")
+        return
+    
+    # Найти pending задачи для Telegram
+    pending_tasks = [task for task in created_tasks if task["status"] == "pending" and task["platform"] == "telegram"]
+    
+    for task in pending_tasks[:1]:  # Запускаем по одной задаче за раз
+        task["status"] = "running"
+        task["progress"] = 10  # Начальный прогресс
+        task["updated_at"] = datetime.utcnow().isoformat()
+        
+        logger.info(f"🚀 Запущена задача парсинга: {task['id']} для {task['link']}")
+        
+        # Имитация прогресса (в реальной версии здесь будет Celery worker)
+        import asyncio
+        asyncio.create_task(simulate_task_progress(task))
+
+async def simulate_task_progress(task):
+    """Simulate task progress for demo purposes."""
+    try:
+        await asyncio.sleep(5)  # Имитация работы
+        task["progress"] = 50
+        task["updated_at"] = datetime.utcnow().isoformat()
+        
+        await asyncio.sleep(5)  # Продолжение работы
+        task["progress"] = 100
+        task["status"] = "completed"
+        task["completed_at"] = datetime.utcnow().isoformat()
+        task["result_count"] = random.randint(10, 100)
+        task["updated_at"] = datetime.utcnow().isoformat()
+        
+        logger.info(f"✅ Завершена задача парсинга: {task['id']}")
+    except Exception as e:
+        task["status"] = "failed"
+        task["error_message"] = str(e)
+        task["updated_at"] = datetime.utcnow().isoformat()
+        logger.error(f"❌ Ошибка в задаче парсинга: {task['id']} - {e}")
+
 # Direct tasks endpoints (without v1 prefix) for frontend compatibility
 @app.get("/tasks", tags=["Tasks API"])
 async def list_tasks(
@@ -383,6 +444,9 @@ async def create_task(task_data: dict):
         
         logger.info(f"🆕 Создана задача парсинга: {task_id} для {link}")
     
+    # Автоматически запускаем обработку pending задач
+    asyncio.create_task(process_pending_tasks())
+    
     return {
         "task_ids": created_task_ids,
         "status": "pending", 
@@ -421,6 +485,60 @@ async def v1_get_parsing_status():
             "whatsapp": {"tasks": 0, "status": "ready"}
         }
     }
+
+# Task management endpoints
+@app.get("/tasks/{task_id}", tags=["Tasks API"])
+async def get_task(task_id: str):
+    """Get specific parsing task."""
+    task = next((t for t in created_tasks if t["id"] == task_id), None)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+@app.delete("/tasks/{task_id}", tags=["Tasks API"])
+async def delete_task(task_id: str):
+    """Delete parsing task."""
+    global created_tasks
+    task_index = next((i for i, t in enumerate(created_tasks) if t["id"] == task_id), None)
+    if task_index is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    deleted_task = created_tasks.pop(task_index)
+    logger.info(f"🗑️ Удалена задача парсинга: {task_id}")
+    
+    return {"message": "Task deleted successfully", "task_id": task_id}
+
+@app.post("/tasks/{task_id}/pause", tags=["Tasks API"])
+async def pause_task(task_id: str):
+    """Pause parsing task."""
+    task = next((t for t in created_tasks if t["id"] == task_id), None)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task["status"] not in ["running", "pending"]:
+        raise HTTPException(status_code=400, detail="Cannot pause task in current status")
+    
+    task["status"] = "paused"
+    task["updated_at"] = datetime.utcnow().isoformat()
+    
+    logger.info(f"⏸️ Приостановлена задача парсинга: {task_id}")
+    return {"message": "Task paused successfully", "task_id": task_id, "status": "paused"}
+
+@app.post("/tasks/{task_id}/resume", tags=["Tasks API"])
+async def resume_task(task_id: str):
+    """Resume parsing task."""
+    task = next((t for t in created_tasks if t["id"] == task_id), None)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task["status"] != "paused":
+        raise HTTPException(status_code=400, detail="Cannot resume task that is not paused")
+    
+    task["status"] = "pending"
+    task["updated_at"] = datetime.utcnow().isoformat()
+    
+    logger.info(f"▶️ Возобновлена задача парсинга: {task_id}")
+    return {"message": "Task resumed successfully", "task_id": task_id, "status": "pending"}
 
 if __name__ == "__main__":
     uvicorn.run(
