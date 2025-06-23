@@ -359,6 +359,22 @@ async def get_parsing_status():
         }
     }
 
+# V1 Status endpoint for API Gateway compatibility
+@app.get("/v1/status", tags=["V1 API"])
+async def v1_get_parsing_status():
+    """Get parsing service status for dashboard (v1 API)."""
+    return {
+        "status": "healthy",
+        "active_tasks": 0,
+        "completed_tasks": 0,
+        "failed_tasks": 0,
+        "platform_stats": {
+            "telegram": {"tasks": 0, "status": "ready"},
+            "instagram": {"tasks": 0, "status": "ready"},
+            "whatsapp": {"tasks": 0, "status": "ready"}
+        }
+    }
+
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
