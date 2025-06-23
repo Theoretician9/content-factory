@@ -129,4 +129,31 @@ class BaseCRUDService(Generic[ModelType]):
             return obj
         except Exception as e:
             logger.error(f"Error updating {self.model.__name__} {obj_id}: {e}")
+            raise
+    
+    async def get_all_active(
+        self,
+        session: AsyncSession
+    ) -> List[ModelType]:
+        """Получение всех активных объектов (для internal endpoints)"""
+        try:
+            query = select(self.model)
+            
+            # Проверяем есть ли поле is_active
+            if hasattr(self.model, 'is_active'):
+                query = query.where(self.model.is_active == True)
+                logger.info(f"🔧 get_all_active for {self.model.__name__}: filtering by is_active=True")
+            else:
+                logger.info(f"🔧 get_all_active for {self.model.__name__}: no is_active field, returning all")
+            
+            query = query.order_by(self.model.created_at.desc())
+            
+            result = await session.execute(query)
+            items = result.scalars().all()
+            
+            logger.info(f"🔧 get_all_active result for {self.model.__name__}: found {len(items)} items")
+            
+            return items
+        except Exception as e:
+            logger.error(f"Error getting all active {self.model.__name__}: {e}")
             raise 

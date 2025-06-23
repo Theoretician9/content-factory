@@ -22,6 +22,10 @@ interface ParseTask {
   completed_at?: string;
   error_message?: string;
   result_count?: number;
+  processed_messages?: number;
+  estimated_total?: number;
+  processed_media?: number;
+  parsing_stats?: { average_speed: number };
 }
 
 interface ParseResult {
@@ -573,6 +577,22 @@ const Parsing = () => {
                                 {task.progress}%
                               </span>
                             </div>
+                            {/* Показываем детальную статистику для активных задач */}
+                            {(task.status === 'running' || task.status === 'completed') && task.processed_messages && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                {task.processed_messages}{task.estimated_total ? `/${task.estimated_total}` : ''} сообщений
+                                {task.processed_media && task.processed_media > 0 && (
+                                  <span>, {task.processed_media} медиа</span>
+                                )}
+                                {task.status === 'completed' && task.parsing_stats && (
+                                  <div className="mt-1">
+                                    <span className="text-green-600">
+                                      {task.parsing_stats.average_speed} сообщ/сек
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                             {formatDate(task.created_at)}

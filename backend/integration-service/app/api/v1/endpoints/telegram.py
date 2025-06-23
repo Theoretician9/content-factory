@@ -347,4 +347,41 @@ async def get_error_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка получения статистики: {str(e)}"
+        )
+
+# Internal endpoint for parsing-service (no auth required)
+@router.get("/internal/active-accounts")
+async def get_active_accounts_internal(
+    session: AsyncSession = Depends(get_async_session),
+    telegram_service: TelegramService = Depends(get_telegram_service)
+):
+    """
+    Internal endpoint для получения всех активных Telegram аккаунтов.
+    Используется parsing-service для проверки доступности аккаунтов.
+    БЕЗ АВТОРИЗАЦИИ - только для внутренних сервисов!
+    """
+    try:
+        logger.info("🔧 Internal request: getting all active Telegram accounts for parsing service")
+        
+        # Получаем все активные сессии без фильтрации по пользователю
+        all_sessions = await telegram_service.session_service.get_all_active(session)
+        
+        result = [
+            {
+                "id": str(s.id),
+                "user_id": s.user_id,
+                "phone": s.phone,
+                "is_active": s.is_active,
+                "created_at": s.created_at.isoformat() if s.created_at else None
+            }
+            for s in all_sessions
+        ]
+        
+        logger.info(f"🔧 Returning {len(result)} active accounts for parsing service")
+        return result
+    except Exception as e:
+        logger.error(f"Error getting active accounts for parsing service: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка получения активных аккаунтов: {str(e)}"
         ) 
