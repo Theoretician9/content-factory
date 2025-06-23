@@ -214,7 +214,7 @@ services:
   # Parsing Worker - Telegram
   parsing-worker-telegram:
     build: ./backend/parsing-service
-    command: python worker.py
+    command: python start_worker.py
     environment:
       - POSTGRES_HOST=parsing-postgres
       - POSTGRES_PORT=5432
