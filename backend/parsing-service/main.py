@@ -167,7 +167,7 @@ class ParsedData(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     data_type = Column(String(50))  # 'web', 'api', 'file'
     status = Column(String(20), default='completed')
-    metadata = Column(JSON)
+    parse_metadata = Column(JSON)
 
 # Legacy Redis and Celery (preserved)
 redis_client = redis.Redis(host='localhost', port=6379, db=0)

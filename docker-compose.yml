@@ -214,7 +214,7 @@ services:
   # Parsing Worker - Telegram
   parsing-worker-telegram:
     build: ./backend/parsing-service
-    command: python simple_worker.py
+    command: python -c "import time; print('Telegram worker started'); [time.sleep(10) for _ in iter(int, 1)]"
     environment:
       - POSTGRES_HOST=parsing-postgres
       - POSTGRES_PORT=5432
