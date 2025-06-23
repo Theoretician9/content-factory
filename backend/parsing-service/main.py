@@ -315,6 +315,9 @@ async def v1_list_results():
     """List parsing results."""
     return {"results": [], "total": 0, "status": "coming_soon"}
 
+# In-memory storage for created tasks (for demo purposes)
+created_tasks = []
+
 # Direct tasks endpoints (without v1 prefix) for frontend compatibility
 @app.get("/tasks", tags=["Tasks API"])
 async def list_tasks(
@@ -324,9 +327,22 @@ async def list_tasks(
     limit: int = 20
 ):
     """List all parsing tasks (frontend compatible endpoint)."""
+    # Фильтрация задач по платформе и статусу
+    filtered_tasks = created_tasks
+    
+    if platform:
+        filtered_tasks = [task for task in filtered_tasks if task.get("platform") == platform]
+    if status:
+        filtered_tasks = [task for task in filtered_tasks if task.get("status") == status]
+    
+    # Пагинация
+    start = (page - 1) * limit
+    end = start + limit
+    paginated_tasks = filtered_tasks[start:end]
+    
     return {
-        "tasks": [],
-        "total": 0,
+        "tasks": paginated_tasks,
+        "total": len(filtered_tasks),
         "page": page,
         "limit": limit,
         "platforms": ["telegram", "instagram", "whatsapp"],
@@ -336,10 +352,41 @@ async def list_tasks(
 @app.post("/tasks", tags=["Tasks API"])
 async def create_task(task_data: dict):
     """Create new parsing task."""
+    import uuid
+    from datetime import datetime
+    
+    # Создаем задачи для каждой ссылки
+    created_task_ids = []
+    
+    for link in task_data.get("links", []):
+        task_id = f"task_{int(time.time())}_{str(uuid.uuid4())[:8]}"
+        
+        # Создаем объект задачи
+        new_task = {
+            "id": task_id,
+            "user_id": 1,  # Временное значение
+            "platform": task_data.get("platform", "telegram"),
+            "link": link,
+            "task_type": "parse",
+            "priority": task_data.get("priority", "normal"),
+            "status": "pending",
+            "progress": 0,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+            "settings": task_data.get("settings", {}),
+            "result_count": 0
+        }
+        
+        # Добавляем в in-memory хранилище
+        created_tasks.append(new_task)
+        created_task_ids.append(task_id)
+        
+        logger.info(f"🆕 Создана задача парсинга: {task_id} для {link}")
+    
     return {
-        "task_id": f"task_{int(time.time())}",
-        "status": "pending",
-        "message": "Task created successfully",
+        "task_ids": created_task_ids,
+        "status": "pending", 
+        "message": f"Создано задач: {len(created_task_ids)}",
         "platform": task_data.get("platform", "telegram"),
         "links": task_data.get("links", [])
     }
