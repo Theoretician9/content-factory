@@ -116,8 +116,8 @@ class Settings(BaseSettings):
     PARSE_RATE_LIMIT_PER_ACCOUNT: int = 100  # messages per second
     
     # Monitoring
-    PROMETHEUS_METRICS_ENABLED: bool = True
-    METRICS_PORT: int = 8001
+    PROMETHEUS_METRICS_ENABLED: bool = False  # Temporarily disabled due to CollectorRegistry conflict
+    METRICS_PORT: int = 8003  # Changed from 8001 to avoid conflict with integration-service
     
     # Supported platforms (for validation)
     SUPPORTED_PLATFORMS: List[Platform] = [

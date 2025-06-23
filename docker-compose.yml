@@ -151,6 +151,8 @@ services:
   # Parsing Service
   parsing-service:
     build: ./backend/parsing-service
+    ports:
+      - "127.0.0.1:8002:8000"
     environment:
       - POSTGRES_HOST=parsing-postgres
       - POSTGRES_PORT=5432
@@ -212,7 +214,7 @@ services:
   # Parsing Worker - Telegram
   parsing-worker-telegram:
     build: ./backend/parsing-service
-    command: sh -c "cd /app && python -c 'import sys; sys.path.insert(0, \"/app\"); from app.workers.celery_app import celery_app; celery_app.worker_main([\"worker\", \"-Q\", \"telegram_parsing\", \"-n\", \"telegram_worker@%h\", \"--loglevel=info\"])'"
+    command: python worker.py
     environment:
       - POSTGRES_HOST=parsing-postgres
       - POSTGRES_PORT=5432

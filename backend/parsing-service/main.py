@@ -13,7 +13,8 @@ from fastapi.responses import JSONResponse
 
 # New multi-platform imports
 from app.core.config import settings
-# from app.core.metrics import start_metrics_server, get_metrics_collector  # Временно отключено
+# Temporarily disable metrics to fix CollectorRegistry duplication error
+# from app.core.metrics import start_metrics_server, get_metrics_collector
 from app.database import init_database
 from app.schemas.base import HealthResponse
 
