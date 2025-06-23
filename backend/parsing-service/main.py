@@ -19,7 +19,7 @@ from app.database import init_database
 from app.schemas.base import HealthResponse
 
 # API routers
-from app.api.v1.endpoints import health
+from app.api.v1.endpoints.health import router as health_router
 
 # Legacy imports (keep for compatibility)
 import uvicorn
@@ -138,12 +138,13 @@ async def root():
 
 
 # Include new API routers
-app.include_router(health.router, prefix="/v1/health", tags=["Health"])
+app.include_router(health_router, prefix="/v1/health", tags=["Health"])
 
 # Include other routers
-from app.api.v1.endpoints import tasks, results
-app.include_router(tasks.router, prefix="/v1/tasks", tags=["Parse Tasks"])
-app.include_router(results.router, prefix="/v1/results", tags=["Parse Results"])
+from app.api.v1.endpoints.tasks import router as tasks_router
+from app.api.v1.endpoints.results import router as results_router
+app.include_router(tasks_router, prefix="/v1/tasks", tags=["Parse Tasks"])
+app.include_router(results_router, prefix="/v1/results", tags=["Parse Results"])
 
 
 # =============================================================================
