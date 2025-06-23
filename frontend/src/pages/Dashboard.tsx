@@ -18,7 +18,7 @@ const cards: CardConfig[] = [
     title: 'Текущий тариф',
     fetch: api.getTariff,
     fields: [
-      { label: 'Название тарифа', key: 'name' },
+      { label: 'Название тарифа', key: 'plan' },
     ],
   },
   {
@@ -27,7 +27,7 @@ const cards: CardConfig[] = [
     fetch: api.getMailingStatus,
     fields: [
       { label: 'Статус', key: 'status' },
-      { label: 'Добавлено', key: 'added' },
+      { label: 'Добавлено', key: 'campaigns' },
       { label: 'Сообщений отправлено', key: 'sent' },
     ],
   },
@@ -46,7 +46,7 @@ const cards: CardConfig[] = [
     fetch: api.getAutocallStatus,
     fields: [
       { label: 'Статус', key: 'status' },
-      { label: 'Звонков сегодня', key: 'calls_today' },
+      { label: 'Звонков сегодня', key: 'calls' },
     ],
   },
   {
@@ -55,7 +55,7 @@ const cards: CardConfig[] = [
     fetch: api.getFunnelsStatus,
     fields: [
       { label: 'Статус', key: 'status' },
-      { label: 'Активных воронок', key: 'active' },
+      { label: 'Активных воронок', key: 'funnels' },
     ],
   },
   {
@@ -64,7 +64,7 @@ const cards: CardConfig[] = [
     fetch: api.getParsingStatus,
     fields: [
       { label: 'Статус', key: 'status' },
-      { label: 'Задач в очереди', key: 'queue' },
+      { label: 'Активных задач', key: 'active_tasks' },
     ],
   },
   {
@@ -73,7 +73,7 @@ const cards: CardConfig[] = [
     fetch: api.getAnalytics,
     fields: [
       { label: 'Статус', key: 'status' },
-      { label: 'Показателей', key: 'metrics' },
+      { label: 'Показателей', key: 'users' },
     ],
   },
 ];

@@ -344,6 +344,20 @@ async def create_task(task_data: dict):
         "links": task_data.get("links", [])
     }
 
+@app.get("/status", tags=["Status API"])
+async def get_parsing_status():
+    """Get parsing service status for dashboard."""
+    return {
+        "status": "healthy",
+        "active_tasks": 0,
+        "completed_tasks": 0,
+        "failed_tasks": 0,
+        "platform_stats": {
+            "telegram": {"tasks": 0, "status": "ready"},
+            "instagram": {"tasks": 0, "status": "ready"},
+            "whatsapp": {"tasks": 0, "status": "ready"}
+        }
+    }
 
 if __name__ == "__main__":
     uvicorn.run(

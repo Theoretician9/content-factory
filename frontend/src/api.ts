@@ -85,7 +85,7 @@ export const api = {
   },
   getAutocallStatus: () => apiFetch('/api/autocall/status'),
   getFunnelsStatus: () => apiFetch('/api/funnels/status'),
-  getParsingStatus: () => apiFetch('/api/parsing/health'),
+  getParsingStatus: () => apiFetch('/api/parsing/status'),
   getAnalytics: () => apiFetch('/api/analytics/summary'),
   // ...добавлять новые сервисы по мере необходимости
 };
