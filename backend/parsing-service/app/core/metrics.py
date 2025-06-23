@@ -4,55 +4,83 @@ Prometheus metrics for multi-platform parsing service.
 
 import logging
 from typing import Dict, Any
-from prometheus_client import Counter, Histogram, Gauge, Info, start_http_server
+from prometheus_client import Counter, Histogram, Gauge, Info, start_http_server, CollectorRegistry, REGISTRY
 
 from .config import settings, Platform, TaskStatus
 
 logger = logging.getLogger(__name__)
+
+# Use a custom registry to avoid conflicts
+metrics_registry = CollectorRegistry()
 
 # =============================================================================
 # TASK METRICS
 # =============================================================================
 
 # Task counters by platform and status
-tasks_total = Counter(
-    'parsing_tasks_total',
-    'Total number of parsing tasks',
-    ['platform', 'task_type', 'status', 'user_id']
-)
+try:
+    tasks_total = Counter(
+        'parsing_tasks_total',
+        'Total number of parsing tasks',
+        ['platform', 'task_type', 'status', 'user_id'],
+        registry=metrics_registry
+    )
+except ValueError:
+    # Metric already exists, get it from registry
+    tasks_total = None
 
-tasks_created = Counter(
-    'parsing_tasks_created_total',
-    'Total number of created parsing tasks',
-    ['platform', 'task_type']
-)
+try:
+    tasks_created = Counter(
+        'parsing_tasks_created_total',
+        'Total number of created parsing tasks',
+        ['platform', 'task_type'],
+        registry=metrics_registry
+    )
+except ValueError:
+    tasks_created = None
 
-tasks_completed = Counter(
-    'parsing_tasks_completed_total',
-    'Total number of completed parsing tasks',
-    ['platform', 'task_type']
-)
+try:
+    tasks_completed = Counter(
+        'parsing_tasks_completed_total',
+        'Total number of completed parsing tasks',
+        ['platform', 'task_type'],
+        registry=metrics_registry
+    )
+except ValueError:
+    tasks_completed = None
 
-tasks_failed = Counter(
-    'parsing_tasks_failed_total',
-    'Total number of failed parsing tasks',
-    ['platform', 'task_type', 'error_type']
-)
+try:
+    tasks_failed = Counter(
+        'parsing_tasks_failed_total',
+        'Total number of failed parsing tasks',
+        ['platform', 'task_type', 'error_type'],
+        registry=metrics_registry
+    )
+except ValueError:
+    tasks_failed = None
 
 # Task duration metrics
-task_duration = Histogram(
-    'parsing_task_duration_seconds',
-    'Time spent processing parsing tasks',
-    ['platform', 'task_type'],
-    buckets=[1, 5, 10, 30, 60, 300, 600, 1800, 3600, 7200]  # 1s to 2h
-)
+try:
+    task_duration = Histogram(
+        'parsing_task_duration_seconds',
+        'Time spent processing parsing tasks',
+        ['platform', 'task_type'],
+        buckets=[1, 5, 10, 30, 60, 300, 600, 1800, 3600, 7200],  # 1s to 2h
+        registry=metrics_registry
+    )
+except ValueError:
+    task_duration = None
 
 # Currently running tasks
-active_tasks = Gauge(
-    'parsing_active_tasks',
-    'Number of currently active parsing tasks',
-    ['platform', 'task_type']
-)
+try:
+    active_tasks = Gauge(
+        'parsing_active_tasks',
+        'Number of currently active parsing tasks',
+        ['platform', 'task_type'],
+        registry=metrics_registry
+    )
+except ValueError:
+    active_tasks = None
 
 # =============================================================================
 # PARSING RESULTS METRICS
