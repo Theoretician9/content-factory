@@ -1,0 +1,37 @@
+# Exclude problematic files that contain null bytes
+*.pyc
+__pycache__/
+.git/
+.gitignore
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Exclude potentially problematic binary files
+*.dll
+*.so
+*.dylib
+*.bin
+*.exe
+
+# Exclude IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Exclude testing and development files
+test_*
+*_test.py
+.pytest_cache/
+
+# Exclude documentation
+README*.md
+*.md
+docs/
+
+# Exclude deployment files
+Dockerfile*
+docker-compose*.yml
+.dockerignore 

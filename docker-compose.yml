@@ -214,7 +214,7 @@ services:
   # Parsing Worker - Telegram
   parsing-worker-telegram:
     build: ./backend/parsing-service
-    command: python -c "import sys; print('Python:', sys.executable); import celery; print('Celery version:', celery.__version__); from app.workers.celery_app import celery_app; print('Celery app:', celery_app); import time; time.sleep(60)"
+    command: python -c "print('Testing imports...'); import sys; sys.path.insert(0, '.'); from app.workers.celery_app import celery_app; print('Import successful:', celery_app); import time; time.sleep(60)"
     environment:
       - POSTGRES_HOST=parsing-postgres
       - POSTGRES_PORT=5432
