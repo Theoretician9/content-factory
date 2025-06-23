@@ -151,8 +151,6 @@ services:
   # Parsing Service
   parsing-service:
     build: ./backend/parsing-service
-    ports:
-      - "127.0.0.1:8002:8000"
     environment:
       - POSTGRES_HOST=parsing-postgres
       - POSTGRES_PORT=5432
