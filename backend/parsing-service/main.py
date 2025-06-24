@@ -324,7 +324,7 @@ async def check_telegram_accounts():
     try:
         async with aiohttp.ClientSession() as session:
             # Используем internal endpoint без авторизации
-            async with session.get("http://api-gateway:8000/api/integrations/telegram/internal/active-accounts") as response:
+            async with session.get("http://integration-service:8000/api/v1/telegram/internal/active-accounts") as response:
                 if response.status == 200:
                     accounts = await response.json()
                     logger.info(f"🔧 Получено активных Telegram аккаунтов: {len(accounts)}")
