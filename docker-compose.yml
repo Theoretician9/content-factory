@@ -212,7 +212,7 @@ services:
   # Parsing Worker - Telegram
   parsing-worker-telegram:
     build: ./backend/parsing-service
-    command: python -c "print('Starting worker...'); import time; import sys; print('Python version:', sys.version); print('Working directory:', '/app'); print('Worker started, sleeping...'); [print('Worker heartbeat:', time.strftime('%Y-%m-%d %H:%M:%S')) or time.sleep(30) for _ in iter(int, 1)]"
+    command: python -m celery worker -A app.workers.celery_app:app --loglevel=info --queues=telegram_queue --concurrency=2 --hostname=telegram-worker@%h
     environment:
       - POSTGRES_HOST=parsing-postgres
       - POSTGRES_PORT=5432
