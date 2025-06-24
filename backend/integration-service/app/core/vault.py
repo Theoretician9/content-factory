@@ -99,4 +99,16 @@ class IntegrationVaultClient:
             return response['data']['keys']
         except:
             # Возвращаем пустой список при ошибке
-            return [] 
+            return []
+
+
+# Global vault client instance
+_vault_client = None
+
+
+def get_vault_client() -> IntegrationVaultClient:
+    """Get global Integration Vault client instance."""
+    global _vault_client
+    if _vault_client is None:
+        _vault_client = IntegrationVaultClient()
+    return _vault_client 
