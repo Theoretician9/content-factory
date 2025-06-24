@@ -21,6 +21,7 @@ from ....schemas.telegram import (
 from ....schemas.base import BaseResponse, ErrorResponse, PaginationParams
 from ....schemas.integration_logs import IntegrationLogResponse
 from ....core.auth import get_user_id_from_request
+from ....core.vault import get_vault_client
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -356,29 +357,71 @@ async def get_active_accounts_internal(
     telegram_service: TelegramService = Depends(get_telegram_service)
 ):
     """
-    Internal endpoint для получения всех активных Telegram аккаунтов.
-    Используется parsing-service для проверки доступности аккаунтов.
+    Internal endpoint для получения всех активных Telegram аккаунтов с полными данными для подключения.
+    Используется parsing-service для реального парсинга.
     БЕЗ АВТОРИЗАЦИИ - только для внутренних сервисов!
     """
     try:
-        logger.info("🔧 Internal request: getting all active Telegram accounts for parsing service")
+        logger.info("🔧 Internal request: getting all active Telegram accounts with full credentials for parsing service")
         
         # Получаем все активные сессии без фильтрации по пользователю
         all_sessions = await telegram_service.session_service.get_all_active(session)
         
-        result = [
-            {
-                "id": str(s.id),
-                "user_id": s.user_id,
-                "phone": s.phone,
-                "is_active": s.is_active,
-                "created_at": s.created_at.isoformat() if s.created_at else None
-            }
-            for s in all_sessions
-        ]
+        # Получаем API ключи из Vault
+        vault_client = get_vault_client()
         
-        logger.info(f"🔧 Returning {len(result)} active accounts for parsing service")
+        try:
+            # Получаем API ключи
+            telegram_config = vault_client.get_secret("kv/data/integrations/telegram")
+            api_id = telegram_config.get('api_id') if telegram_config else None
+            api_hash = telegram_config.get('api_hash') if telegram_config else None
+            
+            if not api_id or not api_hash:
+                logger.error("❌ No Telegram API credentials found in Vault")
+                api_id = "23699038"  # Fallback
+                api_hash = "055c48aee9080db331639a87f85617b4"  # Fallback
+                
+        except Exception as vault_error:
+            logger.warning(f"⚠️ Vault error, using fallback credentials: {vault_error}")
+            api_id = "23699038"  # Fallback 
+            api_hash = "055c48aee9080db331639a87f85617b4"  # Fallback
+        
+        result = []
+        for s in all_sessions:
+            try:
+                # Получаем session файл из Vault
+                session_data = None
+                try:
+                    session_path = f"kv/data/integrations/telegram/sessions/{s.id}"
+                    session_secret = vault_client.get_secret(session_path)
+                    session_data = session_secret.get('session_data') if session_secret else None
+                except Exception as session_error:
+                    logger.warning(f"⚠️ Could not get session file for {s.id}: {session_error}")
+                
+                account_data = {
+                    "id": str(s.id),
+                    "user_id": s.user_id,
+                    "phone": s.phone,
+                    "is_active": s.is_active,
+                    "created_at": s.created_at.isoformat() if s.created_at else None,
+                    # Добавляем данные для подключения
+                    "api_id": api_id,
+                    "api_hash": api_hash,
+                    "session_id": str(s.id),
+                    "session_data": session_data,  # Session файл из Vault
+                    "connection_ready": session_data is not None
+                }
+                result.append(account_data)
+                
+            except Exception as account_error:
+                logger.error(f"❌ Error processing account {s.id}: {account_error}")
+                continue
+        
+        logger.info(f"🔧 Returning {len(result)} active accounts with full credentials for parsing service")
+        logger.info(f"📊 Accounts with session data: {len([a for a in result if a['connection_ready']])}")
+        
         return result
+        
     except Exception as e:
         logger.error(f"Error getting active accounts for parsing service: {e}")
         raise HTTPException(
