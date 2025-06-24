@@ -80,18 +80,27 @@ class RealParsingService:
         try:
             logger.info(f"📱 Starting REAL Telegram parsing for {link}")
             
-            # Step 1: Authenticate with first available account
+            # Step 1: Get accounts with credentials from integration-service
             accounts = await self._get_available_telegram_accounts()
             if not accounts:
                 raise Exception("No available Telegram accounts for parsing")
             
-            # Use first available account
+            # Use first available account with complete credentials
             account = accounts[0]
+            
+            # Проверяем что у нас есть все необходимые данные
+            if not account.get('connection_ready', False):
+                raise Exception(f"Account {account.get('id')} is not ready for connection")
+            
+            # Формируем credentials для TelegramAdapter
             credentials = {
-                'session_id': account.get('session_id'),
+                'session_id': account.get('session_id') or account.get('id'),
                 'api_id': account.get('api_id'),
-                'api_hash': account.get('api_hash')
+                'api_hash': account.get('api_hash'),
+                'session_data': account.get('session_data')
             }
+            
+            logger.info(f"🔑 Using account credentials: session_id={credentials['session_id']}, api_id={credentials['api_id']}")
             
             # Step 2: Authenticate adapter
             authenticated = await self.telegram_adapter.authenticate(
@@ -100,7 +109,7 @@ class RealParsingService:
             )
             
             if not authenticated:
-                raise Exception("Failed to authenticate Telegram adapter")
+                raise Exception("Failed to authenticate Telegram adapter with integration-service credentials")
             
             # Step 3: Validate target
             validation_result = await self.telegram_adapter.validate_targets([link])
