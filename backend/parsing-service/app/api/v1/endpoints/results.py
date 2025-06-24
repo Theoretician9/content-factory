@@ -151,6 +151,7 @@ def generate_mock_results(task_id: str) -> List[dict]:
             "platform_id": str(random.randint(100000000, 999999999)),
             "username": user.get("username"),
             "display_name": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
+            "author_phone": f"+1{random.randint(1000000000, 9999999999)}" if random.random() > 0.6 else None,  # 40% имеют открытые номера
             "created_at": created_time.isoformat(),
             "platform_specific_data": {
                 "user_id": random.randint(100000000, 999999999),
