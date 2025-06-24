@@ -87,8 +87,8 @@ class Settings(BaseSettings):
     VAULT_ROLE_ID: Optional[str] = None
     VAULT_SECRET_ID: Optional[str] = None
     
-    # JWT Authentication
-    JWT_SECRET_KEY: str = "super-secret-jwt-key-for-parsing-service"
+    # JWT Authentication (будет загружена из Vault)
+    JWT_SECRET_KEY: Optional[str] = None
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 30
     
@@ -126,6 +126,25 @@ class Settings(BaseSettings):
         # Platform.INSTAGRAM,  # Phase 2
         # Platform.WHATSAPP,   # Phase 3
     ]
+    
+    def __init__(self, **values):
+        super().__init__(**values)
+        # Получаем JWT секрет из Vault
+        try:
+            # Используем VaultClient для получения JWT секрета (импорт внутри функции для избежания циклических импортов)
+            from .vault import get_vault_client
+            vault_client = get_vault_client()
+            secret_data = vault_client.get_secret("kv/data/jwt")
+            if secret_data and 'secret_key' in secret_data:
+                self.JWT_SECRET_KEY = secret_data['secret_key']
+                print(f"✅ {self.APP_NAME}: JWT секрет получен из Vault")
+            else:
+                raise Exception("JWT secret not found in Vault")
+        except Exception as e:
+            # Fallback к environment variable
+            self.JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'super-secret-jwt-key-for-parsing-service')
+            print(f"⚠️ {self.APP_NAME}: используется JWT секрет из ENV")
+            print(f"⚠️ Причина: {type(e).__name__}: {str(e)}")
     
     class Config:
         env_file = ".env"
