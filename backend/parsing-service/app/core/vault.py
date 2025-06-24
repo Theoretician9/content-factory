@@ -12,8 +12,20 @@ import logging
 from typing import Optional, Dict, Any
 import hvac
 from hvac.exceptions import VaultError
+from enum import Enum
+from .config import settings
 
-from .config import settings, Platform
+
+class Platform(str, Enum):
+    """Supported social media platforms."""
+    TELEGRAM = "telegram"
+    INSTAGRAM = "instagram"
+    WHATSAPP = "whatsapp"
+    FACEBOOK = "facebook"
+    TWITTER = "twitter"
+    LINKEDIN = "linkedin"
+    TIKTOK = "tiktok"
+    YOUTUBE = "youtube"
 
 logger = logging.getLogger(__name__)
 
