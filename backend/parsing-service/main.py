@@ -357,7 +357,7 @@ async def process_pending_tasks():
         
         # Имитация прогресса (в реальной версии здесь будет Celery worker)
         import asyncio
-        asyncio.create_task(simulate_task_progress(task))
+        asyncio.create_task(execute_real_parsing(task))
 
 async def execute_real_parsing(task):
     """Execute REAL parsing with database storage instead of simulation."""
