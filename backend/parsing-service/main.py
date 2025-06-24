@@ -720,8 +720,18 @@ async def export_task_results(task_id: str, format: str = "json"):
         import io
         
         async with AsyncSessionLocal() as db_session:
+            # Convert task_id to integer for database compatibility
+            try:
+                # Extract numeric part from task_id like "task_1750768096_ed4d1724"
+                if '_' in task_id:
+                    task_id_int = int(task_id.split('_')[1])
+                else:
+                    task_id_int = hash(task_id) % 1000000
+            except:
+                task_id_int = hash(task_id) % 1000000
+            
             # Get all results for the task
-            query = select(ParseResult).where(ParseResult.task_id == task_id).order_by(ParseResult.created_at.desc())
+            query = select(ParseResult).where(ParseResult.task_id == task_id_int).order_by(ParseResult.created_at.desc())
             result = await db_session.execute(query)
             results = result.scalars().all()
             
