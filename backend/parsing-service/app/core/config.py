@@ -128,22 +128,38 @@ class Settings(BaseSettings):
     
     def __init__(self, **values):
         super().__init__(**values)
-        # Получаем JWT секрет из Vault с lazy import
+        # Получаем JWT секрет из Vault с улучшенной обработкой ошибок
+        self.JWT_SECRET_KEY = None
+        
         try:
             # Lazy import для избежания циклических импортов
+            # Импорт внутри функции предотвращает circular import
             from .vault import get_vault_client
+            
             vault_client = get_vault_client()
             secret_data = vault_client.get_secret("kv/data/jwt")
+            
             if secret_data and 'secret_key' in secret_data:
                 self.JWT_SECRET_KEY = secret_data['secret_key']
                 print(f"✅ {self.APP_NAME}: JWT секрет получен из Vault")
             else:
-                raise Exception("JWT secret not found in Vault")
-        except Exception as e:
-            # Fallback к environment variable
+                raise Exception("JWT secret not found in Vault kv/data/jwt path")
+                
+        except ImportError as e:
+            # Проблема с импортом vault модуля
+            print(f"⚠️ {self.APP_NAME}: Ошибка импорта vault модуля: {e}")
             self.JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'super-secret-jwt-key-for-parsing-service')
-            print(f"⚠️ {self.APP_NAME}: используется JWT секрет из ENV")
-            print(f"⚠️ Причина: {type(e).__name__}: {str(e)}")
+            
+        except Exception as e:
+            # Любые другие ошибки Vault (соединение, аутентификация, отсутствие данных)
+            print(f"⚠️ {self.APP_NAME}: Vault недоступен ({type(e).__name__}: {str(e)})")
+            print(f"⚠️ {self.APP_NAME}: Используется JWT секрет из переменных окружения")
+            self.JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'super-secret-jwt-key-for-parsing-service')
+        
+        # Проверяем что JWT секрет установлен
+        if not self.JWT_SECRET_KEY:
+            self.JWT_SECRET_KEY = 'super-secret-jwt-key-for-parsing-service'
+            print(f"⚠️ {self.APP_NAME}: Используется дефолтный JWT секрет")
     
     class Config:
         env_file = ".env"

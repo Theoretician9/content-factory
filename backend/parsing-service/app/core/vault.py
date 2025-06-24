@@ -12,21 +12,8 @@ import logging
 from typing import Optional, Dict, Any
 import hvac
 from hvac.exceptions import VaultError
-from enum import Enum
 
 logger = logging.getLogger(__name__)
-
-
-class Platform(str, Enum):
-    """Supported social media platforms."""
-    TELEGRAM = "telegram"
-    INSTAGRAM = "instagram"
-    WHATSAPP = "whatsapp"
-    FACEBOOK = "facebook"
-    TWITTER = "twitter"
-    LINKEDIN = "linkedin"
-    TIKTOK = "tiktok"
-    YOUTUBE = "youtube"
 
 
 class VaultClient:
@@ -82,17 +69,17 @@ class VaultClient:
             logger.error(f"❌ Unexpected error getting secret from {path}: {e}")
             return None
     
-    def get_platform_api_keys(self, platform: Platform) -> Optional[Dict[str, str]]:
+    def get_platform_api_keys(self, platform: str) -> Optional[Dict[str, str]]:
         """
         Get API keys for specific platform.
         
         Args:
-            platform: Platform (telegram, instagram, whatsapp)
+            platform: Platform name (telegram, instagram, whatsapp)
             
         Returns:
             Dictionary with API keys or None
         """
-        if platform == Platform.TELEGRAM:
+        if platform == "telegram":
             # For Telegram, get API keys from integration-service secret (where they actually are)
             secret_data = self.get_secret("integration-service")
             if secret_data:
@@ -102,7 +89,7 @@ class VaultClient:
                 }
         else:
             # For other platforms, use the standard path
-            path = f"integrations/{platform.value}"
+            path = f"integrations/{platform}"
             secret_data = self.get_secret(path)
             if secret_data:
                 return {
