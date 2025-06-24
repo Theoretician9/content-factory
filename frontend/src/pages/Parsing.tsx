@@ -35,6 +35,7 @@ interface ParseResult {
   platform_id: string;
   username?: string;
   display_name: string;
+  author_phone?: string;
   platform_specific_data: any;
   created_at: string;
 }
@@ -728,6 +729,7 @@ const Parsing = () => {
                             <th className="text-left py-2">ID</th>
                             <th className="text-left py-2">Username</th>
                             <th className="text-left py-2">Имя</th>
+                            <th className="text-left py-2">Телефон</th>
                             <th className="text-left py-2">Дата</th>
                           </tr>
                         </thead>
@@ -741,6 +743,15 @@ const Parsing = () => {
                               <td className="py-2">{result.platform_id}</td>
                               <td className="py-2">{result.username || '-'}</td>
                               <td className="py-2">{result.display_name}</td>
+                              <td className="py-2">
+                                {result.author_phone ? (
+                                  <span className="text-blue-600 font-mono text-xs">
+                                    {result.author_phone}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400">Скрыт</span>
+                                )}
+                              </td>
                               <td className="py-2">{formatDate(result.created_at)}</td>
                             </tr>
                           ))}
