@@ -213,6 +213,23 @@ class VaultClient:
             logger.error(f"❌ Vault health check failed: {e}")
             return False
 
+    async def get_telegram_api_keys(self) -> Dict[str, str]:
+        """
+        Получить API ключи Telegram из Vault
+        Returns:
+            Dict containing api_id and api_hash
+        """
+        try:
+            # Используем тот же путь что и в integration-service: integrations/telegram
+            secret_data = await self.get_secret("integrations/telegram")
+            return {
+                'api_id': secret_data.get('api_id'),
+                'api_hash': secret_data.get('api_hash')
+            }
+        except Exception as e:
+            self.logger.error(f"Failed to get Telegram API keys: {e}")
+            return {}
+
 
 # Global Vault client instance
 _vault_client: Optional[VaultClient] = None
