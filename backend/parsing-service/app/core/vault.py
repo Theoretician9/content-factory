@@ -80,14 +80,23 @@ class VaultClient:
         Returns:
             Dictionary with API keys or None
         """
-        path = f"integrations/{platform.value}"
-        secret_data = self.get_secret(path)
-        if secret_data:
-            # Extract API keys from the secret data
-            return {
-                'api_id': secret_data.get('api_id'),
-                'api_hash': secret_data.get('api_hash')
-            }
+        if platform == Platform.TELEGRAM:
+            # For Telegram, get API keys from integration-service secret (where they actually are)
+            secret_data = self.get_secret("integration-service")
+            if secret_data:
+                return {
+                    'api_id': secret_data.get('telegram_api_id'),
+                    'api_hash': secret_data.get('telegram_api_hash')
+                }
+        else:
+            # For other platforms, use the standard path
+            path = f"integrations/{platform.value}"
+            secret_data = self.get_secret(path)
+            if secret_data:
+                return {
+                    'api_id': secret_data.get('api_id'),
+                    'api_hash': secret_data.get('api_hash')
+                }
         return None
     
     def get_telegram_session(self, session_id: str) -> Optional[bytes]:
@@ -212,23 +221,6 @@ class VaultClient:
         except Exception as e:
             logger.error(f"❌ Vault health check failed: {e}")
             return False
-
-    async def get_telegram_api_keys(self) -> Dict[str, str]:
-        """
-        Получить API ключи Telegram из Vault
-        Returns:
-            Dict containing api_id and api_hash
-        """
-        try:
-            # Используем тот же путь что и в integration-service: integrations/telegram
-            secret_data = await self.get_secret("integrations/telegram")
-            return {
-                'api_id': secret_data.get('api_id'),
-                'api_hash': secret_data.get('api_hash')
-            }
-        except Exception as e:
-            self.logger.error(f"Failed to get Telegram API keys: {e}")
-            return {}
 
 
 # Global Vault client instance
