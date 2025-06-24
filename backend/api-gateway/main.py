@@ -628,8 +628,8 @@ async def proxy_parsing_service(request: Request, path: str):
     elif path.startswith("v1/"):
         # API v1 endpoints
         target_url = f"{SERVICE_URLS['parsing']}/{path}"
-    elif path in ["tasks", "results", "search", "stats", "status"]:
-        # Прямые endpoints без v1 префикса
+    elif path in ["tasks", "results", "search", "stats", "status"] or path.startswith(("tasks/", "results/", "search/", "stats/", "status/")):
+        # Прямые endpoints без v1 префикса (включая вложенные пути)
         target_url = f"{SERVICE_URLS['parsing']}/{path}"
     else:
         # Остальные endpoints направляем в v1
