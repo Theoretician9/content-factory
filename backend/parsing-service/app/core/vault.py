@@ -32,20 +32,20 @@ class Platform(str, Enum):
 class VaultClient:
     """Client for HashiCorp Vault integration with AppRole authentication."""
     
-    def __init__(self, vault_addr: str = None, vault_token: str = None, role_id: str = None, secret_id: str = None):
+    def __init__(self):
         # Use environment variables directly to avoid circular import
-        self.vault_addr = vault_addr or os.getenv('VAULT_ADDR', 'http://vault:8201')
+        self.vault_addr = os.getenv('VAULT_ADDR', 'http://vault:8201')
         self.client = hvac.Client(url=self.vault_addr)
         self.vault_token = None
         
         # AppRole Authentication
-        self.role_id = role_id or os.getenv('VAULT_ROLE_ID')
-        self.secret_id = secret_id or os.getenv('VAULT_SECRET_ID')
+        self.role_id = os.getenv('VAULT_ROLE_ID')
+        self.secret_id = os.getenv('VAULT_SECRET_ID')
         
         if self.role_id and self.secret_id:
             self._authenticate_with_approle()
         else:
-            self.vault_token = vault_token or os.getenv('VAULT_TOKEN')
+            self.vault_token = os.getenv('VAULT_TOKEN')
             self.client.token = self.vault_token
     
     def _authenticate_with_approle(self):
