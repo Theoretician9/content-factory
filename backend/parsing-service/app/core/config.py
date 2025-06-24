@@ -137,13 +137,13 @@ class Settings(BaseSettings):
             from .vault import get_vault_client
             
             vault_client = get_vault_client()
-            secret_data = vault_client.get_secret("kv/data/jwt")
+            secret_data = vault_client.get_secret("jwt")  # Исправлен путь: kv/data/jwt будет добавлено автоматически
             
             if secret_data and 'secret_key' in secret_data:
                 self.JWT_SECRET_KEY = secret_data['secret_key']
                 print(f"✅ {self.APP_NAME}: JWT секрет получен из Vault")
             else:
-                raise Exception("JWT secret not found in Vault kv/data/jwt path")
+                raise Exception("JWT secret not found in Vault at path jwt")
                 
         except ImportError as e:
             # Проблема с импортом vault модуля
