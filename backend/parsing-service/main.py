@@ -441,18 +441,25 @@ async def estimate_channel_size(channel_link: str) -> int:
         if "t.me/" in channel_link:
             # Имитируем проверку типа канала
             channel_name = channel_link.split("t.me/")[-1]
+            channel_name_lower = channel_name.lower()
             
-            # Реалистичные размеры каналов
-            if len(channel_name) < 6:  # Короткие имена = популярные каналы
-                estimated_size = random.randint(5000, 25000)
-            elif any(word in channel_name.lower() for word in ["news", "chat", "group"]):
+            # ИСПРАВЛЕНО: Сначала проверяем на тестовые каналы
+            if any(word in channel_name_lower for word in ["test", "demo", "realtest"]):
+                estimated_size = random.randint(10, 100)  # Тестовые каналы
+                logger.info(f"🧪 Тестовый канал {channel_name}: ~{estimated_size} сообщений")
+            # Затем проверяем новостные/чат каналы  
+            elif any(word in channel_name_lower for word in ["news", "новости", "chat", "чат", "group"]):
                 estimated_size = random.randint(1000, 8000)  
-            elif any(word in channel_name.lower() for word in ["test", "demo"]):
-                estimated_size = random.randint(10, 100)
+                logger.info(f"📰 Новостной/чат канал {channel_name}: ~{estimated_size} сообщений")
+            # Затем короткие имена = популярные каналы
+            elif len(channel_name) < 6:  
+                estimated_size = random.randint(5000, 25000)
+                logger.info(f"⭐ Популярный канал {channel_name}: ~{estimated_size} сообщений")
+            # Обычные каналы
             else:
-                estimated_size = random.randint(500, 3000)  # Обычные каналы
+                estimated_size = random.randint(500, 3000)  
+                logger.info(f"📢 Обычный канал {channel_name}: ~{estimated_size} сообщений")
                 
-            logger.info(f"🔍 Оценка размера канала {channel_name}: ~{estimated_size} сообщений")
             return estimated_size
         else:
             # Fallback для других форматов ссылок
