@@ -115,12 +115,43 @@ const Parsing = () => {
     loadTasks();
   }, [tasksFilter]);
 
+  // Real-time обновление прогресса для активных задач
+  useEffect(() => {
+    const hasActiveTasks = tasks.some(task => 
+      task.status === 'pending' || task.status === 'running'
+    );
+
+    let intervalId: number;
+
+    if (hasActiveTasks) {
+      // Запускаем автообновление каждые 3 секунды для активных задач
+      intervalId = setInterval(() => {
+        loadTasks();
+      }, 3000);
+    }
+
+    // Очищаем interval при размонтировании или когда нет активных задач
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [tasks, tasksFilter]); // Пересоздаем interval при изменении задач или фильтров
+
   const loadTasks = async () => {
     setLoading(true);
     setError('');
     
     try {
-      const res = await parsingApi.tasks.list(tasksFilter);
+      // Правильная передача типов в API, пустые строки как undefined
+      const apiFilter = {
+        platform: tasksFilter.platform || undefined,
+        status: tasksFilter.status || undefined,
+        page: tasksFilter.page,
+        limit: tasksFilter.limit
+      };
+      
+      const res = await parsingApi.tasks.list(apiFilter as any);
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks || data);
@@ -515,6 +546,19 @@ const Parsing = () => {
 
               {/* Таблица задач */}
               <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                {/* Заголовок с индикатором автообновления */}
+                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex items-center justify-between">
+                  <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    Задачи парсинга ({tasks.length})
+                  </h4>
+                  {/* Индикатор автообновления для активных задач */}
+                  {tasks.some(task => task.status === 'pending' || task.status === 'running') && (
+                    <div className="flex items-center text-sm text-blue-600 dark:text-blue-400">
+                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse mr-2"></div>
+                      Автообновление каждые 3 сек
+                    </div>
+                  )}
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead className="bg-gray-50 dark:bg-gray-700">

@@ -39,6 +39,7 @@ class ParseResult(BaseModel):
     author_id = Column(String(255), nullable=True, index=True)
     author_username = Column(String(255), nullable=True)
     author_name = Column(String(255), nullable=True)
+    author_phone = Column(String(20), nullable=True)  # Phone number if accessible
     author_verified = Column(Boolean, default=False, nullable=False)
     
     # Timestamps
