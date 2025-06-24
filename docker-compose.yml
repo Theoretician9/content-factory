@@ -164,8 +164,8 @@ services:
       - RABBITMQ_PASSWORD=password
       - VAULT_ADDR=http://vault:8201
       - VAULT_TOKEN=${VAULT_TOKEN}
-      - VAULT_ROLE_ID=${VAULT_ROLE_ID}
-      - VAULT_SECRET_ID=${VAULT_SECRET_ID}
+      - VAULT_ROLE_ID=${PARSING_VAULT_ROLE_ID}
+      - VAULT_SECRET_ID=${PARSING_VAULT_SECRET_ID}
       - INTEGRATION_SERVICE_URL=http://integration-service:8000
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-for-content-factory-2024}
       - LOG_LEVEL=INFO
@@ -226,8 +226,8 @@ services:
       - RABBITMQ_PASSWORD=password
       - VAULT_ADDR=http://vault:8201
       - VAULT_TOKEN=${VAULT_TOKEN}
-      - VAULT_ROLE_ID=${VAULT_ROLE_ID}
-      - VAULT_SECRET_ID=${VAULT_SECRET_ID}
+      - VAULT_ROLE_ID=${PARSING_VAULT_ROLE_ID}
+      - VAULT_SECRET_ID=${PARSING_VAULT_SECRET_ID}
       - INTEGRATION_SERVICE_URL=http://integration-service:8000
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-for-content-factory-2024}
       - LOG_LEVEL=INFO
@@ -267,8 +267,8 @@ services:
       - REDIS_PORT=6379
       - VAULT_ADDR=http://vault:8201
       - VAULT_TOKEN=${VAULT_TOKEN}
-      - VAULT_ROLE_ID=${VAULT_ROLE_ID}
-      - VAULT_SECRET_ID=${VAULT_SECRET_ID}
+      - VAULT_ROLE_ID=${INTEGRATION_VAULT_ROLE_ID}
+      - VAULT_SECRET_ID=${INTEGRATION_VAULT_SECRET_ID}
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=user
       - RABBITMQ_PASSWORD=password
