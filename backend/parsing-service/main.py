@@ -144,9 +144,9 @@ async def root():
 # Include other routers
 # Temporarily disable external routers due to null bytes issue
 # from app.api.v1.endpoints.tasks import router as tasks_router
-# from app.api.v1.endpoints.results import router as results_router
+from app.api.v1.endpoints.results import router as results_router
 # app.include_router(tasks_router, prefix="/v1/tasks", tags=["Parse Tasks"])
-# app.include_router(results_router, prefix="/v1/results", tags=["Parse Results"])
+app.include_router(results_router, prefix="/v1/results", tags=["Parse Results"])
 
 
 # =============================================================================
@@ -634,6 +634,27 @@ async def resume_task(task_id: str):
     
     logger.info(f"▶️ Возобновлена задача парсинга: {task_id}")
     return {"message": "Task resumed successfully", "task_id": task_id, "status": "pending"}
+
+# Direct results endpoints (without v1 prefix) for frontend compatibility
+@app.get("/results/{task_id}", tags=["Results API"])
+async def get_task_results(
+    task_id: str,
+    format: Optional[str] = "json",
+    platform_filter: Optional[str] = None,
+    limit: int = 1000,
+    offset: int = 0
+):
+    """Get parsing results for specific task (frontend compatible endpoint)."""
+    # Импортируем функцию из results router
+    from app.api.v1.endpoints.results import get_result
+    return await get_result(task_id, format, platform_filter, limit, offset)
+
+@app.get("/results/{task_id}/export", tags=["Results API"])
+async def export_task_results(task_id: str, format: str = "json"):
+    """Export parsing results in specified format (frontend compatible endpoint)."""
+    # Импортируем функцию из results router
+    from app.api.v1.endpoints.results import export_result
+    return await export_result(task_id, format)
 
 if __name__ == "__main__":
     uvicorn.run(
