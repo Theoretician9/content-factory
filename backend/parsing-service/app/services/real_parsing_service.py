@@ -154,7 +154,7 @@ class RealParsingService:
         try:
             import aiohttp
             async with aiohttp.ClientSession() as session:
-                url = "http://api-gateway:8000/api/integrations/telegram/internal/active-accounts"
+                url = "http://integration-service:8000/api/v1/telegram/internal/active-accounts"
                 async with session.get(url) as response:
                     if response.status == 200:
                         accounts = await response.json()
