@@ -99,15 +99,21 @@ async def parse_telegram_channel_real(link: str, account: Dict) -> Dict:
         telegram_adapter = TelegramAdapter()
         
         try:
-            # Authenticate with real account
+            # Authenticate with real account using data from integration-service
             credentials = {
-                'session_id': account.get('session_id') or account.get('id'),  # Fallback to account id
-                'api_id': account.get('api_id') or account.get('telegram_api_id', ''),
-                'api_hash': account.get('api_hash') or account.get('telegram_api_hash', '')
+                'session_id': account.get('session_id') or account.get('id'),
+                'api_id': account.get('api_id'),
+                'api_hash': account.get('api_hash'),
+                'session_data': account.get('session_data')  # Session файл от integration-service
             }
             
-            logger.info(f"🔑 Authenticating with session_id: {credentials['session_id']}, api_id: {credentials['api_id'][:8]}...")
+            logger.info(f"🔑 Using integration-service credentials: session_id={credentials['session_id']}, api_id={credentials['api_id']}, has_session_data={credentials['session_data'] is not None}")
             
+            if not credentials['session_data']:
+                logger.warning(f"⚠️ No session data provided by integration-service for account {account.get('id')}")
+                return {"participants": [], "messages": [], "channel_info": None}
+            
+            # Authenticate with TelegramAdapter using integration-service data
             authenticated = await telegram_adapter.authenticate(
                 account_id=str(account.get('id')), 
                 credentials=credentials
