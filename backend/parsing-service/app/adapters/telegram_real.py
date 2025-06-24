@@ -66,7 +66,7 @@ class TelegramRealAdapter(BasePlatformAdapter):
                 return False
             
             # Get session file from Vault
-            session_data = self.vault_client.get_session(Platform.TELEGRAM, session_id)
+            session_data = self.vault_client.get_telegram_session(session_id)
             if not session_data:
                 self.logger.error(f"Failed to get session {session_id} from Vault")
                 return False
