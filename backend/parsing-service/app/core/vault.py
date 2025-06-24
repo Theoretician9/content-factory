@@ -9,6 +9,7 @@ import os
 import tempfile
 import json
 import logging
+import requests
 from typing import Optional, Dict, Any
 import hvac
 from hvac.exceptions import VaultError
@@ -53,20 +54,26 @@ class VaultClient:
         Get secret from Vault KV v2 engine.
         
         Args:
-            path: Secret path (e.g., 'integrations/telegram/api_keys')
+            path: Secret path (e.g., 'jwt')
             
         Returns:
             Secret data or None if not found
         """
         try:
-            logger.debug(f"🔍 Getting secret from path: {path}")
-            response = self.client.secrets.kv.v2.read_secret_version(path=path)
-            return response['data']['data']
-        except VaultError as e:
-            logger.error(f"❌ Failed to get secret from {path}: {e}")
-            return None
+            # Используем прямой HTTP запрос как в integration-service
+            # для правильного обращения к KV engine с именем 'kv'
+            url = f"{self.vault_addr}/v1/kv/data/{path}"
+            headers = {"X-Vault-Token": self.vault_token}
+            
+            logger.debug(f"🔍 Getting secret from URL: {url}")
+            
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            
+            return response.json()["data"]["data"]
+            
         except Exception as e:
-            logger.error(f"❌ Unexpected error getting secret from {path}: {e}")
+            logger.error(f"❌ Failed to get secret from {path}: {e}")
             return None
     
     def get_platform_api_keys(self, platform: str) -> Optional[Dict[str, str]]:
