@@ -47,43 +47,51 @@ class TelegramAdapter(BasePlatformAdapter):
         return "Telegram"
     
     async def authenticate(self, account_id: str, credentials: Dict[str, Any]) -> bool:
-        """Authenticate with Telegram using session from Vault."""
+        """Authenticate with Telegram using credentials from integration-service."""
         try:
+            # Получаем все данные от integration-service (НЕ из Vault!)
             session_id = credentials.get('session_id')
+            self.api_id = credentials.get('api_id')
+            self.api_hash = credentials.get('api_hash')  
+            session_data = credentials.get('session_data')
+            
             if not session_id:
-                self.logger.error("No session_id provided")
+                self.logger.error("No session_id provided by integration-service")
                 return False
-            
-            # Get API keys from Vault
-            api_keys = self.vault_client.get_platform_api_keys(Platform.TELEGRAM)
-            if not api_keys:
-                self.logger.error("Failed to get API keys from Vault")
-                return False
-            
-            self.api_id = api_keys.get('api_id')
-            self.api_hash = api_keys.get('api_hash')
-            
+                
             if not self.api_id or not self.api_hash:
-                self.logger.error("Missing api_id or api_hash")
+                self.logger.error("No API credentials provided by integration-service")
                 return False
-            
-            # Get session file from Vault
-            session_data = self.vault_client.get_session(Platform.TELEGRAM, session_id)
+                
             if not session_data:
-                self.logger.error(f"Failed to get session {session_id} from Vault")
+                self.logger.error(f"No session data provided for session {session_id}")
                 return False
             
-            # Create temporary session file
+            self.logger.info(f"🔐 Using API credentials from integration-service: api_id={self.api_id}")
+            
+            # Создаем временный session файл из данных integration-service
             with tempfile.NamedTemporaryFile(suffix='.session', delete=False) as f:
-                f.write(session_data)
+                if isinstance(session_data, str):
+                    # Если данные в base64 или hex, декодируем
+                    try:
+                        import base64
+                        session_bytes = base64.b64decode(session_data)
+                    except:
+                        session_bytes = session_data.encode()
+                else:
+                    session_bytes = session_data
+                    
+                f.write(session_bytes)
                 self.session_file_path = f.name
+            
+            self.logger.info(f"📁 Created temporary session file: {self.session_file_path}")
             
             # Initialize Telegram client
             self.client = TelegramClient(
                 session=self.session_file_path,
-                api_id=self.api_id,
+                api_id=int(self.api_id),
                 api_hash=self.api_hash,
-                device_model="Parsing Service",
+                device_model="Content Factory Parser",
                 system_version="1.0",
                 app_version="1.0"
             )
@@ -95,7 +103,7 @@ class TelegramAdapter(BasePlatformAdapter):
                 return False
             
             me = await self.client.get_me()
-            self.logger.info(f"✅ Telegram authenticated for user {me.first_name} ({me.id})")
+            self.logger.info(f"✅ Telegram authenticated for user {me.first_name} ({me.id}) using integration-service credentials")
             return True
             
         except Exception as e:
