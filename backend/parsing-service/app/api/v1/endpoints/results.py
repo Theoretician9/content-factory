@@ -9,8 +9,8 @@ import json
 import csv
 import io
 
-from ...database import get_db
-from ...models.parse_result import ParseResult
+from app.database import get_db
+from app.models.parse_result import ParseResult
 
 router = APIRouter()
 
