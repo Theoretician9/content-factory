@@ -24,7 +24,6 @@ from telethon.tl.functions.channels import GetFullChannelRequest
 
 from .base import BasePlatformAdapter
 from ..core.config import Platform
-from ..core.vault import get_vault_client
 from ..models.parse_task import ParseTask
 from ..models.parse_result import ParseResult
 
@@ -38,7 +37,6 @@ class TelegramAdapter(BasePlatformAdapter):
         super().__init__(Platform.TELEGRAM)
         self.client = None
         self.session_file_path = None
-        self.vault_client = get_vault_client()
         self.api_id = None
         self.api_hash = None
         
