@@ -6,7 +6,6 @@ import os
 from typing import Optional, List
 from enum import Enum
 from pydantic_settings import BaseSettings
-from .vault import get_vault_client
 
 
 class Platform(str, Enum):
@@ -129,9 +128,9 @@ class Settings(BaseSettings):
     
     def __init__(self, **values):
         super().__init__(**values)
-        # Получаем JWT секрет из Vault
+        # Получаем JWT секрет из Vault с lazy import
         try:
-            # Используем VaultClient для получения JWT секрета (импорт внутри функции для избежания циклических импортов)
+            # Lazy import для избежания циклических импортов
             from .vault import get_vault_client
             vault_client = get_vault_client()
             secret_data = vault_client.get_secret("kv/data/jwt")
