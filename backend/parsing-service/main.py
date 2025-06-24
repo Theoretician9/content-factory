@@ -632,8 +632,18 @@ async def get_task_results(
         from sqlalchemy import select, func
         
         async with AsyncSessionLocal() as db_session:
+            # Convert task_id to integer for database compatibility
+            try:
+                # Extract numeric part from task_id like "task_1750768096_ed4d1724"
+                if '_' in task_id:
+                    task_id_int = int(task_id.split('_')[1])
+                else:
+                    task_id_int = hash(task_id) % 1000000
+            except:
+                task_id_int = hash(task_id) % 1000000
+            
             # Build query
-            query = select(ParseResult).where(ParseResult.task_id == task_id)
+            query = select(ParseResult).where(ParseResult.task_id == task_id_int)
             
             # Apply platform filter
             if platform_filter:
