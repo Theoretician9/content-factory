@@ -101,10 +101,12 @@ async def parse_telegram_channel_real(link: str, account: Dict) -> Dict:
         try:
             # Authenticate with real account
             credentials = {
-                'session_id': account.get('session_id'),
-                'api_id': account.get('api_id', ''),
-                'api_hash': account.get('api_hash', '')
+                'session_id': account.get('session_id') or account.get('id'),  # Fallback to account id
+                'api_id': account.get('api_id') or account.get('telegram_api_id', ''),
+                'api_hash': account.get('api_hash') or account.get('telegram_api_hash', '')
             }
+            
+            logger.info(f"🔑 Authenticating with session_id: {credentials['session_id']}, api_id: {credentials['api_id'][:8]}...")
             
             authenticated = await telegram_adapter.authenticate(
                 account_id=str(account.get('id')), 
