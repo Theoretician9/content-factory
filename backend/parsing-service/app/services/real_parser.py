@@ -107,10 +107,10 @@ async def parse_telegram_channel_real(link: str, account: Dict) -> Dict:
                 'session_data': account.get('session_data')  # Session файл от integration-service
             }
             
-            logger.info(f"🔑 Using integration-service credentials: session_id={credentials['session_id']}, api_id={credentials['api_id']}, has_session_data={credentials['session_data'] is not None}")
+            logger.info(f"🔑 REAL_PARSER: Using integration-service credentials: session_id={credentials['session_id']}, api_id={credentials['api_id']}, has_session_data={credentials['session_data'] is not None}")
             
             if not credentials['session_data']:
-                logger.warning(f"⚠️ No session data provided by integration-service for account {account.get('id')}")
+                logger.warning(f"⚠️ REAL_PARSER: No session data provided by integration-service for account {account.get('id')}")
                 return {"participants": [], "messages": [], "channel_info": None}
             
             # Authenticate with TelegramAdapter using integration-service data
