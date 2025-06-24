@@ -83,9 +83,11 @@ async def get_real_telegram_accounts() -> List[Dict]:
 
 
 async def parse_telegram_channel_real(link: str, account: Dict) -> Dict:
-    """Parse Telegram channel using real Telethon client."""
+    """Parse Telegram channel using real Telethon client via TelegramAdapter."""
     try:
-        logger.info(f"📡 Parsing channel {link} with real Telegram account")
+        from ..adapters.telegram import TelegramAdapter
+        
+        logger.info(f"📡 Parsing channel {link} with REAL TelegramAdapter")
         
         # Extract channel username from link
         if 't.me/' in link:
@@ -93,40 +95,81 @@ async def parse_telegram_channel_real(link: str, account: Dict) -> Dict:
         else:
             channel_username = link.replace('@', '')
         
-        # For now, we'll simulate what real Telethon would return
-        # In production, this would use actual Telethon client with real session
+        # Initialize real TelegramAdapter
+        telegram_adapter = TelegramAdapter()
         
-        # Check if channel is accessible
-        channel_accessible = await check_channel_accessibility(channel_username, account)
-        
-        if not channel_accessible:
-            logger.warning(f"⚠️ Channel {channel_username} is not accessible or private")
-            return {"participants": [], "messages": [], "channel_info": None}
-        
-        # Real parsing would happen here using Telethon
-        # telethon_client = TelegramClient(session_file, api_id, api_hash)
-        # channel_entity = await telethon_client.get_entity(channel_username)
-        # participants = await telethon_client.get_participants(channel_entity)
-        # messages = await telethon_client.get_messages(channel_entity, limit=100)
-        
-        logger.info(f"✅ Successfully accessed channel {channel_username}")
-        
-        # Since we can't do real Telethon parsing without proper session setup,
-        # we return empty results indicating channel was accessed but no data extracted
-        return {
-            "channel_info": {
-                "username": channel_username,
-                "title": f"Real Channel: {channel_username}",
-                "type": "channel",
-                "accessible": True,
-                "parsed_at": datetime.utcnow().isoformat()
-            },
-            "participants": [],  # Real participants would be here
-            "messages": []       # Real messages would be here
-        }
+        try:
+            # Authenticate with real account
+            credentials = {
+                'session_id': account.get('session_id'),
+                'api_id': account.get('api_id', ''),
+                'api_hash': account.get('api_hash', '')
+            }
+            
+            authenticated = await telegram_adapter.authenticate(
+                account_id=str(account.get('id')), 
+                credentials=credentials
+            )
+            
+            if not authenticated:
+                logger.warning(f"⚠️ Failed to authenticate Telegram account {account.get('id')}")
+                return {"participants": [], "messages": [], "channel_info": None}
+            
+            # Validate target accessibility
+            validation_result = await telegram_adapter.validate_targets([link])
+            if not validation_result.get(link, False):
+                logger.warning(f"⚠️ Channel {link} is not accessible")
+                return {"participants": [], "messages": [], "channel_info": None}
+            
+            # Create task object for adapter
+            task_obj = type('Task', (), {
+                'id': f"parse_{channel_username}",
+                'link': link,
+                'platform': Platform.TELEGRAM
+            })()
+            
+            # Parse using real TelegramAdapter
+            config = {
+                'message_limit': 100,    # Limit for testing
+                'participant_limit': 50, # Limit for testing
+                'include_media': True,
+                'include_participants': True
+            }
+            
+            logger.info(f"🔥 Starting REAL Telethon parsing for {channel_username}")
+            
+            # This calls real Telethon methods
+            parsed_data = await telegram_adapter.parse_target(task_obj, link, config)
+            
+            if parsed_data:
+                logger.info(f"✅ Real Telethon parsing successful: {len(parsed_data) if isinstance(parsed_data, list) else 'Data collected'}")
+                
+                # Convert adapter results to our format
+                return {
+                    "channel_info": {
+                        "username": channel_username,
+                        "title": f"Real parsed: {channel_username}",
+                        "type": "channel",
+                        "accessible": True,
+                        "parsed_at": datetime.utcnow().isoformat(),
+                        "real_telethon": True
+                    },
+                    "participants": parsed_data if isinstance(parsed_data, list) else [],
+                    "messages": []
+                }
+            else:
+                logger.warning(f"⚠️ No data returned from TelegramAdapter for {channel_username}")
+                return {"participants": [], "messages": [], "channel_info": None}
+                
+        finally:
+            # Always cleanup adapter
+            try:
+                await telegram_adapter.cleanup()
+            except Exception as cleanup_error:
+                logger.warning(f"⚠️ TelegramAdapter cleanup error: {cleanup_error}")
         
     except Exception as e:
-        logger.error(f"❌ Real channel parsing failed: {e}")
+        logger.error(f"❌ Real TelegramAdapter parsing failed: {e}")
         return {"participants": [], "messages": [], "channel_info": None}
 
 
