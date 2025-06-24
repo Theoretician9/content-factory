@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
 import logging
+import os
 
 from ....database import get_async_session
 from ....services.telegram_service import TelegramService
@@ -371,32 +372,23 @@ async def get_active_accounts_internal(
         vault_client = get_vault_client()
         
         try:
-            # Получаем API ключи
-            telegram_config = vault_client.get_secret("kv/data/integrations/telegram")
-            api_id = telegram_config.get('api_id') if telegram_config else None
-            api_hash = telegram_config.get('api_hash') if telegram_config else None
-            
-            if not api_id or not api_hash:
-                logger.error("❌ No Telegram API credentials found in Vault")
-                api_id = "23699038"  # Fallback
-                api_hash = "055c48aee9080db331639a87f85617b4"  # Fallback
-                
-        except Exception as vault_error:
-            logger.warning(f"⚠️ Vault error, using fallback credentials: {vault_error}")
-            api_id = "23699038"  # Fallback 
-            api_hash = "055c48aee9080db331639a87f85617b4"  # Fallback
+            # Получаем Telegram API ключи из Vault
+            telegram_config = vault_client.get_secret("integrations/telegram")
+            api_id = telegram_config.get('api_id')
+            api_hash = telegram_config.get('api_hash')
+        except Exception as e:
+            logger.warning(f"⚠️ Vault error, using fallback credentials: {e}")
+            # Fallback на переменные окружения
+            api_id = os.getenv('TELEGRAM_API_ID')
+            api_hash = os.getenv('TELEGRAM_API_HASH')
         
         result = []
         for s in all_sessions:
             try:
-                # Получаем session файл из Vault
-                session_data = None
-                try:
-                    session_path = f"kv/data/integrations/telegram/sessions/{s.id}"
-                    session_secret = vault_client.get_secret(session_path)
-                    session_data = session_secret.get('session_data') if session_secret else None
-                except Exception as session_error:
-                    logger.warning(f"⚠️ Could not get session file for {s.id}: {session_error}")
+                # Получаем session данные из Vault
+                session_path = f"integrations/telegram/sessions/{s.id}"
+                session_vault_data = vault_client.get_secret(session_path)
+                session_data = session_vault_data.get('session_data') if session_vault_data else None
                 
                 account_data = {
                     "id": str(s.id),
@@ -408,7 +400,7 @@ async def get_active_accounts_internal(
                     "api_id": api_id,
                     "api_hash": api_hash,
                     "session_id": str(s.id),
-                    "session_data": session_data,  # Session файл из Vault
+                    "session_data": session_data,  # Session данные из Vault
                     "connection_ready": session_data is not None
                 }
                 result.append(account_data)
