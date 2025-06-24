@@ -1,29 +1,71 @@
-from typing import Dict, Any
 import os
-import hvac
+import requests
 import logging
 import time
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
 class IntegrationVaultClient:
-    def __init__(self):
-        # Используем правильный адрес Vault из docker-compose
-        self.vault_addr = os.getenv('VAULT_ADDR', 'http://vault:8201')
-        self.vault_token = os.getenv('VAULT_TOKEN', 'root')
+    def __init__(self, vault_addr: str = None, vault_token: str = None, role_id: str = None, secret_id: str = None):
+        self.vault_addr = vault_addr or os.getenv('VAULT_ADDR', 'http://vault:8201')
+        self.vault_token = None
+        
+        # Поддержка AppRole Authentication
+        self.role_id = role_id or os.getenv('VAULT_ROLE_ID')
+        self.secret_id = secret_id or os.getenv('VAULT_SECRET_ID')
+        
+        # Fallback на токенную аутентификацию
+        if not self.role_id or not self.secret_id:
+            self.vault_token = vault_token or os.getenv('VAULT_TOKEN')
+            logger.info("DEBUG VaultClient.__init__: Using token authentication")
+            logger.info(f"DEBUG VaultClient.__init__: vault_addr = {self.vault_addr}")
+            logger.info(f"DEBUG VaultClient.__init__: vault_token = {self.vault_token[:20]}..." if self.vault_token else "No token")
+            if not self.vault_token:
+                raise ValueError("Vault token is required when AppRole credentials are not provided")
+        else:
+            logger.info("DEBUG VaultClient.__init__: Using AppRole authentication")
+            logger.info(f"DEBUG VaultClient.__init__: vault_addr = {self.vault_addr}")
+            logger.info(f"DEBUG VaultClient.__init__: role_id = {self.role_id}")
+            logger.info(f"DEBUG VaultClient.__init__: secret_id = {self.secret_id[:10]}...")
+            self._authenticate_with_approle()
+            
+        # Ждем пока Vault станет доступен
+        self._wait_for_vault()
+
+    def _authenticate_with_approle(self):
+        """Аутентификация через AppRole и получение токена"""
         try:
-            self.client = hvac.Client(url=self.vault_addr, token=self.vault_token)
-            self._wait_for_vault()
+            auth_data = {
+                "role_id": self.role_id,
+                "secret_id": self.secret_id
+            }
+            
+            response = requests.post(
+                f"{self.vault_addr}/v1/auth/approle/login",
+                json=auth_data
+            )
+            response.raise_for_status()
+            
+            auth_result = response.json()
+            self.vault_token = auth_result["auth"]["client_token"]
+            logger.info("DEBUG VaultClient._authenticate_with_approle: Successfully authenticated via AppRole")
+            logger.info(f"DEBUG VaultClient._authenticate_with_approle: token = {self.vault_token[:20]}...")
+            
         except Exception as e:
-            logger.warning(f"Could not initialize Vault client: {e}")
-            self.client = None
+            logger.error(f"ERROR VaultClient._authenticate_with_approle: Failed to authenticate: {e}")
+            raise ValueError(f"AppRole authentication failed: {e}")
 
     def _wait_for_vault(self, max_attempts=30, delay=2):
         """Ждем пока Vault станет доступен"""
         for attempt in range(max_attempts):
             try:
-                status = self.client.sys.read_health_status()
-                logger.info(f"Vault is available, status: {status}")
+                response = requests.get(
+                    f"{self.vault_addr}/v1/sys/health",
+                    headers={"X-Vault-Token": self.vault_token}
+                )
+                response.raise_for_status()
+                logger.info(f"Vault is available, status: {response}")
                 return
             except Exception as e:
                 if attempt < max_attempts - 1:
@@ -34,48 +76,55 @@ class IntegrationVaultClient:
                     raise
 
     def get_secret(self, path: str) -> Dict[str, Any]:
-        """Получить секрет из Vault"""
-        if not self.client:
-            raise Exception("Vault client not initialized")
+        """
+        Получить секрет из Vault
+        :param path: путь к секрету (например, 'integration-service')
+        :return: данные секрета
+        """
+        # Автоматически добавляем kv/data/ префикс для KV v2 engine
+        full_path = f"kv/data/{path}"
+        url = f"{self.vault_addr}/v1/{full_path}"
+        headers = {"X-Vault-Token": self.vault_token}
+        
+        logger.debug(f"DEBUG VaultClient.get_secret: path = {path}")
+        logger.debug(f"DEBUG VaultClient.get_secret: full_path = {full_path}")
+        logger.debug(f"DEBUG VaultClient.get_secret: self.vault_addr = {self.vault_addr}")
+        logger.debug(f"DEBUG VaultClient.get_secret: constructed URL = {url}")
+        logger.debug(f"DEBUG VaultClient.get_secret: headers = {{'X-Vault-Token': '{self.vault_token[:20]}...'}}")
+        
         try:
-            response = self.client.secrets.kv.v2.read_secret_version(
-                path=path,
-                mount_point='kv'
-            )
-            if not response or 'data' not in response or 'data' not in response['data']:
-                raise Exception(f"Invalid response format from Vault for path {path}")
-            return response['data']['data']
+            response = requests.get(url, headers=headers)
+            logger.debug(f"DEBUG VaultClient.get_secret: response.status_code = {response.status_code}")
+            logger.debug(f"DEBUG VaultClient.get_secret: response.url = {response.url}")
+            response.raise_for_status()
+            return response.json()["data"]["data"]
         except Exception as e:
             logger.error(f"Error getting secret {path}: {e}")
             raise
 
     def put_secret(self, path: str, data: Dict[str, Any]) -> None:
-        """Сохранить секрет в Vault"""
-        if not self.client:
-            raise Exception("Vault client not initialized")
-        try:
-            self.client.secrets.kv.v2.create_or_update_secret(
-                path=path,
-                secret=data,
-                mount_point='kv'
-            )
-            logger.info(f"Successfully saved secret to Vault: {path}")
-        except Exception as e:
-            logger.error(f"Error putting secret {path}: {e}")
-            raise
+        """
+        Сохранить секрет в Vault
+        :param path: путь к секрету
+        :param data: данные для сохранения
+        """
+        full_path = f"kv/data/{path}"
+        response = requests.post(
+            f"{self.vault_addr}/v1/{full_path}",
+            headers={"X-Vault-Token": self.vault_token},
+            json={"data": data}
+        )
+        response.raise_for_status()
+        logger.info(f"Successfully saved secret to Vault: {path}")
 
     def delete_secret(self, path: str) -> None:
         """Удалить секрет из Vault"""
-        if not self.client:
-            raise Exception("Vault client not initialized")
-        try:
-            self.client.secrets.kv.v2.delete_metadata_and_all_versions(
-                path=path,
-                mount_point='kv'
-            )
-        except Exception as e:
-            logger.error(f"Error deleting secret {path}: {e}")
-            raise
+        full_path = f"kv/metadata/{path}"
+        response = requests.delete(
+            f"{self.vault_addr}/v1/{full_path}",
+            headers={"X-Vault-Token": self.vault_token}
+        )
+        response.raise_for_status()
 
     def get_integration_credentials(self, platform: str) -> Dict[str, Any]:
         try:
@@ -91,12 +140,13 @@ class IntegrationVaultClient:
         self.delete_secret(f'integrations/{platform}')
 
     def list_integrations(self) -> list:
-        if not self.client:
-            return []
-        
         try:
-            response = self.client.secrets.kv.v2.list_secrets(path='integrations', mount_point='kv')
-            return response['data']['keys']
+            response = requests.get(
+                f"{self.vault_addr}/v1/kv/metadata/integrations",
+                headers={"X-Vault-Token": self.vault_token}
+            )
+            response.raise_for_status()
+            return response.json()["data"]["keys"]
         except:
             # Возвращаем пустой список при ошибке
             return []
