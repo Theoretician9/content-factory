@@ -6,6 +6,7 @@ import os
 from typing import Optional, List
 from enum import Enum
 from pydantic_settings import BaseSettings
+from .vault import get_vault_client
 
 
 class Platform(str, Enum):
