@@ -373,7 +373,7 @@ async def get_active_accounts_internal(
         
         try:
             # Получаем Telegram API ключи из Vault
-            telegram_config = vault_client.get_secret("kv/data/integration-service")
+            telegram_config = vault_client.get_secret("integration-service")
             api_id = telegram_config.get('telegram_api_id')
             api_hash = telegram_config.get('telegram_api_hash')
         except Exception as e:
@@ -386,7 +386,7 @@ async def get_active_accounts_internal(
         for s in all_sessions:
             try:
                 # Получаем session данные из Vault
-                session_path = f"kv/data/integration-service/sessions/{s.id}"
+                session_path = f"integration-service/sessions/{s.id}"
                 session_vault_data = vault_client.get_secret(session_path)
                 session_data = session_vault_data.get('session_data') if session_vault_data else None
                 
