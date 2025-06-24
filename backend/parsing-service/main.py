@@ -626,16 +626,165 @@ async def get_task_results(
     offset: int = 0
 ):
     """Get parsing results for specific task (frontend compatible endpoint)."""
-    # Импортируем функцию из results router
-    from app.api.v1.endpoints.results import get_result
-    return await get_result(task_id, format, platform_filter, limit, offset)
+    try:
+        from app.database import AsyncSessionLocal
+        from app.models.parse_result import ParseResult
+        from sqlalchemy import select, func
+        
+        async with AsyncSessionLocal() as db_session:
+            # Build query
+            query = select(ParseResult).where(ParseResult.task_id == task_id)
+            
+            # Apply platform filter
+            if platform_filter:
+                query = query.where(ParseResult.platform == platform_filter)
+            
+            # Get total count
+            count_query = select(func.count()).select_from(query.subquery())
+            total_result = await db_session.execute(count_query)
+            total = total_result.scalar() or 0
+            
+            # Apply pagination and ordering
+            query = query.order_by(ParseResult.created_at.desc()).offset(offset).limit(limit)
+            
+            # Execute query
+            result = await db_session.execute(query)
+            results = result.scalars().all()
+            
+            # Format results
+            formatted_results = []
+            for r in results:
+                formatted_results.append({
+                    "id": str(r.id),
+                    "task_id": str(r.task_id),
+                    "platform": r.platform.value if hasattr(r.platform, 'value') else str(r.platform),
+                    "platform_id": r.author_id or r.content_id,
+                    "username": r.author_username,
+                    "display_name": r.author_name or r.content_text[:50] if r.content_text else "Unknown",
+                    "author_phone": r.author_phone,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                    "platform_specific_data": r.platform_data or {}
+                })
+            
+            # If no results found, return empty
+            if not formatted_results:
+                return {
+                    "task_id": task_id,
+                    "results": [],
+                    "total": 0,
+                    "format": format,
+                    "pagination": {
+                        "offset": offset,
+                        "limit": limit,
+                        "has_more": False
+                    },
+                    "message": "No parsing results found for this task. The task may still be running or no data was collected."
+                }
+            
+            return {
+                "task_id": task_id,
+                "results": formatted_results,
+                "total": total,
+                "format": format,
+                "pagination": {
+                    "offset": offset,
+                    "limit": limit,
+                    "has_more": offset + limit < total
+                }
+            }
+            
+    except Exception as e:
+        logger.error(f"❌ Error getting task results: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get results: {str(e)}")
 
 @app.get("/results/{task_id}/export", tags=["Results API"])
 async def export_task_results(task_id: str, format: str = "json"):
     """Export parsing results in specified format (frontend compatible endpoint)."""
-    # Импортируем функцию из results router
-    from app.api.v1.endpoints.results import export_result
-    return await export_result(task_id, format)
+    try:
+        from app.database import AsyncSessionLocal
+        from app.models.parse_result import ParseResult
+        from sqlalchemy import select
+        from fastapi.responses import StreamingResponse
+        import json
+        import csv
+        import io
+        
+        async with AsyncSessionLocal() as db_session:
+            # Get all results for the task
+            query = select(ParseResult).where(ParseResult.task_id == task_id).order_by(ParseResult.created_at.desc())
+            result = await db_session.execute(query)
+            results = result.scalars().all()
+            
+            if not results:
+                raise HTTPException(status_code=404, detail="No results found for this task")
+            
+            # Format results for export
+            formatted_results = []
+            for r in results:
+                formatted_results.append({
+                    "id": str(r.id),
+                    "task_id": str(r.task_id),
+                    "platform": r.platform.value if hasattr(r.platform, 'value') else str(r.platform),
+                    "platform_id": r.author_id or r.content_id,
+                    "username": r.author_username,
+                    "display_name": r.author_name or r.content_text[:50] if r.content_text else "Unknown",
+                    "author_phone": r.author_phone,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                    "platform_specific_data": r.platform_data or {}
+                })
+            
+            # Export in JSON
+            if format.lower() == "json":
+                json_content = json.dumps(formatted_results, ensure_ascii=False, indent=2)
+                return StreamingResponse(
+                    io.BytesIO(json_content.encode('utf-8')),
+                    media_type="application/json",
+                    headers={"Content-Disposition": f"attachment; filename=parsing_results_{task_id}.json"}
+                )
+            
+            # Export in CSV
+            elif format.lower() == "csv":
+                output = io.StringIO()
+                if formatted_results:
+                    # Flatten the data for CSV
+                    flattened_results = []
+                    for result in formatted_results:
+                        flat_result = {
+                            "id": result["id"],
+                            "task_id": result["task_id"],
+                            "platform": result["platform"],
+                            "platform_id": result["platform_id"],
+                            "username": result.get("username", ""),
+                            "display_name": result.get("display_name", ""),
+                            "author_phone": result.get("author_phone", ""),
+                            "created_at": result["created_at"],
+                        }
+                        
+                        # Add platform-specific data as separate columns
+                        if result.get("platform_specific_data"):
+                            for k, v in result["platform_specific_data"].items():
+                                flat_result[f"specific_{k}"] = str(v) if v is not None else ""
+                        
+                        flattened_results.append(flat_result)
+                    
+                    if flattened_results:
+                        writer = csv.DictWriter(output, fieldnames=flattened_results[0].keys())
+                        writer.writeheader()
+                        writer.writerows(flattened_results)
+                
+                csv_content = output.getvalue()
+                return StreamingResponse(
+                    io.BytesIO(csv_content.encode('utf-8')),
+                    media_type="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=parsing_results_{task_id}.csv"}
+                )
+            
+            else:
+                raise HTTPException(status_code=400, detail="Unsupported format. Use 'json' or 'csv'")
+            
+    except Exception as e:
+        logger.error(f"❌ Error exporting task results: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to export results: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(
