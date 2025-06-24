@@ -80,8 +80,15 @@ class VaultClient:
         Returns:
             Dictionary with API keys or None
         """
-        path = f"integrations/{platform.value}/api_keys"
-        return self.get_secret(path)
+        path = f"integrations/{platform.value}"
+        secret_data = self.get_secret(path)
+        if secret_data:
+            # Extract API keys from the secret data
+            return {
+                'api_id': secret_data.get('api_id'),
+                'api_hash': secret_data.get('api_hash')
+            }
+        return None
     
     def get_telegram_session(self, session_id: str) -> Optional[bytes]:
         """
