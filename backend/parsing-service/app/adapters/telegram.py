@@ -530,7 +530,7 @@ class TelegramAdapter(BasePlatformAdapter):
                     'description': getattr(full_channel.full_chat, 'about', ''),
                     'date_created': getattr(channel, 'date', None)
                 },
-                'raw_data': channel.to_dict()
+                'raw_data': self._sanitize_datetime_objects(channel.to_dict())
             }
         except Exception as e:
             self.logger.error(f"Could not get channel metadata: {e}")
@@ -582,7 +582,7 @@ class TelegramAdapter(BasePlatformAdapter):
                     'is_creator': getattr(chat, 'creator', False),
                     'admin_rights': getattr(chat, 'admin_rights', None)
                 },
-                'raw_data': chat.to_dict()
+                'raw_data': self._sanitize_datetime_objects(chat.to_dict())
             }
         except Exception as e:
             self.logger.error(f"Could not get group metadata: {e}")
