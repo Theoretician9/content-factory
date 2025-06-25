@@ -195,10 +195,14 @@ class TelegramAdapter(BasePlatformAdapter):
                 
             processed_messages += 1
             
-            # Check if message has comments/replies
+            # Check if message has comments/replies (only for channels with comments enabled)
             if hasattr(message, 'replies') and message.replies and message.replies.replies > 0:
                 try:
+                    # Rate limiting: small delay between requests
+                    await asyncio.sleep(0.1)
+                    
                     # Get comments/replies for this message
+                    comment_count = 0
                     async for reply in self.client.iter_messages(
                         channel, 
                         reply_to=message.id,
@@ -216,13 +220,24 @@ class TelegramAdapter(BasePlatformAdapter):
                                 user_data = await self._extract_user_data(task, user, channel, "commenter")
                                 unique_users[user_id] = user_data
                                 found_commenters += 1
+                                comment_count += 1
                                 
                                 if found_commenters % 10 == 0:
                                     self.logger.info(f"Found {found_commenters} unique commenters...")
+                                
+                                # Rate limiting for user requests
+                                if comment_count % 5 == 0:
+                                    await asyncio.sleep(0.5)
                                     
+                            except FloodWaitError as e:
+                                self.logger.warning(f"FloodWait {e.seconds}s - pausing...")
+                                await asyncio.sleep(e.seconds + 1)
                             except Exception as e:
                                 self.logger.debug(f"Could not get commenter data for user {user_id}: {e}")
                 
+                except FloodWaitError as e:
+                    self.logger.warning(f"FloodWait {e.seconds}s while getting replies for message {message.id}")
+                    await asyncio.sleep(e.seconds + 1)
                 except Exception as e:
                     self.logger.debug(f"Could not get replies for message {message.id}: {e}")
             
@@ -392,36 +407,7 @@ class TelegramAdapter(BasePlatformAdapter):
             'raw_data': user.to_dict()
         }
     
-    async def _extract_participant_data(self, task: ParseTask, user: User, entity) -> Dict[str, Any]:
-        """Extract data from a Telegram group participant."""
-        # Use naive UTC datetime for database compatibility
-        from datetime import datetime
-        content_created_at = datetime.utcnow()
-        
-        return {
-            'task_id': task.id,
-            'platform': Platform.TELEGRAM,
-            'source_id': str(entity.id),
-            'source_name': getattr(entity, 'title', 'Unknown'),
-            'source_type': 'group',
-            'content_id': f"user_{user.id}",
-            'content_type': 'participant',
-            'content_text': f"Participant: {user.first_name or ''} {user.last_name or ''}",
-            'author_id': str(user.id),
-            'author_username': user.username,
-            'author_name': f"{user.first_name or ''} {user.last_name or ''}".strip(),
-            'author_phone': None,  # Will be filled later
-            'content_created_at': content_created_at,
-            'platform_data': {
-                'user_id': user.id,
-                'username': user.username,
-                'first_name': user.first_name,
-                'last_name': user.last_name,
-                'is_bot': user.bot,
-                'is_verified': user.verified,
-            },
-            'raw_data': user.to_dict()
-        }
+
     
     def _get_media_types(self, message: Message) -> List[str]:
         """Get media types from message."""
