@@ -657,21 +657,34 @@ async def get_task_results(
     try:
         from app.database import AsyncSessionLocal
         from app.models.parse_result import ParseResult
+        from app.models.parse_task import ParseTask
         from sqlalchemy import select, func
         
         async with AsyncSessionLocal() as db_session:
-            # Convert task_id to integer for database compatibility
-            try:
-                # Extract numeric part from task_id like "task_1750768096_ed4d1724"
-                if '_' in task_id:
-                    task_id_int = int(task_id.split('_')[1])
-                else:
-                    task_id_int = hash(task_id) % 1000000
-            except:
-                task_id_int = hash(task_id) % 1000000
+            # Find the database task_id by task_id string
+            task_query = select(ParseTask).where(ParseTask.task_id == task_id)
+            task_result = await db_session.execute(task_query)
+            db_task = task_result.scalar_one_or_none()
+            
+            if not db_task:
+                return {
+                    "task_id": task_id,
+                    "results": [],
+                    "total": 0,
+                    "format": format,
+                    "pagination": {
+                        "offset": offset,
+                        "limit": limit,
+                        "has_more": False
+                    },
+                    "message": f"Task {task_id} not found in database"
+                }
+            
+            # Use the database primary key for results lookup
+            task_db_id = db_task.id
             
             # Build query
-            query = select(ParseResult).where(ParseResult.task_id == task_id_int)
+            query = select(ParseResult).where(ParseResult.task_id == task_db_id)
             
             # Apply platform filter
             if platform_filter:
