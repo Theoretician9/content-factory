@@ -73,13 +73,18 @@ async def perform_real_parsing(task_id: str, platform: str, link: str, user_id: 
             
             # Save real participants (if any)
             if channel_data.get('participants'):
+                logger.info(f"📝 Saving {len(channel_data['participants'])} participants to database")
                 for participant in channel_data['participants']:
-                    # Only save if essential fields are present
-                    if participant.get('source_id') and participant.get('content_id'):
+                    # Check essential fields - be more lenient
+                    content_id = participant.get('content_id', f"user_{participant.get('author_id', 'unknown')}")
+                    source_id = participant.get('source_id', 'unknown')
+                    
+                    if content_id and source_id:
                         await save_participant_real(task_db_id, participant, db_session)
                         results_saved += 1
                     else:
-                        logger.warning(f"⚠️ Skipping participant with missing fields: {participant.get('content_id', 'unknown')}")
+                        logger.warning(f"⚠️ Skipping participant with missing fields: content_id={content_id}, source_id={source_id}")
+                        logger.debug(f"Participant data: {participant}")
             
             # Save real messages (if any)
             if channel_data.get('messages'):
@@ -194,11 +199,20 @@ async def parse_telegram_channel_real(link: str, account: Dict) -> Dict:
                 participants = []
                 
                 if isinstance(parsed_data, list):
+                    logger.info(f"🔍 DEBUG: Processing {len(parsed_data)} items from TelegramAdapter")
                     for item in parsed_data:
-                        if item.get('content_type') == 'message':
+                        content_type = item.get('content_type')
+                        if content_type == 'message':
                             messages.append(item)
-                        elif item.get('content_type') in ['participant', 'user']:  # Support both old and new format
+                        elif content_type in ['participant', 'user']:  # Support both old and new format
                             participants.append(item)
+                        elif content_type in ['channel_metadata', 'group_metadata']:
+                            # Channel/Group info - also count as participants for now
+                            participants.append(item)
+                        else:
+                            logger.warning(f"⚠️ Unknown content_type: {content_type}")
+                    
+                    logger.info(f"📊 Parsed data breakdown: {len(messages)} messages, {len(participants)} users/participants")
                 
                 return {
                     "channel_info": {
