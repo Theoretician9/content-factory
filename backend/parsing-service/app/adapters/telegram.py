@@ -452,6 +452,9 @@ class TelegramAdapter(BasePlatformAdapter):
         # Use naive UTC datetime for database compatibility
         content_created_at = datetime.utcnow()
         
+        # Convert user.to_dict() and sanitize datetime objects
+        raw_data = self._sanitize_datetime_objects(user.to_dict())
+        
         return {
             'task_id': task.id,
             'platform': Platform.TELEGRAM,
@@ -486,7 +489,7 @@ class TelegramAdapter(BasePlatformAdapter):
                 'chat_id': entity.id,
                 'chat_title': getattr(entity, 'title', 'Unknown')
             },
-            'raw_data': user.to_dict()
+            'raw_data': raw_data
         }
     
     async def _extract_channel_metadata(self, task: ParseTask, channel: Channel) -> Dict[str, Any]:
