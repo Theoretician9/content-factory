@@ -11,9 +11,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import AsyncSessionLocal
 from ..models.parse_result import ParseResult
+from ..models.parse_task import ParseTask
 from ..core.config import Platform
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
+
+
+async def get_task_db_id(task_id: str, db_session: AsyncSession) -> Optional[int]:
+    """Get the database ID for a task by its string task_id."""
+    try:
+        # Query to find the task by task_id string
+        stmt = select(ParseTask.id).where(ParseTask.task_id == task_id)
+        result = await db_session.execute(stmt)
+        db_id = result.scalar_one_or_none()
+        
+        if db_id:
+            logger.info(f"✅ Found task DB ID: {db_id} for task_id: {task_id}")
+            return db_id
+        else:
+            logger.warning(f"⚠️ Task not found in database: {task_id}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"❌ Error finding task ID: {e}")
+        return None
 
 
 async def perform_real_parsing(task_id: str, platform: str, link: str, user_id: int = 1):
@@ -265,9 +287,15 @@ async def save_channel_info_real(task_id: str, channel_info: Dict, db_session: A
 async def save_participant_real(task_id: str, participant: Dict, db_session: AsyncSession):
     """Save real participant data to database."""
     try:
+        # Get the correct task ID from database
+        task_db_id = await get_task_db_id(task_id, db_session)
+        if not task_db_id:
+            logger.error(f"❌ Task {task_id} not found in database")
+            return
+            
         # Use TelegramAdapter data format
         result = ParseResult(
-            task_id=int(task_id.split('_')[1]) if '_' in task_id else hash(task_id) % 1000000,
+            task_id=task_db_id,
             platform=Platform.TELEGRAM,
             source_id=participant.get('source_id') or 'unknown',  # From TelegramAdapter
             source_name=participant.get('source_name') or 'unknown',  # From TelegramAdapter
@@ -293,9 +321,15 @@ async def save_participant_real(task_id: str, participant: Dict, db_session: Asy
 async def save_message_real(task_id: str, message: Dict, db_session: AsyncSession):
     """Save real message data to database."""
     try:
+        # Get the correct task ID from database
+        task_db_id = await get_task_db_id(task_id, db_session)
+        if not task_db_id:
+            logger.error(f"❌ Task {task_id} not found in database")
+            return
+            
         # Use TelegramAdapter data format
         result = ParseResult(
-            task_id=int(task_id.split('_')[1]) if '_' in task_id else hash(task_id) % 1000000,
+            task_id=task_db_id,
             platform=Platform.TELEGRAM,
             source_id=message.get('source_id') or 'unknown',  # From TelegramAdapter
             source_name=message.get('source_name') or 'unknown',  # From TelegramAdapter
