@@ -184,7 +184,7 @@ class TelegramAdapter(BasePlatformAdapter):
     
     async def _parse_channel(self, task: ParseTask, channel: Channel, message_limit: int, progress_callback=None):
         """Parse users from a Telegram channel by collecting commenters from posts."""
-        self.logger.info(f"📱 Parsing channel users: {channel.title}")
+        self.logger.info(f"📱 Parsing channel users: {channel.title} (USER LIMIT: {message_limit} users)")
         
         unique_users = {}  # user_id -> user_data
         processed_messages = 0
