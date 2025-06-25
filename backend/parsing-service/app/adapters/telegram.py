@@ -191,9 +191,16 @@ class TelegramAdapter(BasePlatformAdapter):
         found_commenters = 0
         
         # Get recent messages to find users who commented
-        async for message in self.client.iter_messages(channel, limit=message_limit):
+        # Use larger message limit since we're limiting by USERS, not messages
+        message_search_limit = max(message_limit * 10, 1000)  # Search more messages to find enough users
+        async for message in self.client.iter_messages(channel, limit=message_search_limit):
             if not isinstance(message, Message):
                 continue
+                
+            # Check if we already reached user limit before processing more messages
+            if found_commenters >= message_limit:
+                self.logger.info(f"🛑 USER LIMIT REACHED: {found_commenters}/{message_limit} - stopping message iteration")
+                break
                 
             processed_messages += 1
             
