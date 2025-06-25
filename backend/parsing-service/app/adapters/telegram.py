@@ -246,49 +246,58 @@ class TelegramAdapter(BasePlatformAdapter):
         return parsed_results
     
     async def _parse_group(self, task: ParseTask, chat: Chat, message_limit: int):
-        """Parse messages and participants from a Telegram group."""
-        self.logger.info(f"👥 Parsing group: {chat.title}")
+        """Parse users from a Telegram group by collecting all participants."""
+        self.logger.info(f"👥 Parsing group users: {chat.title}")
         
-        parsed_results = []
+        unique_users = {}  # user_id -> user_data
         
-        # Parse recent messages
-        message_count = 0
-        async for message in self.client.iter_messages(chat, limit=message_limit):
-            if not isinstance(message, Message):
-                continue
-                
-            result_data = await self._extract_message_data(task, message, chat)
-            
-            # Get author phone if available 
-            if message.from_id and isinstance(message.from_id, PeerUser):
-                try:
-                    user = await self.client.get_entity(message.from_id)
-                    result_data['author_phone'] = await self._get_user_phone(user)
-                    result_data['author_username'] = user.username
-                    result_data['author_name'] = f"{user.first_name or ''} {user.last_name or ''}".strip()
-                except Exception as e:
-                    self.logger.debug(f"Could not get user data: {e}")
-            
-            parsed_results.append(result_data)
-            message_count += 1
-        
-        # Parse group participants
+        # Parse group participants (primary focus)
         participant_count = 0
         try:
             async for participant in self.client.iter_participants(chat):
                 if isinstance(participant, User):
-                    participant_data = await self._extract_participant_data(task, participant, chat)
-                    participant_data['author_phone'] = await self._get_user_phone(participant)
+                    user_id = participant.id
                     
-                    parsed_results.append(participant_data)
+                    # Skip if we already have this user
+                    if user_id in unique_users:
+                        continue
+                    
+                    user_data = await self._extract_user_data(task, participant, chat, "participant")
+                    unique_users[user_id] = user_data
                     participant_count += 1
+                    
                     if participant_count % 50 == 0:
                         self.logger.info(f"Processed {participant_count} participants...")
         
         except ChatAdminRequiredError:
             self.logger.warning("Cannot access participant list - admin rights required")
+            
+            # Fallback: collect users from recent messages
+            self.logger.info("Fallback: collecting users from recent messages...")
+            message_count = 0
+            async for message in self.client.iter_messages(chat, limit=message_limit):
+                if not isinstance(message, Message):
+                    continue
+                    
+                message_count += 1
+                
+                # Get message author
+                if message.from_id and isinstance(message.from_id, PeerUser):
+                    user_id = message.from_id.user_id
+                    if user_id not in unique_users:
+                        try:
+                            user = await self.client.get_entity(message.from_id)
+                            user_data = await self._extract_user_data(task, user, chat, "message_author")
+                            unique_users[user_id] = user_data
+                            participant_count += 1
+                        except Exception as e:
+                            self.logger.debug(f"Could not get message author data for user {user_id}: {e}")
+                
+                if message_count % 100 == 0:
+                    self.logger.info(f"Processed {message_count} messages, found {len(unique_users)} unique users...")
         
-        self.logger.info(f"📊 Parsed {message_count} messages and {participant_count} participants from group {chat.title}")
+        parsed_results = list(unique_users.values())
+        self.logger.info(f"📊 Group parsing complete: {len(parsed_results)} unique users found")
         return parsed_results
     
     async def _get_user_phone(self, user: User) -> Optional[str]:
@@ -298,10 +307,20 @@ class TelegramAdapter(BasePlatformAdapter):
             if hasattr(user, 'phone') and user.phone:
                 return f"+{user.phone}"
             
-            # Try to get full user info
-            full_user = await self.client(GetFullUserRequest(user))
-            if hasattr(full_user.user, 'phone') and full_user.user.phone:
-                return f"+{full_user.user.phone}"
+            # Try to get full user info (may fail due to privacy settings)
+            try:
+                full_user = await self.client(GetFullUserRequest(user))
+                if hasattr(full_user.user, 'phone') and full_user.user.phone:
+                    return f"+{full_user.user.phone}"
+            except Exception as full_user_error:
+                self.logger.debug(f"Could not get full user info for {user.id}: {full_user_error}")
+            
+            # Check if user has contact info in mutual contacts
+            try:
+                if hasattr(user, 'contact') and user.contact:
+                    return f"+{user.phone}" if user.phone else None
+            except Exception:
+                pass
             
             return None
             
