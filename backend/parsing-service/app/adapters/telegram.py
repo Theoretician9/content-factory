@@ -224,12 +224,14 @@ class TelegramAdapter(BasePlatformAdapter):
                                 found_commenters += 1
                                 comment_count += 1
                                 
-                                if found_commenters % 10 == 0:
+                                # Calculate progress update frequency (every 5% of message_limit)
+                                progress_step = max(1, int(message_limit * 0.05))
+                                if found_commenters % progress_step == 0:
                                     self.logger.info(f"Found {found_commenters} unique commenters...")
                                     # Update progress if callback provided
                                     if progress_callback:
                                         try:
-                                            await progress_callback(found_commenters, 500)  # Estimate 500 users
+                                            await progress_callback(found_commenters, message_limit)
                                         except Exception as e:
                                             self.logger.debug(f"Progress callback error: {e}")
                                 
@@ -293,12 +295,14 @@ class TelegramAdapter(BasePlatformAdapter):
                         unique_users[user_id] = user_data
                         participant_count += 1
                         
-                        if participant_count % 50 == 0:
+                        # Calculate progress update frequency (every 5% of message_limit)
+                        progress_step = max(1, int(message_limit * 0.05))
+                        if participant_count % progress_step == 0:
                             self.logger.info(f"Processed {participant_count} participants...")
                             # Update progress if callback provided
                             if progress_callback:
                                 try:
-                                    await progress_callback(participant_count, 1000)  # Estimate 1000 participants
+                                    await progress_callback(participant_count, message_limit)
                                 except Exception as e:
                                     self.logger.debug(f"Progress callback error: {e}")
                             # Rate limiting for large groups
