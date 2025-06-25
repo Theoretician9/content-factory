@@ -197,6 +197,8 @@ async def parse_telegram_channel_real_with_progress(link: str, account: Dict, pr
                 'progress_callback': progress_callback  # Pass callback to adapter
             }
             
+            logger.info(f"🔧 TelegramAdapter config: message_limit={message_limit}, progress_callback={progress_callback is not None}")
+            
             logger.info(f"🔥 Starting REAL Telethon parsing for {channel_username}")
             
             # This calls real Telethon methods with progress tracking
