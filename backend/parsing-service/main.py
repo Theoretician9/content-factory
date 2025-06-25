@@ -577,7 +577,10 @@ async def create_task(task_data: dict):
                 "progress": 0,
                 "created_at": datetime.utcnow().isoformat(),
                 "updated_at": datetime.utcnow().isoformat(),
-                "settings": task_data.get("settings", {}),
+                "settings": {
+                    **task_data.get("settings", {}),
+                    "message_limit": task_data.get("message_limit") or task_data.get("settings", {}).get("message_limit") or task_data.get("settings", {}).get("max_depth", 100)
+                },
                 "result_count": 0
             }
             

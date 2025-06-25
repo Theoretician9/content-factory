@@ -161,7 +161,7 @@ class TelegramAdapter(BasePlatformAdapter):
             message_limit = config.get('message_limit', 10000)
             progress_callback = config.get('progress_callback')
             
-            self.logger.info(f"📥 Starting to parse {normalized_target} (limit: {message_limit})")
+            self.logger.info(f"📥 Starting to parse {normalized_target} (USER LIMIT: {message_limit} users)")
             
             # Get entity (Channel/Group)
             entity = await self.client.get_entity(normalized_target)
@@ -226,8 +226,11 @@ class TelegramAdapter(BasePlatformAdapter):
                                 
                                 # 🔥 ПРОВЕРКА ЛИМИТА ПОЛЬЗОВАТЕЛЕЙ
                                 if found_commenters >= message_limit:
-                                    self.logger.info(f"🔄 Reached user limit: {found_commenters}/{message_limit} users found - stopping parsing")
-                                    return [await self._extract_channel_metadata(task, channel)] + list(unique_users.values())
+                                    self.logger.info(f"🛑 LIMIT REACHED: {found_commenters}/{message_limit} users found - STOPPING CHANNEL PARSING")
+                                    channel_metadata = await self._extract_channel_metadata(task, channel)
+                                    final_results = [channel_metadata] + list(unique_users.values())
+                                    self.logger.info(f"✅ Returning {len(final_results)} results due to user limit")
+                                    return final_results
                                 
                                 # Calculate progress update frequency (every 5% of message_limit)
                                 progress_step = max(1, int(message_limit * 0.05))
