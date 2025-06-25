@@ -12,7 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 # New multi-platform imports
-from app.core.config import settings
+from app.core.config import settings, Platform as PlatformEnum, TaskStatus, TaskPriority
+from app.models.parse_task import ParseTask
+from app.database import AsyncSessionLocal
 # Temporarily disable metrics to fix CollectorRegistry duplication error
 # from app.core.metrics import start_metrics_server, get_metrics_collector
 from app.database import init_database
