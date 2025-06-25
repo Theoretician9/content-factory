@@ -295,6 +295,12 @@ class TelegramAdapter(BasePlatformAdapter):
                         
                         if participant_count % 50 == 0:
                             self.logger.info(f"Processed {participant_count} participants...")
+                            # Update progress if callback provided
+                            if progress_callback:
+                                try:
+                                    await progress_callback(participant_count, 1000)  # Estimate 1000 participants
+                                except Exception as e:
+                                    self.logger.debug(f"Progress callback error: {e}")
                             # Rate limiting for large groups
                             await asyncio.sleep(0.1)
                     

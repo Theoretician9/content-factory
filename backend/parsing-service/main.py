@@ -370,16 +370,23 @@ async def execute_real_parsing(task):
         
         # Update task to running status
         task["status"] = "running" 
-        task["progress"] = 10
+        task["progress"] = 0
         task["updated_at"] = datetime.utcnow().isoformat()
         
+        # Get message limit from task config
+        message_limit = task.get("settings", {}).get("message_limit", 100)
+        
         # Create progress callback function
-        async def update_progress(current_users: int, estimated_total: int = 500):
+        async def update_progress(current_users: int, estimated_total: int = None):
             """Update task progress based on real parsing data."""
             try:
-                # Calculate progress: 10% start + 80% parsing + 10% saving
-                parsing_progress = min(80, int(80 * current_users / estimated_total))
-                total_progress = 10 + parsing_progress
+                # Use message_limit as estimated_total if not provided
+                if estimated_total is None:
+                    estimated_total = message_limit
+                
+                # Calculate progress: 0-95% parsing + 95-100% saving
+                parsing_progress = min(95, int(95 * current_users / estimated_total))
+                total_progress = parsing_progress
                 
                 task["progress"] = total_progress
                 task["updated_at"] = datetime.utcnow().isoformat()
