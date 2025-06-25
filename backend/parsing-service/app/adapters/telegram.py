@@ -164,14 +164,17 @@ class TelegramAdapter(BasePlatformAdapter):
             # Get entity (Channel/Group)
             entity = await self.client.get_entity(normalized_target)
             
+            parsed_results = []
+            
             if isinstance(entity, Channel):
-                await self._parse_channel(task, entity, message_limit)
+                parsed_results = await self._parse_channel(task, entity, message_limit)
             elif isinstance(entity, Chat):
-                await self._parse_group(task, entity, message_limit)
+                parsed_results = await self._parse_group(task, entity, message_limit)
             else:
                 raise ValueError(f"Unsupported entity type: {type(entity)}")
             
-            self.logger.info(f"✅ Completed parsing {normalized_target}")
+            self.logger.info(f"✅ Completed parsing {normalized_target}, returning {len(parsed_results)} results")
+            return parsed_results
             
         except Exception as e:
             self.logger.error(f"❌ Failed to parse {target}: {e}")
@@ -181,7 +184,9 @@ class TelegramAdapter(BasePlatformAdapter):
         """Parse messages from a Telegram channel."""
         self.logger.info(f"📱 Parsing channel: {channel.title}")
         
+        parsed_results = []
         message_count = 0
+        
         async for message in self.client.iter_messages(channel, limit=message_limit):
             if not isinstance(message, Message):
                 continue
@@ -194,17 +199,19 @@ class TelegramAdapter(BasePlatformAdapter):
                 try:
                     user = await self.client.get_entity(message.from_id)
                     result_data['author_phone'] = await self._get_user_phone(user)
+                    result_data['author_username'] = user.username
+                    result_data['author_name'] = f"{user.first_name or ''} {user.last_name or ''}".strip()
                 except Exception as e:
                     self.logger.debug(f"Could not get user data: {e}")
             
-            # Save result (здесь нужно будет сохранить в БД)
-            self.logger.debug(f"Parsed message {message.id}: {result_data.get('content_text', '')[:50]}...")
-            
+            parsed_results.append(result_data)
             message_count += 1
+            
             if message_count % 100 == 0:
                 self.logger.info(f"Processed {message_count} messages...")
         
         self.logger.info(f"📊 Parsed {message_count} messages from channel {channel.title}")
+        return parsed_results
     
     async def _parse_group(self, task: ParseTask, chat: Chat, message_limit: int):
         """Parse messages and participants from a Telegram group."""
