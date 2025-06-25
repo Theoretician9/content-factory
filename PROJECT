@@ -16,7 +16,7 @@ SaaS-платформа для автоматизации маркетинга, 
 ## Технологии
 - Python (FastAPI)
 - MySQL (основная БД)
-- PostgreSQL (для интеграций)
+- PostgreSQL (для интеграций и парсинга)
 - Redis
 - RabbitMQ
 - Nginx
@@ -49,6 +49,8 @@ SaaS-платформа для автоматизации маркетинга, 
 - ✅ База данных integration_db создана и полностью инициализирована
 - ✅ Пользователь integration_user настроен с полными правами
 - ✅ Схема БД Integration Service создана (4 таблицы с индексами и триггерами)
+- ✅ **PostgreSQL для Parsing Service**: БД parsing_db полностью настроена и работает
+- ✅ **Parsing Service models**: Универсальные модели для мультиплатформенного парсинга
 - ❌ Остальные базы данных для сервисов ещё не созданы
 - ❌ Не настроены миграции и схемы баз данных для других сервисов
 
@@ -73,13 +75,79 @@ SaaS-платформа для автоматизации маркетинга, 
 - ✅ API Gateway запущен и доступен на порту 8000 (с AppRole Authentication)
 - ✅ Integration Service запущен и полностью функционален (порт 8001, с AppRole Authentication)
 - ✅ User Service запущен и работает (с AppRole Authentication)
-- ❌ Остальные микросервисы (Billing, Scenario, Content, Invite, Parsing) ещё не протестированы
+- ✅ **Parsing Service запущен и полностью функционален** (порт 8002, с AppRole Authentication)
+- ❌ Остальные микросервисы (Billing, Scenario, Content, Invite) ещё не протестированы
 - ❌ Не настроено взаимодействие между сервисами
 - ❌ Не протестированы API эндпоинты остальных сервисов
 
+### **PARSING SERVICE - Мультиплатформенный сервис парсинга** ✅ ПОЛНОСТЬЮ РЕАЛИЗОВАН
+
+#### **Назначение и архитектура**
+- **Универсальный парсинг**: Telegram (полностью), Instagram/WhatsApp (планируется)
+- **Модульная архитектура**: Platform Adapters для каждой социальной сети
+- **Реальные аккаунты**: Интеграция с integration-service для получения Telegram сессий
+- **Мультиплатформенные очереди**: RabbitMQ с разделением по платформам
+- **Унифицированное API**: Единые endpoints для всех платформ с параметром platform
+
+#### **Ключевые особенности реализации**
+- **✅ Circular Import исправлен**: config.py ↔ vault.py через lazy import и try/except
+- **✅ AppRole аутентификация**: Раздельные VAULT_ROLE_ID/SECRET_ID для каждого сервиса
+- **✅ Реальный Telegram парсинг**: Telethon 1.34.0 с live session данными
+- **✅ Intelligent progress**: Smart оценка объема каналов и real-time прогресс
+- **✅ Database integration**: PostgreSQL с универсальными моделями данных
+- **✅ Frontend integration**: React UI с TypeScript и real-time updates
+
+#### **Парсинг Telegram - полностью работает**
+- **Группы**: `iter_participants` для получения участников (user_id, username, phone)
+- **Каналы**: `iter_messages` для поиска комментаторов к постам
+- **Session management**: StringSession из БД integration-service
+- **API credentials**: api_id/api_hash из Vault
+- **Error handling**: FloodWait, AuthKey, ChannelPrivate errors
+- **User limit enforcement**: Точное соблюдение лимитов пользователя
+
+#### **Системы управления задачами**
+- **Task lifecycle**: pending → running → completed/failed/paused
+- **Real-time progress**: 0% → 95% (парсинг) → 100% (сохранение)
+- **CRUD операции**: create, read, update, delete, pause, resume
+- **Account management**: Автоматический выбор активных аккаунтов
+- **Database storage**: Сохранение результатов в PostgreSQL
+
+#### **Интеграции с микросервисами**
+- **Integration Service**: `/internal/active-accounts` для получения Telegram аккаунтов
+- **Vault**: Секреты API и session данные через AppRole
+- **API Gateway**: Проксирование `/api/parsing/{path}` с JWT авторизацией
+- **Frontend**: React компонент с полным управлением задачами
+
+#### **Проблемы требующие доработки**
+- **❌ Просмотр результатов**: Кнопка "глазик" не показывает данные парсинга
+- **❌ Export функций**: Скачивание CSV/Excel файлов не реализовано
+- **❌ Кнопка скачивания**: Нет прямого скачивания Excel без просмотра
+- **❌ Пагинация результатов**: Показываются все результаты сразу
+- **❌ Поиск сообществ**: Поиск по ключевым словам не работает
+- **❌ Множественные аккаунты**: Не протестировано переключение между аккаунтами
+- **❌ Очередь пабликов**: Не протестирована обработка очереди
+- **❌ Парсинг групп**: Протестирован только парсинг каналов
+- **❌ Приоритеты задач**: Функция приоритетов на фронте не протестирована
+
+#### **Архитектурные принципы**
+- **Принцип наименьших привилегий**: Каждый сервис имеет отдельные роли в Vault
+- **Изоляция сервисов**: Parsing-service работает только с своими данными
+- **Разделение ответственности**: Parsing только парсит, не управляет аккаунтами
+- **Профессиональные решения**: Нет костылей, только архитектурные паттерны
+- **Extensibility**: Готовность к добавлению новых платформ
+
+#### **Критически важно при работе с Parsing Service**:
+1. **НИКОГДА не редактировать файлы на сервере напрямую** - только через git
+2. **AppRole credentials в .env** - каждый сервис имеет свои VAULT_ROLE_ID/SECRET_ID
+3. **Session данные из Integration Service** - НЕ из Vault напрямую
+4. **Lazy import в config.py** - для избежания circular imports
+5. **PostgreSQL для parsing_db** - отдельная БД, не MySQL
+6. **Intelligent progress estimation** - based on channel analysis
+7. **User limit enforcement** - строгое соблюдение лимитов пользователя
+
 ## Безопасность
 - ✅ **Production Vault**: запущен в production режиме с файловым хранением (только во внутренней сети)
-- ✅ **AppRole Authentication**: внедрено в integration-service, user-service, api-gateway
+- ✅ **AppRole Authentication**: внедрено в integration-service, user-service, api-gateway, **parsing-service**
 - ✅ **Автоматические токены**: обновление каждые 1-4 часа без ручного вмешательства
 - ✅ **Vault Unsealer**: автоматическое unsealing 24/7, self-healing при sealed state
 - ✅ Настроены unseal keys и инициализация для Vault
@@ -88,17 +156,21 @@ SaaS-платформа для автоматизации маркетинга, 
 - ✅ Integration Service полностью интегрирован с Vault для хранения секретов
 - ✅ API Gateway интегрирован с Vault (CSRF_SECRET_KEY, JWT_SECRET_KEY)
 - ✅ User Service интегрирован с Vault для JWT секретов
+- ✅ **Parsing Service интегрирован с Vault** для JWT секретов и API credentials
 - ✅ HTTPS настроен и работает через Let's Encrypt
 - ✅ GitHub push protection: секреты не попадают в репозиторий, токены в переменных окружения
 - ✅ **Audit Trail**: все AppRole аутентификации логируются в Vault
+- ✅ **Разделение ролей**: parsing-service имеет отдельные VAULT_ROLE_ID/SECRET_ID
 - ⏳ Остальные сервисы будут переведены на AppRole по мере развития
 - ❌ Не настроен firewall
 
 ## Очереди и кэширование
 - ✅ Redis запущен и доступен на порту 6380
 - ✅ RabbitMQ запущен и доступен на портах 5672, 15672, 15692
-- ❌ Не настроены очереди в RabbitMQ
-- ❌ Не настроено кэширование в Redis
+- ✅ **Parsing Service Celery**: Настроена интеграция с RabbitMQ для задач парсинга
+- ✅ **Redis state management**: Управление состояниями задач и прогрессом
+- ❌ Не настроены очереди в RabbitMQ для других сервисов
+- ❌ Не настроено кэширование в Redis для других сервисов
 
 ## Доступы
 - API Gateway: http://92.113.146.148:8000 (будет http/https, публично)
@@ -582,6 +654,21 @@ class VaultClient:
 - **Особенности:**
   - PostgreSQL 15 с поддержкой JSONB, UUID, индексов
   - 4 таблицы: telegram_sessions, telegram_bots, telegram_channels, integration_logs
+  - Автоматические триггеры для updated_at
+  - Полнотекстовый поиск и GIN индексы
+
+### 17. Parsing Service (parsing-service)
+- **Назначение:** Мультиплатформенный сервис парсинга
+- **Внутренний адрес:** parsing-service:8002
+- **Внешний адрес:** Только через SSH-туннель: http://localhost:8002
+- **База данных:** parsing-postgres:5433 (PostgreSQL)
+- **Команды:**
+  - Перезапуск: `docker-compose restart parsing-service`
+  - Логи: `docker-compose logs parsing-service | tail 100`
+  - Войти в контейнер: `docker-compose exec parsing-service sh`
+- **Особенности:**
+  - PostgreSQL 15 с поддержкой JSONB, UUID, индексов
+  - 4 таблицы: telegram_sessions, telegram_bots, telegram_channels, parsing_logs
   - Автоматические триггеры для updated_at
   - Полнотекстовый поиск и GIN индексы
 
