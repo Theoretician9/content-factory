@@ -17,7 +17,8 @@ from telethon.tl.types import (
 )
 from telethon.errors import (
     FloodWaitError, SessionPasswordNeededError, 
-    AuthKeyError, ChannelPrivateError, ChatAdminRequiredError
+    AuthKeyError, ChannelPrivateError, ChatAdminRequiredError,
+    UserPrivacyRestrictedError, PeerFloodError
 )
 from telethon.tl.functions.users import GetFullUserRequest
 from telethon.tl.functions.channels import GetFullChannelRequest
@@ -256,8 +257,11 @@ class TelegramAdapter(BasePlatformAdapter):
             if processed_messages % 50 == 0:
                 self.logger.info(f"Processed {processed_messages} messages, found {len(unique_users)} unique users...")
         
-        parsed_results = list(unique_users.values())
-        self.logger.info(f"📊 Channel parsing complete: {processed_messages} messages processed, {len(parsed_results)} unique users found")
+        # Add channel metadata as first result
+        channel_metadata = await self._extract_channel_metadata(task, channel)
+        
+        parsed_results = [channel_metadata] + list(unique_users.values())
+        self.logger.info(f"📊 Channel parsing complete: {processed_messages} messages processed, {len(unique_users)} unique users found")
         return parsed_results
     
     async def _parse_group(self, task: ParseTask, chat: Chat, message_limit: int):
@@ -323,8 +327,11 @@ class TelegramAdapter(BasePlatformAdapter):
                 if message_count % 100 == 0:
                     self.logger.info(f"Processed {message_count} messages, found {len(unique_users)} unique users...")
         
-        parsed_results = list(unique_users.values())
-        self.logger.info(f"📊 Group parsing complete: {len(parsed_results)} unique users found")
+        # Add group metadata as first result
+        group_metadata = await self._extract_group_metadata(task, chat)
+        
+        parsed_results = [group_metadata] + list(unique_users.values())
+        self.logger.info(f"📊 Group parsing complete: {len(unique_users)} unique users found")
         return parsed_results
     
     async def _get_user_phone(self, user: User) -> Optional[str]:
