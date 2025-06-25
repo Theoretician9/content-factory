@@ -362,31 +362,66 @@ async def process_pending_tasks():
         asyncio.create_task(execute_real_parsing(task))
 
 async def execute_real_parsing(task):
-    """Execute REAL parsing with database storage instead of simulation."""
+    """Execute REAL parsing with database storage and real-time progress updates."""
     try:
-        from app.services.real_parser import perform_real_parsing
+        from app.services.real_parser import perform_real_parsing_with_progress
         
         logger.info(f"🚀 Starting REAL parsing for task {task['id']}: {task['link']}")
         
         # Update task to running status
         task["status"] = "running" 
-        task["progress"] = 20
+        task["progress"] = 10
         task["updated_at"] = datetime.utcnow().isoformat()
         
-        # Step 1: Perform actual parsing and save to database
-        num_results = await perform_real_parsing(
+        # Create progress callback function
+        async def update_progress(current_users: int, estimated_total: int = 500):
+            """Update task progress based on real parsing data."""
+            try:
+                # Calculate progress: 10% start + 80% parsing + 10% saving
+                parsing_progress = min(80, int(80 * current_users / estimated_total))
+                total_progress = 10 + parsing_progress
+                
+                task["progress"] = total_progress
+                task["updated_at"] = datetime.utcnow().isoformat()
+                task["current_users"] = current_users
+                task["estimated_total"] = estimated_total
+                
+                # Also update database task
+                try:
+                    from app.database import AsyncSessionLocal
+                    from app.models.parse_task import ParseTask
+                    from sqlalchemy import select
+                    
+                    async with AsyncSessionLocal() as db_session:
+                        stmt = select(ParseTask).where(ParseTask.task_id == task["id"])
+                        result = await db_session.execute(stmt)
+                        db_task = result.scalar_one_or_none()
+                        if db_task:
+                            db_task.progress = total_progress
+                            db_task.updated_at = datetime.utcnow()
+                            await db_session.commit()
+                except Exception as db_error:
+                    logger.debug(f"DB progress update error: {db_error}")
+                
+                logger.info(f"📊 Progress: {total_progress}% ({current_users}/{estimated_total} users found)")
+            except Exception as e:
+                logger.debug(f"Progress update error: {e}")
+        
+        # Step 1: Perform actual parsing with progress callback
+        num_results = await perform_real_parsing_with_progress(
             task_id=task["id"],
             platform=task["platform"], 
             link=task["link"],
-            user_id=task.get("user_id", 1)
+            user_id=task.get("user_id", 1),
+            progress_callback=update_progress
         )
         
-        # Step 2: Simulate processing progress for UI
-        await asyncio.sleep(2)  # Brief processing time
-        task["progress"] = 80
+        # Step 2: Saving to database (90-100%)
+        task["progress"] = 95
         task["updated_at"] = datetime.utcnow().isoformat()
+        logger.info(f"💾 Saving {num_results} results to database...")
         
-        await asyncio.sleep(1)  # Final processing
+        await asyncio.sleep(1)  # Brief save time
         
         # Step 3: Complete the task with real statistics
         task["progress"] = 100
