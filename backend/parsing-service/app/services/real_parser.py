@@ -249,15 +249,9 @@ async def check_channel_accessibility(channel_username: str, account: Dict) -> b
         return False
 
 
-async def save_channel_info_real(task_id: str, channel_info: Dict, db_session: AsyncSession):
+async def save_channel_info_real(task_db_id: int, channel_info: Dict, db_session: AsyncSession):
     """Save real channel information to database."""
     try:
-        # Get the correct task ID from database
-        task_db_id = await get_task_db_id(task_id, db_session)
-        if not task_db_id:
-            logger.error(f"❌ Task {task_id} not found in database")
-            return
-            
         username = channel_info.get('username', 'unknown')
         result = ParseResult(
             task_id=task_db_id,
@@ -290,15 +284,9 @@ async def save_channel_info_real(task_id: str, channel_info: Dict, db_session: A
         logger.error(f"❌ Error saving channel info: {e}")
 
 
-async def save_participant_real(task_id: str, participant: Dict, db_session: AsyncSession):
+async def save_participant_real(task_db_id: int, participant: Dict, db_session: AsyncSession):
     """Save real participant data to database."""
     try:
-        # Get the correct task ID from database
-        task_db_id = await get_task_db_id(task_id, db_session)
-        if not task_db_id:
-            logger.error(f"❌ Task {task_id} not found in database")
-            return
-            
         # Use TelegramAdapter data format
         result = ParseResult(
             task_id=task_db_id,
@@ -324,15 +312,9 @@ async def save_participant_real(task_id: str, participant: Dict, db_session: Asy
         logger.error(f"❌ Error saving participant: {e}")
 
 
-async def save_message_real(task_id: str, message: Dict, db_session: AsyncSession):
+async def save_message_real(task_db_id: int, message: Dict, db_session: AsyncSession):
     """Save real message data to database."""
     try:
-        # Get the correct task ID from database
-        task_db_id = await get_task_db_id(task_id, db_session)
-        if not task_db_id:
-            logger.error(f"❌ Task {task_id} not found in database")
-            return
-            
         # Use TelegramAdapter data format
         result = ParseResult(
             task_id=task_db_id,
