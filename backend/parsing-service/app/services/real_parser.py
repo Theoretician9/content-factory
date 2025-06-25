@@ -249,31 +249,22 @@ async def save_channel_info_real(task_id: str, channel_info: Dict, db_session: A
 async def save_participant_real(task_id: str, participant: Dict, db_session: AsyncSession):
     """Save real participant data to database."""
     try:
+        # Use TelegramAdapter data format
         result = ParseResult(
             task_id=int(task_id.split('_')[1]) if '_' in task_id else hash(task_id) % 1000000,
             platform=Platform.TELEGRAM,
-            source_id=participant.get('source_channel_id'),
-            source_name=participant.get('source_channel_name'),
-            source_type="channel",
-            content_id=str(participant.get('user_id')),
-            content_type="participant",
-            content_text=f"Real participant: {participant.get('username', 'No username')}",
-            author_id=str(participant.get('user_id')),
-            author_username=participant.get('username'),
-            author_name=participant.get('first_name', ''),
-            author_phone=participant.get('phone'),  # Real phone if available
-            content_created_at=participant.get('join_date'),
-            platform_data={
-                "user_id": participant.get('user_id'),
-                "username": participant.get('username'),
-                "first_name": participant.get('first_name'),
-                "last_name": participant.get('last_name'),
-                "phone": participant.get('phone'),
-                "is_bot": participant.get('is_bot', False),
-                "is_premium": participant.get('is_premium', False),
-                "status": participant.get('status'),
-                "real_parsing": True
-            },
+            source_id=participant.get('source_id') or 'unknown',  # From TelegramAdapter
+            source_name=participant.get('source_name') or 'unknown',  # From TelegramAdapter
+            source_type=participant.get('source_type', 'channel'),
+            content_id=participant.get('content_id') or 'unknown',  # From TelegramAdapter
+            content_type=participant.get('content_type', 'participant'),
+            content_text=participant.get('content_text', 'Real participant'),
+            author_id=participant.get('author_id'),
+            author_username=participant.get('author_username'),
+            author_name=participant.get('author_name', ''),
+            author_phone=participant.get('author_phone'),  # Real phone if available
+            content_created_at=participant.get('content_created_at') or datetime.utcnow(),
+            platform_data=participant.get('platform_data', {}),
             created_at=datetime.utcnow()
         )
         
