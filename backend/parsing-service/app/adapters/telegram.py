@@ -277,12 +277,21 @@ class TelegramAdapter(BasePlatformAdapter):
                     if user_id in unique_users:
                         continue
                     
-                    user_data = await self._extract_user_data(task, participant, chat, "participant")
-                    unique_users[user_id] = user_data
-                    participant_count += 1
+                    try:
+                        user_data = await self._extract_user_data(task, participant, chat, "participant")
+                        unique_users[user_id] = user_data
+                        participant_count += 1
+                        
+                        if participant_count % 50 == 0:
+                            self.logger.info(f"Processed {participant_count} participants...")
+                            # Rate limiting for large groups
+                            await asyncio.sleep(0.1)
                     
-                    if participant_count % 50 == 0:
-                        self.logger.info(f"Processed {participant_count} participants...")
+                    except FloodWaitError as e:
+                        self.logger.warning(f"FloodWait {e.seconds}s while processing participant {user_id}")
+                        await asyncio.sleep(e.seconds + 1)
+                    except Exception as e:
+                        self.logger.debug(f"Could not process participant {user_id}: {e}")
         
         except ChatAdminRequiredError:
             self.logger.warning("Cannot access participant list - admin rights required")
@@ -305,6 +314,9 @@ class TelegramAdapter(BasePlatformAdapter):
                             user_data = await self._extract_user_data(task, user, chat, "message_author")
                             unique_users[user_id] = user_data
                             participant_count += 1
+                        except FloodWaitError as e:
+                            self.logger.warning(f"FloodWait {e.seconds}s while getting message author {user_id}")
+                            await asyncio.sleep(e.seconds + 1)
                         except Exception as e:
                             self.logger.debug(f"Could not get message author data for user {user_id}: {e}")
                 
