@@ -215,32 +215,33 @@ async def check_channel_accessibility(channel_username: str, account: Dict) -> b
 async def save_channel_info_real(task_id: str, channel_info: Dict, db_session: AsyncSession):
     """Save real channel information to database."""
     try:
+        username = channel_info.get('username', 'unknown')
         result = ParseResult(
             task_id=int(task_id.split('_')[1]) if '_' in task_id else hash(task_id) % 1000000,
             platform=Platform.TELEGRAM,
-            source_id=channel_info.get('id', f"@{channel_info['username']}"),
-            source_name=channel_info['username'],
+            source_id=channel_info.get('id') or f"@{username}",
+            source_name=username,
             source_type="channel",
             content_id="channel_info",
             content_type="channel_metadata",
-            content_text=f"Real channel: {channel_info['title']}",
+            content_text=f"Real channel: {channel_info.get('title', username)}",
             author_id=None,
             author_username=None,
-            author_name=channel_info['title'],
+            author_name=channel_info.get('title', username),
             author_phone=None,
             content_created_at=datetime.utcnow(),
             platform_data={
-                "channel_username": channel_info['username'],
-                "channel_title": channel_info['title'],
-                "channel_type": channel_info['type'],
-                "accessible": channel_info['accessible'],
+                "channel_username": username,
+                "channel_title": channel_info.get('title', username),
+                "channel_type": channel_info.get('type', 'channel'),
+                "accessible": channel_info.get('accessible', True),
                 "real_parsing": True
             },
             created_at=datetime.utcnow()
         )
         
         db_session.add(result)
-        logger.info(f"📝 Saved real channel info for {channel_info['username']}")
+        logger.info(f"📝 Saved real channel info for {username}")
         
     except Exception as e:
         logger.error(f"❌ Error saving channel info: {e}")
@@ -277,30 +278,27 @@ async def save_participant_real(task_id: str, participant: Dict, db_session: Asy
 async def save_message_real(task_id: str, message: Dict, db_session: AsyncSession):
     """Save real message data to database."""
     try:
+        # Use TelegramAdapter data format
         result = ParseResult(
             task_id=int(task_id.split('_')[1]) if '_' in task_id else hash(task_id) % 1000000,
             platform=Platform.TELEGRAM,
-            source_id=message.get('channel_id'),
-            source_name=message.get('channel_username'),
-            source_type="channel",
-            content_id=str(message.get('message_id')),
-            content_type="message",
-            content_text=message.get('text', ''),
-            author_id=str(message.get('from_user_id')) if message.get('from_user_id') else None,
-            author_username=message.get('from_username'),
-            author_name=message.get('from_name'),
-            author_phone=message.get('from_phone'),
-            content_created_at=message.get('date'),
-            platform_data={
-                "message_id": message.get('message_id'),
-                "text": message.get('text'),
-                "from_user_id": message.get('from_user_id'),
-                "from_username": message.get('from_username'),
-                "media_type": message.get('media_type'),
-                "views": message.get('views'),
-                "forwards": message.get('forwards'),
-                "real_parsing": True
-            },
+            source_id=message.get('source_id') or 'unknown',  # From TelegramAdapter
+            source_name=message.get('source_name') or 'unknown',  # From TelegramAdapter
+            source_type=message.get('source_type', 'channel'),
+            content_id=message.get('content_id') or 'unknown',  # From TelegramAdapter
+            content_type=message.get('content_type', 'message'),
+            content_text=message.get('content_text', ''),
+            author_id=message.get('author_id'),
+            author_username=message.get('author_username'),
+            author_name=message.get('author_name', ''),
+            author_phone=message.get('author_phone'),
+            content_created_at=message.get('content_created_at') or datetime.utcnow(),
+            views_count=message.get('views_count', 0),
+            has_media=message.get('has_media', False),
+            media_count=message.get('media_count', 0),
+            is_forwarded=message.get('is_forwarded', False),
+            is_reply=message.get('is_reply', False),
+            platform_data=message.get('platform_data', {}),
             created_at=datetime.utcnow()
         )
         
