@@ -742,11 +742,13 @@ async def get_task_results(
                     "limit": limit,
                     "has_more": offset + limit < total
                 }
-            }
+                            }
             
     except Exception as e:
-        logger.error(f"❌ Error getting task results: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get results: {str(e)}")
+        import traceback
+        error_detail = f"Get results error for task {task_id}: {str(e)}"
+        logger.error(f"❌ {error_detail}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=error_detail)
 
 @app.get("/results/{task_id}/export", tags=["Results API"])
 async def export_task_results(task_id: str, format: str = "json"):
@@ -754,6 +756,7 @@ async def export_task_results(task_id: str, format: str = "json"):
     try:
         from app.database import AsyncSessionLocal
         from app.models.parse_result import ParseResult
+        from app.models.parse_task import ParseTask
         from sqlalchemy import select
         from fastapi.responses import StreamingResponse
         import json
@@ -761,18 +764,19 @@ async def export_task_results(task_id: str, format: str = "json"):
         import io
         
         async with AsyncSessionLocal() as db_session:
-            # Convert task_id to integer for database compatibility
-            try:
-                # Extract numeric part from task_id like "task_1750768096_ed4d1724"
-                if '_' in task_id:
-                    task_id_int = int(task_id.split('_')[1])
-                else:
-                    task_id_int = hash(task_id) % 1000000
-            except:
-                task_id_int = hash(task_id) % 1000000
+            # Find the database task_id by task_id string
+            task_query = select(ParseTask).where(ParseTask.task_id == task_id)
+            task_result = await db_session.execute(task_query)
+            db_task = task_result.scalar_one_or_none()
+            
+            if not db_task:
+                raise HTTPException(status_code=404, detail=f"Task {task_id} not found in database")
+            
+            # Use the database primary key for results lookup
+            task_db_id = db_task.id
             
             # Get all results for the task
-            query = select(ParseResult).where(ParseResult.task_id == task_id_int).order_by(ParseResult.created_at.desc())
+            query = select(ParseResult).where(ParseResult.task_id == task_db_id).order_by(ParseResult.created_at.desc())
             result = await db_session.execute(query)
             results = result.scalars().all()
             
@@ -843,9 +847,13 @@ async def export_task_results(task_id: str, format: str = "json"):
             else:
                 raise HTTPException(status_code=400, detail="Unsupported format. Use 'json' or 'csv'")
             
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
-        logger.error(f"❌ Error exporting task results: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to export results: {str(e)}")
+        import traceback
+        error_detail = f"Export error for task {task_id}: {str(e)}"
+        logger.error(f"❌ {error_detail}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=error_detail)
 
 if __name__ == "__main__":
     uvicorn.run(
