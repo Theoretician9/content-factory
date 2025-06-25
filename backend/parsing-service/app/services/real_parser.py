@@ -197,7 +197,7 @@ async def parse_telegram_channel_real(link: str, account: Dict) -> Dict:
                     for item in parsed_data:
                         if item.get('content_type') == 'message':
                             messages.append(item)
-                        elif item.get('content_type') == 'participant':
+                        elif item.get('content_type') in ['participant', 'user']:  # Support both old and new format
                             participants.append(item)
                 
                 return {
