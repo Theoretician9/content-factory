@@ -271,8 +271,11 @@ class TelegramAdapter(BasePlatformAdapter):
                         
                         # 🔥 ПРОВЕРКА ЛИМИТА ПОЛЬЗОВАТЕЛЕЙ
                         if found_commenters >= message_limit:
-                            self.logger.info(f"🔄 Reached user limit: {found_commenters}/{message_limit} users found - stopping parsing")
-                            return [await self._extract_channel_metadata(task, channel)] + list(unique_users.values())
+                            self.logger.info(f"🛑 LIMIT REACHED: {found_commenters}/{message_limit} users found - STOPPING CHANNEL PARSING")
+                            channel_metadata = await self._extract_channel_metadata(task, channel)
+                            final_results = [channel_metadata] + list(unique_users.values())
+                            self.logger.info(f"✅ Returning {len(final_results)} results due to user limit")
+                            return final_results
                         
                     except Exception as e:
                         self.logger.debug(f"Could not get author data for user {user_id}: {e}")
