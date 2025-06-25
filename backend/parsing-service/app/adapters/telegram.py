@@ -181,7 +181,7 @@ class TelegramAdapter(BasePlatformAdapter):
             self.logger.error(f"❌ Failed to parse {target}: {e}")
             raise
     
-    async def _parse_channel(self, task: ParseTask, channel: Channel, message_limit: int):
+    async def _parse_channel(self, task: ParseTask, channel: Channel, message_limit: int, progress_callback=None):
         """Parse users from a Telegram channel by collecting commenters from posts."""
         self.logger.info(f"📱 Parsing channel users: {channel.title}")
         
@@ -225,6 +225,12 @@ class TelegramAdapter(BasePlatformAdapter):
                                 
                                 if found_commenters % 10 == 0:
                                     self.logger.info(f"Found {found_commenters} unique commenters...")
+                                    # Update progress if callback provided
+                                    if progress_callback:
+                                        try:
+                                            await progress_callback(found_commenters, 500)  # Estimate 500 users
+                                        except Exception as e:
+                                            self.logger.debug(f"Progress callback error: {e}")
                                 
                                 # Rate limiting for user requests
                                 if comment_count % 5 == 0:
