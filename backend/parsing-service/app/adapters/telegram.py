@@ -316,6 +316,10 @@ class TelegramAdapter(BasePlatformAdapter):
     
     async def _extract_participant_data(self, task: ParseTask, user: User, entity) -> Dict[str, Any]:
         """Extract data from a Telegram group participant."""
+        # Use naive UTC datetime for database compatibility
+        from datetime import datetime
+        content_created_at = datetime.utcnow()
+        
         return {
             'task_id': task.id,
             'platform': Platform.TELEGRAM,
@@ -329,7 +333,7 @@ class TelegramAdapter(BasePlatformAdapter):
             'author_username': user.username,
             'author_name': f"{user.first_name or ''} {user.last_name or ''}".strip(),
             'author_phone': None,  # Will be filled later
-            'content_created_at': datetime.now(),
+            'content_created_at': content_created_at,
             'platform_data': {
                 'user_id': user.id,
                 'username': user.username,
