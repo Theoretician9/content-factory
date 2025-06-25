@@ -373,8 +373,10 @@ async def execute_real_parsing(task):
         task["progress"] = 0
         task["updated_at"] = datetime.utcnow().isoformat()
         
-        # Get message limit from task config
-        message_limit = task.get("settings", {}).get("message_limit", 100)
+        # Get message limit from task config (support both field names)
+        settings = task.get("settings", {})
+        message_limit = settings.get("message_limit") or settings.get("max_depth", 100)
+        logger.info(f"🎯 Using message limit: {message_limit} (from settings: {settings})")
         
         # Create progress callback function
         async def update_progress(current_users: int, estimated_total: int = None):
@@ -550,7 +552,7 @@ async def create_task(task_data: dict):
                 description=f"Parsing task for {link}",
                 config={
                     "target": link,
-                    "message_limit": task_data.get("message_limit", 100),
+                    "message_limit": task_data.get("message_limit") or task_data.get("settings", {}).get("message_limit") or task_data.get("settings", {}).get("max_depth", 100),
                     "include_media": task_data.get("include_media", True),
                     "settings": task_data.get("settings", {})
                 },
