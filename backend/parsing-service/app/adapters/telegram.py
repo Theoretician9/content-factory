@@ -181,36 +181,68 @@ class TelegramAdapter(BasePlatformAdapter):
             raise
     
     async def _parse_channel(self, task: ParseTask, channel: Channel, message_limit: int):
-        """Parse messages from a Telegram channel."""
-        self.logger.info(f"📱 Parsing channel: {channel.title}")
+        """Parse users from a Telegram channel by collecting commenters from posts."""
+        self.logger.info(f"📱 Parsing channel users: {channel.title}")
         
-        parsed_results = []
-        message_count = 0
+        unique_users = {}  # user_id -> user_data
+        processed_messages = 0
+        found_commenters = 0
         
+        # Get recent messages to find users who commented
         async for message in self.client.iter_messages(channel, limit=message_limit):
             if not isinstance(message, Message):
                 continue
                 
-            # Parse message data
-            result_data = await self._extract_message_data(task, message, channel)
+            processed_messages += 1
             
-            # Get author phone if available
-            if message.from_id and isinstance(message.from_id, PeerUser):
+            # Check if message has comments/replies
+            if hasattr(message, 'replies') and message.replies and message.replies.replies > 0:
                 try:
-                    user = await self.client.get_entity(message.from_id)
-                    result_data['author_phone'] = await self._get_user_phone(user)
-                    result_data['author_username'] = user.username
-                    result_data['author_name'] = f"{user.first_name or ''} {user.last_name or ''}".strip()
+                    # Get comments/replies for this message
+                    async for reply in self.client.iter_messages(
+                        channel, 
+                        reply_to=message.id,
+                        limit=50  # Limit comments per post
+                    ):
+                        if reply.from_id and isinstance(reply.from_id, PeerUser):
+                            user_id = reply.from_id.user_id
+                            
+                            # Skip if we already have this user
+                            if user_id in unique_users:
+                                continue
+                            
+                            try:
+                                user = await self.client.get_entity(reply.from_id)
+                                user_data = await self._extract_user_data(task, user, channel, "commenter")
+                                unique_users[user_id] = user_data
+                                found_commenters += 1
+                                
+                                if found_commenters % 10 == 0:
+                                    self.logger.info(f"Found {found_commenters} unique commenters...")
+                                    
+                            except Exception as e:
+                                self.logger.debug(f"Could not get commenter data for user {user_id}: {e}")
+                
                 except Exception as e:
-                    self.logger.debug(f"Could not get user data: {e}")
+                    self.logger.debug(f"Could not get replies for message {message.id}: {e}")
             
-            parsed_results.append(result_data)
-            message_count += 1
+            # Also collect message authors (if not anonymous channel)
+            if message.from_id and isinstance(message.from_id, PeerUser):
+                user_id = message.from_id.user_id
+                if user_id not in unique_users:
+                    try:
+                        user = await self.client.get_entity(message.from_id)
+                        user_data = await self._extract_user_data(task, user, channel, "author")
+                        unique_users[user_id] = user_data
+                        found_commenters += 1
+                    except Exception as e:
+                        self.logger.debug(f"Could not get author data for user {user_id}: {e}")
             
-            if message_count % 100 == 0:
-                self.logger.info(f"Processed {message_count} messages...")
+            if processed_messages % 50 == 0:
+                self.logger.info(f"Processed {processed_messages} messages, found {len(unique_users)} unique users...")
         
-        self.logger.info(f"📊 Parsed {message_count} messages from channel {channel.title}")
+        parsed_results = list(unique_users.values())
+        self.logger.info(f"📊 Channel parsing complete: {processed_messages} messages processed, {len(parsed_results)} unique users found")
         return parsed_results
     
     async def _parse_group(self, task: ParseTask, chat: Chat, message_limit: int):
