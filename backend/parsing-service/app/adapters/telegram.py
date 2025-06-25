@@ -159,6 +159,7 @@ class TelegramAdapter(BasePlatformAdapter):
         try:
             normalized_target = self.normalize_target(target)
             message_limit = config.get('message_limit', 10000)
+            progress_callback = config.get('progress_callback')
             
             self.logger.info(f"📥 Starting to parse {normalized_target} (limit: {message_limit})")
             
@@ -168,9 +169,9 @@ class TelegramAdapter(BasePlatformAdapter):
             parsed_results = []
             
             if isinstance(entity, Channel):
-                parsed_results = await self._parse_channel(task, entity, message_limit)
+                parsed_results = await self._parse_channel(task, entity, message_limit, progress_callback)
             elif isinstance(entity, Chat):
-                parsed_results = await self._parse_group(task, entity, message_limit)
+                parsed_results = await self._parse_group(task, entity, message_limit, progress_callback)
             else:
                 raise ValueError(f"Unsupported entity type: {type(entity)}")
             
@@ -270,7 +271,7 @@ class TelegramAdapter(BasePlatformAdapter):
         self.logger.info(f"📊 Channel parsing complete: {processed_messages} messages processed, {len(unique_users)} unique users found")
         return parsed_results
     
-    async def _parse_group(self, task: ParseTask, chat: Chat, message_limit: int):
+    async def _parse_group(self, task: ParseTask, chat: Chat, message_limit: int, progress_callback=None):
         """Parse users from a Telegram group by collecting all participants."""
         self.logger.info(f"👥 Parsing group users: {chat.title}")
         
