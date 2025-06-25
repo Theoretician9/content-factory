@@ -131,6 +131,11 @@ async def get_real_telegram_accounts() -> List[Dict]:
 
 async def parse_telegram_channel_real(link: str, account: Dict) -> Dict:
     """Parse Telegram channel using real Telethon client via TelegramAdapter."""
+    return await parse_telegram_channel_real_with_progress(link, account, None)
+
+
+async def parse_telegram_channel_real_with_progress(link: str, account: Dict, progress_callback=None) -> Dict:
+    """Parse Telegram channel with real-time progress updates."""
     try:
         from ..adapters.telegram import TelegramAdapter
         
@@ -183,17 +188,18 @@ async def parse_telegram_channel_real(link: str, account: Dict) -> Dict:
                 'platform': Platform.TELEGRAM
             })()
             
-            # Parse using real TelegramAdapter
+            # Parse using real TelegramAdapter with progress callback
             config = {
                 'message_limit': 100,    # Limit for testing
                 'participant_limit': 50, # Limit for testing
                 'include_media': True,
-                'include_participants': True
+                'include_participants': True,
+                'progress_callback': progress_callback  # Pass callback to adapter
             }
             
             logger.info(f"🔥 Starting REAL Telethon parsing for {channel_username}")
             
-            # This calls real Telethon methods
+            # This calls real Telethon methods with progress tracking
             parsed_data = await telegram_adapter.parse_target(task_obj, link, config)
             
             if parsed_data:
