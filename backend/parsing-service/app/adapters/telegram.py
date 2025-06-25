@@ -224,6 +224,11 @@ class TelegramAdapter(BasePlatformAdapter):
                                 found_commenters += 1
                                 comment_count += 1
                                 
+                                # 🔥 ПРОВЕРКА ЛИМИТА ПОЛЬЗОВАТЕЛЕЙ
+                                if found_commenters >= message_limit:
+                                    self.logger.info(f"🔄 Reached user limit: {found_commenters}/{message_limit} users found - stopping parsing")
+                                    return [await self._extract_channel_metadata(task, channel)] + list(unique_users.values())
+                                
                                 # Calculate progress update frequency (every 5% of message_limit)
                                 progress_step = max(1, int(message_limit * 0.05))
                                 if found_commenters % progress_step == 0:
