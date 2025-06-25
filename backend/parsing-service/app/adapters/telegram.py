@@ -328,13 +328,32 @@ class TelegramAdapter(BasePlatformAdapter):
             self.logger.debug(f"Could not get phone for user {user.id}: {e}")
             return None
     
-    async def _extract_message_data(self, task: ParseTask, message: Message, entity) -> Dict[str, Any]:
-        """Extract data from a Telegram message."""
-        # Convert timezone-aware datetime to naive UTC datetime for database compatibility
-        content_created_at = message.date
-        if content_created_at and hasattr(content_created_at, 'tzinfo') and content_created_at.tzinfo:
-            # Convert to naive UTC datetime
-            content_created_at = content_created_at.replace(tzinfo=None)
+    async def _extract_user_data(self, task: ParseTask, user: User, entity, user_type: str) -> Dict[str, Any]:
+        """Extract user data from a Telegram user."""
+        from datetime import datetime
+        
+        # Get user's phone number
+        user_phone = await self._get_user_phone(user)
+        
+        # Construct full name
+        full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+        if not full_name:
+            full_name = user.username or f"User {user.id}"
+        
+        # Create user description based on type
+        if user_type == "participant":
+            content_text = f"Group participant: {full_name}"
+        elif user_type == "commenter":
+            content_text = f"Channel commenter: {full_name}"
+        elif user_type == "author":
+            content_text = f"Post author: {full_name}"
+        elif user_type == "message_author":
+            content_text = f"Message author: {full_name}"
+        else:
+            content_text = f"User: {full_name}"
+        
+        # Use naive UTC datetime for database compatibility
+        content_created_at = datetime.utcnow()
         
         return {
             'task_id': task.id,
@@ -342,27 +361,35 @@ class TelegramAdapter(BasePlatformAdapter):
             'source_id': str(entity.id),
             'source_name': getattr(entity, 'title', getattr(entity, 'username', 'Unknown')),
             'source_type': 'channel' if isinstance(entity, Channel) else 'group',
-            'content_id': str(message.id),
-            'content_type': 'message',
-            'content_text': message.text or '',
-            'author_id': str(message.from_id.user_id) if message.from_id else None,
-            'author_username': None,  # Will be filled later
-            'author_name': None,      # Will be filled later  
-            'author_phone': None,     # Will be filled later
+            'content_id': f"user_{user.id}",
+            'content_type': 'user',  # Changed from 'message' to 'user'
+            'content_text': content_text,
+            'author_id': str(user.id),
+            'author_username': user.username,
+            'author_name': full_name,
+            'author_phone': user_phone,
             'content_created_at': content_created_at,
-            'views_count': getattr(message, 'views', 0) or 0,
-            'has_media': message.media is not None,
-            'media_count': 1 if message.media else 0,
-            'media_types': self._get_media_types(message),
-            'is_forwarded': message.forward is not None,
-            'is_reply': message.reply_to is not None,
+            'views_count': 0,
+            'has_media': False,
+            'media_count': 0,
+            'media_types': [],
+            'is_forwarded': False,
+            'is_reply': False,
             'platform_data': {
-                'message_id': message.id,
+                'user_id': user.id,
+                'username': user.username,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'is_bot': user.bot,
+                'is_verified': user.verified,
+                'is_premium': getattr(user, 'premium', False),
+                'user_type': user_type,
+                'phone': user_phone,
+                'language_code': getattr(user, 'lang_code', None),
                 'chat_id': entity.id,
-                'forward_from': message.forward.from_name if message.forward else None,
-                'reply_to_message_id': message.reply_to.reply_to_msg_id if message.reply_to else None,
+                'chat_title': getattr(entity, 'title', 'Unknown')
             },
-            'raw_data': message.to_dict()
+            'raw_data': user.to_dict()
         }
     
     async def _extract_participant_data(self, task: ParseTask, user: User, entity) -> Dict[str, Any]:
