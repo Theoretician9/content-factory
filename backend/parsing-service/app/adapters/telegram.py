@@ -279,6 +279,12 @@ class TelegramAdapter(BasePlatformAdapter):
     
     async def _extract_message_data(self, task: ParseTask, message: Message, entity) -> Dict[str, Any]:
         """Extract data from a Telegram message."""
+        # Convert timezone-aware datetime to naive UTC datetime for database compatibility
+        content_created_at = message.date
+        if content_created_at and hasattr(content_created_at, 'tzinfo') and content_created_at.tzinfo:
+            # Convert to naive UTC datetime
+            content_created_at = content_created_at.replace(tzinfo=None)
+        
         return {
             'task_id': task.id,
             'platform': Platform.TELEGRAM,
@@ -292,7 +298,7 @@ class TelegramAdapter(BasePlatformAdapter):
             'author_username': None,  # Will be filled later
             'author_name': None,      # Will be filled later  
             'author_phone': None,     # Will be filled later
-            'content_created_at': message.date,
+            'content_created_at': content_created_at,
             'views_count': getattr(message, 'views', 0) or 0,
             'has_media': message.media is not None,
             'media_count': 1 if message.media else 0,
