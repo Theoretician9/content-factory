@@ -292,7 +292,7 @@ class TelegramAdapter(BasePlatformAdapter):
     
     async def _parse_group(self, task: ParseTask, chat: Chat, message_limit: int, progress_callback=None):
         """Parse users from a Telegram group by collecting all participants."""
-        self.logger.info(f"👥 Parsing group users: {chat.title}")
+        self.logger.info(f"👥 Parsing group users: {chat.title} (USER LIMIT: {message_limit} users)")
         
         unique_users = {}  # user_id -> user_data
         
@@ -314,8 +314,11 @@ class TelegramAdapter(BasePlatformAdapter):
                         
                         # 🔥 ПРОВЕРКА ЛИМИТА ПОЛЬЗОВАТЕЛЕЙ
                         if participant_count >= message_limit:
-                            self.logger.info(f"🔄 Reached user limit: {participant_count}/{message_limit} users found - stopping parsing")
-                            return [await self._extract_group_metadata(task, chat)] + list(unique_users.values())
+                            self.logger.info(f"🛑 LIMIT REACHED: {participant_count}/{message_limit} users found - STOPPING GROUP PARSING")
+                            group_metadata = await self._extract_group_metadata(task, chat)
+                            final_results = [group_metadata] + list(unique_users.values())
+                            self.logger.info(f"✅ Returning {len(final_results)} results due to user limit")
+                            return final_results
                         
                         # Calculate progress update frequency (every 5% of message_limit)
                         progress_step = max(1, int(message_limit * 0.05))
@@ -360,8 +363,11 @@ class TelegramAdapter(BasePlatformAdapter):
                             
                             # 🔥 ПРОВЕРКА ЛИМИТА ПОЛЬЗОВАТЕЛЕЙ
                             if participant_count >= message_limit:
-                                self.logger.info(f"🔄 Reached user limit: {participant_count}/{message_limit} users found - stopping parsing")
-                                return [await self._extract_group_metadata(task, chat)] + list(unique_users.values())
+                                self.logger.info(f"🛑 LIMIT REACHED: {participant_count}/{message_limit} users found - STOPPING GROUP PARSING (fallback mode)")
+                                group_metadata = await self._extract_group_metadata(task, chat)
+                                final_results = [group_metadata] + list(unique_users.values())
+                                self.logger.info(f"✅ Returning {len(final_results)} results due to user limit")
+                                return final_results
                         except FloodWaitError as e:
                             self.logger.warning(f"FloodWait {e.seconds}s while getting message author {user_id}")
                             await asyncio.sleep(e.seconds + 1)
