@@ -351,6 +351,11 @@ class TelegramAdapter(BasePlatformAdapter):
                             user_data = await self._extract_user_data(task, user, chat, "message_author")
                             unique_users[user_id] = user_data
                             participant_count += 1
+                            
+                            # 🔥 ПРОВЕРКА ЛИМИТА ПОЛЬЗОВАТЕЛЕЙ
+                            if participant_count >= message_limit:
+                                self.logger.info(f"🔄 Reached user limit: {participant_count}/{message_limit} users found - stopping parsing")
+                                return [await self._extract_group_metadata(task, chat)] + list(unique_users.values())
                         except FloodWaitError as e:
                             self.logger.warning(f"FloodWait {e.seconds}s while getting message author {user_id}")
                             await asyncio.sleep(e.seconds + 1)
