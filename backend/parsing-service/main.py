@@ -492,30 +492,56 @@ async def create_task(task_data: dict):
     # Создаем задачи для каждой ссылки
     created_task_ids = []
     
-    for link in task_data.get("links", []):
-        task_id = f"task_{int(time.time())}_{str(uuid.uuid4())[:8]}"
+    async with AsyncSessionLocal() as db_session:
+        for link in task_data.get("links", []):
+            task_id = f"task_{int(time.time())}_{str(uuid.uuid4())[:8]}"
+            
+            # Создаем объект задачи в БД
+            db_task = ParseTask(
+                task_id=task_id,
+                user_id=1,  # Временное значение
+                platform=PlatformEnum.TELEGRAM if task_data.get("platform", "telegram") == "telegram" else PlatformEnum.TELEGRAM,
+                task_type=task_data.get("task_type", "messages"),
+                title=f"Parse {link}",
+                description=f"Parsing task for {link}",
+                config={
+                    "target": link,
+                    "message_limit": task_data.get("message_limit", 100),
+                    "include_media": task_data.get("include_media", True),
+                    "settings": task_data.get("settings", {})
+                },
+                status=TaskStatus.PENDING,
+                priority=TaskPriority.NORMAL,
+                progress=0
+            )
+            
+            db_session.add(db_task)
+            await db_session.flush()  # Get the auto-generated ID
+            
+            # Создаем объект задачи для in-memory хранилища (для совместимости)
+            new_task = {
+                "id": task_id,
+                "db_id": db_task.id,  # Связь с БД
+                "user_id": 1,
+                "platform": task_data.get("platform", "telegram"),
+                "link": link,
+                "task_type": task_data.get("task_type", "messages"),
+                "priority": task_data.get("priority", "normal"),
+                "status": "pending",
+                "progress": 0,
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat(),
+                "settings": task_data.get("settings", {}),
+                "result_count": 0
+            }
+            
+            # Добавляем в in-memory хранилище для совместимости с фронтендом
+            created_tasks.append(new_task)
+            created_task_ids.append(task_id)
+            
+            logger.info(f"🆕 Создана задача парсинга: {task_id} (БД ID: {db_task.id}) для {link}")
         
-        # Создаем объект задачи
-        new_task = {
-            "id": task_id,
-            "user_id": 1,  # Временное значение
-            "platform": task_data.get("platform", "telegram"),
-            "link": link,
-            "task_type": "parse",
-            "priority": task_data.get("priority", "normal"),
-            "status": "pending",
-            "progress": 0,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
-            "settings": task_data.get("settings", {}),
-            "result_count": 0
-        }
-        
-        # Добавляем в in-memory хранилище
-        created_tasks.append(new_task)
-        created_task_ids.append(task_id)
-        
-        logger.info(f"🆕 Создана задача парсинга: {task_id} для {link}")
+        await db_session.commit()
     
     # Автоматически запускаем обработку pending задач
     asyncio.create_task(process_pending_tasks())
