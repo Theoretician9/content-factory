@@ -134,7 +134,7 @@ async def parse_telegram_channel_real(link: str, account: Dict) -> Dict:
     return await parse_telegram_channel_real_with_progress(link, account, None)
 
 
-async def parse_telegram_channel_real_with_progress(link: str, account: Dict, progress_callback=None) -> Dict:
+async def parse_telegram_channel_real_with_progress(link: str, account: Dict, progress_callback=None, message_limit: int = 100) -> Dict:
     """Parse Telegram channel with real-time progress updates."""
     try:
         from ..adapters.telegram import TelegramAdapter
@@ -190,8 +190,8 @@ async def parse_telegram_channel_real_with_progress(link: str, account: Dict, pr
             
             # Parse using real TelegramAdapter with progress callback
             config = {
-                'message_limit': 100,    # Limit for testing
-                'participant_limit': 50, # Limit for testing
+                'message_limit': message_limit,    # Use provided message_limit
+                'participant_limit': message_limit, # Same limit for participants
                 'include_media': True,
                 'include_participants': True,
                 'progress_callback': progress_callback  # Pass callback to adapter
