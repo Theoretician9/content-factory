@@ -152,7 +152,17 @@ async def parse_telegram_channel_real(link: str, account: Dict) -> Dict:
             if parsed_data:
                 logger.info(f"✅ Real Telethon parsing successful: {len(parsed_data) if isinstance(parsed_data, list) else 'Data collected'}")
                 
-                # Convert adapter results to our format
+                # Separate messages and participants from TelegramAdapter data
+                messages = []
+                participants = []
+                
+                if isinstance(parsed_data, list):
+                    for item in parsed_data:
+                        if item.get('content_type') == 'message':
+                            messages.append(item)
+                        elif item.get('content_type') == 'participant':
+                            participants.append(item)
+                
                 return {
                     "channel_info": {
                         "username": channel_username,
@@ -162,8 +172,8 @@ async def parse_telegram_channel_real(link: str, account: Dict) -> Dict:
                         "parsed_at": datetime.utcnow().isoformat(),
                         "real_telethon": True
                     },
-                    "participants": parsed_data if isinstance(parsed_data, list) else [],
-                    "messages": []
+                    "participants": participants,
+                    "messages": messages
                 }
             else:
                 logger.warning(f"⚠️ No data returned from TelegramAdapter for {channel_username}")
