@@ -356,6 +356,11 @@ class TelegramAdapter(BasePlatformAdapter):
                 if not isinstance(message, Message):
                     continue
                     
+                # Check if we already reached user limit before processing more messages
+                if participant_count >= message_limit:
+                    self.logger.info(f"🛑 USER LIMIT REACHED: {participant_count}/{message_limit} - stopping fallback message iteration")
+                    break
+                    
                 message_count += 1
                 
                 # Get message author
