@@ -217,6 +217,8 @@ class TelegramAdapter(BasePlatformAdapter):
         """Parse messages and participants from a Telegram group."""
         self.logger.info(f"👥 Parsing group: {chat.title}")
         
+        parsed_results = []
+        
         # Parse recent messages
         message_count = 0
         async for message in self.client.iter_messages(chat, limit=message_limit):
@@ -230,9 +232,12 @@ class TelegramAdapter(BasePlatformAdapter):
                 try:
                     user = await self.client.get_entity(message.from_id)
                     result_data['author_phone'] = await self._get_user_phone(user)
+                    result_data['author_username'] = user.username
+                    result_data['author_name'] = f"{user.first_name or ''} {user.last_name or ''}".strip()
                 except Exception as e:
                     self.logger.debug(f"Could not get user data: {e}")
             
+            parsed_results.append(result_data)
             message_count += 1
         
         # Parse group participants
@@ -243,6 +248,7 @@ class TelegramAdapter(BasePlatformAdapter):
                     participant_data = await self._extract_participant_data(task, participant, chat)
                     participant_data['author_phone'] = await self._get_user_phone(participant)
                     
+                    parsed_results.append(participant_data)
                     participant_count += 1
                     if participant_count % 50 == 0:
                         self.logger.info(f"Processed {participant_count} participants...")
@@ -251,6 +257,7 @@ class TelegramAdapter(BasePlatformAdapter):
             self.logger.warning("Cannot access participant list - admin rights required")
         
         self.logger.info(f"📊 Parsed {message_count} messages and {participant_count} participants from group {chat.title}")
+        return parsed_results
     
     async def _get_user_phone(self, user: User) -> Optional[str]:
         """Get user's phone number if accessible."""
