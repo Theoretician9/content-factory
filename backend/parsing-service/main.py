@@ -857,7 +857,7 @@ async def export_task_results(task_id: str, format: str = "json"):
                 )
             
             # Export in CSV
-            elif format.lower() == "csv":
+                        elif format.lower() == "csv":
                 output = io.StringIO()
                 if formatted_results:
                     # Flatten the data for CSV
