@@ -519,7 +519,7 @@ class TelegramAdapter(BasePlatformAdapter):
                 'has_media': False,
                 'media_count': 0,
                 'media_types': [],
-                'platform_data': {
+                'platform_data': self._sanitize_datetime_objects({
                     'channel_id': channel.id,
                     'username': channel.username,
                     'title': channel.title,
@@ -529,7 +529,7 @@ class TelegramAdapter(BasePlatformAdapter):
                     'is_megagroup': getattr(channel, 'megagroup', False),
                     'description': getattr(full_channel.full_chat, 'about', ''),
                     'date_created': getattr(channel, 'date', None)
-                },
+                }),
                 'raw_data': self._sanitize_datetime_objects(channel.to_dict())
             }
         except Exception as e:
@@ -600,6 +600,20 @@ class TelegramAdapter(BasePlatformAdapter):
                 'raw_data': {}
             }
 
+    def _sanitize_datetime_objects(self, obj):
+        """Recursively convert datetime objects to ISO strings for JSON serialization."""
+        from datetime import datetime
+        
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        elif isinstance(obj, dict):
+            return {key: self._sanitize_datetime_objects(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [self._sanitize_datetime_objects(item) for item in obj]
+        elif isinstance(obj, tuple):
+            return tuple(self._sanitize_datetime_objects(item) for item in obj)
+        else:
+            return obj
     
     def _get_media_types(self, message: Message) -> List[str]:
         """Get media types from message."""
