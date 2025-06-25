@@ -46,7 +46,7 @@ async def perform_real_parsing(task_id: str, platform: str, link: str, user_id: 
 async def perform_real_parsing_with_progress(task_id: str, platform: str, link: str, user_id: int = 1, progress_callback=None, message_limit: int = 100):
     """Perform REAL Telegram parsing with real-time progress updates."""
     try:
-        logger.info(f"🚀 Starting REAL Telegram parsing for task {task_id}: {link}")
+        logger.info(f"🚀 Starting REAL Telegram parsing for task {task_id}: {link} (USER LIMIT: {message_limit})")
         
         if platform != "telegram":
             raise Exception(f"Platform {platform} not yet supported for real parsing")
