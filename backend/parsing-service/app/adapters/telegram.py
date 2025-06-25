@@ -426,6 +426,113 @@ class TelegramAdapter(BasePlatformAdapter):
             'raw_data': user.to_dict()
         }
     
+    async def _extract_channel_metadata(self, task: ParseTask, channel: Channel) -> Dict[str, Any]:
+        """Extract metadata about the channel itself."""
+        from datetime import datetime
+        
+        try:
+            # Get full channel info
+            full_channel = await self.client(GetFullChannelRequest(channel))
+            participants_count = getattr(full_channel.full_chat, 'participants_count', 0)
+            
+            return {
+                'task_id': task.id,
+                'platform': Platform.TELEGRAM,
+                'source_id': str(channel.id),
+                'source_name': channel.title or channel.username or 'Unknown Channel',
+                'source_type': 'channel',
+                'content_id': f"channel_{channel.id}",
+                'content_type': 'channel_metadata',
+                'content_text': f"Channel metadata: {channel.title}",
+                'author_id': None,
+                'author_username': channel.username,
+                'author_name': f"Channel: {channel.title}",
+                'author_phone': None,
+                'content_created_at': datetime.utcnow(),
+                'views_count': 0,
+                'has_media': False,
+                'media_count': 0,
+                'media_types': [],
+                'platform_data': {
+                    'channel_id': channel.id,
+                    'username': channel.username,
+                    'title': channel.title,
+                    'participants_count': participants_count,
+                    'is_verified': getattr(channel, 'verified', False),
+                    'is_broadcast': getattr(channel, 'broadcast', False),
+                    'is_megagroup': getattr(channel, 'megagroup', False),
+                    'description': getattr(full_channel.full_chat, 'about', ''),
+                    'date_created': getattr(channel, 'date', None)
+                },
+                'raw_data': channel.to_dict()
+            }
+        except Exception as e:
+            self.logger.error(f"Could not get channel metadata: {e}")
+            return {
+                'task_id': task.id,
+                'platform': Platform.TELEGRAM,
+                'source_id': str(channel.id),
+                'source_name': channel.title or 'Unknown Channel',
+                'source_type': 'channel',
+                'content_id': f"channel_{channel.id}",
+                'content_type': 'channel_metadata',
+                'content_text': f"Channel metadata: {channel.title}",
+                'content_created_at': datetime.utcnow(),
+                'platform_data': {'error': str(e)},
+                'raw_data': {}
+            }
+    
+    async def _extract_group_metadata(self, task: ParseTask, chat: Chat) -> Dict[str, Any]:
+        """Extract metadata about the group itself.""" 
+        from datetime import datetime
+        
+        try:
+            # Get basic group info
+            participants_count = getattr(chat, 'participants_count', 0)
+            
+            return {
+                'task_id': task.id,
+                'platform': Platform.TELEGRAM,
+                'source_id': str(chat.id),
+                'source_name': chat.title or 'Unknown Group',
+                'source_type': 'group',
+                'content_id': f"group_{chat.id}",
+                'content_type': 'group_metadata',
+                'content_text': f"Group metadata: {chat.title}",
+                'author_id': None,
+                'author_username': None,
+                'author_name': f"Group: {chat.title}",
+                'author_phone': None,
+                'content_created_at': datetime.utcnow(),
+                'views_count': 0,
+                'has_media': False,
+                'media_count': 0,
+                'media_types': [],
+                'platform_data': {
+                    'chat_id': chat.id,
+                    'title': chat.title,
+                    'participants_count': participants_count,
+                    'date_created': getattr(chat, 'date', None),
+                    'is_creator': getattr(chat, 'creator', False),
+                    'admin_rights': getattr(chat, 'admin_rights', None)
+                },
+                'raw_data': chat.to_dict()
+            }
+        except Exception as e:
+            self.logger.error(f"Could not get group metadata: {e}")
+            return {
+                'task_id': task.id,
+                'platform': Platform.TELEGRAM,
+                'source_id': str(chat.id),
+                'source_name': chat.title or 'Unknown Group',
+                'source_type': 'group',
+                'content_id': f"group_{chat.id}",
+                'content_type': 'group_metadata',
+                'content_text': f"Group metadata: {chat.title}",
+                'content_created_at': datetime.utcnow(),
+                'platform_data': {'error': str(e)},
+                'raw_data': {}
+            }
 
     
     def _get_media_types(self, message: Message) -> List[str]:
