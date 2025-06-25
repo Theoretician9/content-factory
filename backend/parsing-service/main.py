@@ -881,18 +881,18 @@ async def export_task_results(task_id: str, format: str = "json"):
                         
                         flattened_results.append(flat_result)
                     
-                                    if flattened_results:
-                    # Collect all unique field names from all records
-                    all_fieldnames = set()
-                    for result in flattened_results:
-                        all_fieldnames.update(result.keys())
-                    
-                    # Sort fieldnames for consistent output
-                    sorted_fieldnames = sorted(all_fieldnames)
-                    
-                    writer = csv.DictWriter(output, fieldnames=sorted_fieldnames)
-                    writer.writeheader()
-                    writer.writerows(flattened_results)
+                    if flattened_results:
+                        # Collect all unique field names from all records
+                        all_fieldnames = set()
+                        for result in flattened_results:
+                            all_fieldnames.update(result.keys())
+                        
+                        # Sort fieldnames for consistent output
+                        sorted_fieldnames = sorted(all_fieldnames)
+                        
+                        writer = csv.DictWriter(output, fieldnames=sorted_fieldnames)
+                        writer.writeheader()
+                        writer.writerows(flattened_results)
                 
                 csv_content = output.getvalue()
                 return StreamingResponse(
