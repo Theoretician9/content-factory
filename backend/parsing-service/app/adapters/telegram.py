@@ -70,17 +70,20 @@ class TelegramAdapter(BasePlatformAdapter):
             # Создаем временный session файл из данных integration-service
             with tempfile.NamedTemporaryFile(suffix='.session', delete=False) as f:
                 if isinstance(session_data, dict):
-                    # Session_data из БД - это JSON объект, нужно получить сырые данные сессии
-                    if 'session_string' in session_data:
-                        # Если есть строка сессии в JSON
-                        session_string = session_data['session_string']
+                    # Session_data из БД - это JSON объект с ключом "encrypted_session"
+                    if 'encrypted_session' in session_data:
+                        # Декодируем base64 данные сессии
+                        encrypted_session = session_data['encrypted_session']
                         try:
                             import base64
-                            session_bytes = base64.b64decode(session_string)
-                        except:
-                            session_bytes = session_string.encode()
+                            session_bytes = base64.b64decode(encrypted_session)
+                            self.logger.info(f"✅ Decoded session data from base64: {len(session_bytes)} bytes")
+                        except Exception as decode_error:
+                            self.logger.error(f"❌ Failed to decode base64 session: {decode_error}")
+                            session_bytes = encrypted_session.encode()
                     else:
-                        # Если JSON содержит другие данные сессии, используем как есть
+                        # Если JSON содержит другие данные сессии
+                        self.logger.warning(f"⚠️ Unexpected session_data format: {list(session_data.keys())}")
                         import json
                         session_bytes = json.dumps(session_data).encode()
                 elif isinstance(session_data, str):
