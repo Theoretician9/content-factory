@@ -574,14 +574,14 @@ class TelegramAdapter(BasePlatformAdapter):
                 'has_media': False,
                 'media_count': 0,
                 'media_types': [],
-                'platform_data': {
+                'platform_data': self._sanitize_datetime_objects({
                     'chat_id': chat.id,
                     'title': chat.title,
                     'participants_count': participants_count,
                     'date_created': getattr(chat, 'date', None),
                     'is_creator': getattr(chat, 'creator', False),
                     'admin_rights': getattr(chat, 'admin_rights', None)
-                },
+                }),
                 'raw_data': self._sanitize_datetime_objects(chat.to_dict())
             }
         except Exception as e:
