@@ -265,6 +265,12 @@ class TelegramAdapter(BasePlatformAdapter):
                         user_data = await self._extract_user_data(task, user, channel, "author")
                         unique_users[user_id] = user_data
                         found_commenters += 1
+                        
+                        # 🔥 ПРОВЕРКА ЛИМИТА ПОЛЬЗОВАТЕЛЕЙ
+                        if found_commenters >= message_limit:
+                            self.logger.info(f"🔄 Reached user limit: {found_commenters}/{message_limit} users found - stopping parsing")
+                            return [await self._extract_channel_metadata(task, channel)] + list(unique_users.values())
+                        
                     except Exception as e:
                         self.logger.debug(f"Could not get author data for user {user_id}: {e}")
             
@@ -299,6 +305,11 @@ class TelegramAdapter(BasePlatformAdapter):
                         user_data = await self._extract_user_data(task, participant, chat, "participant")
                         unique_users[user_id] = user_data
                         participant_count += 1
+                        
+                        # 🔥 ПРОВЕРКА ЛИМИТА ПОЛЬЗОВАТЕЛЕЙ
+                        if participant_count >= message_limit:
+                            self.logger.info(f"🔄 Reached user limit: {participant_count}/{message_limit} users found - stopping parsing")
+                            return [await self._extract_group_metadata(task, chat)] + list(unique_users.values())
                         
                         # Calculate progress update frequency (every 5% of message_limit)
                         progress_step = max(1, int(message_limit * 0.05))
