@@ -43,7 +43,7 @@ async def perform_real_parsing(task_id: str, platform: str, link: str, user_id: 
     return await perform_real_parsing_with_progress(task_id, platform, link, user_id, None)
 
 
-async def perform_real_parsing_with_progress(task_id: str, platform: str, link: str, user_id: int = 1, progress_callback=None):
+async def perform_real_parsing_with_progress(task_id: str, platform: str, link: str, user_id: int = 1, progress_callback=None, message_limit: int = 100):
     """Perform REAL Telegram parsing with real-time progress updates."""
     try:
         logger.info(f"🚀 Starting REAL Telegram parsing for task {task_id}: {link}")
@@ -59,7 +59,7 @@ async def perform_real_parsing_with_progress(task_id: str, platform: str, link: 
         logger.info(f"📱 Using {len(accounts)} real Telegram accounts for parsing")
         
         # Step 2: Parse channel using real Telegram API with progress callback
-        channel_data = await parse_telegram_channel_real_with_progress(link, accounts[0], progress_callback)
+        channel_data = await parse_telegram_channel_real_with_progress(link, accounts[0], progress_callback, message_limit)
         
         # Step 3: Save ONLY real results to database
         async with AsyncSessionLocal() as db_session:

@@ -420,7 +420,8 @@ async def execute_real_parsing(task):
             platform=task["platform"], 
             link=task["link"],
             user_id=task.get("user_id", 1),
-            progress_callback=update_progress
+            progress_callback=update_progress,
+            message_limit=message_limit
         )
         
         # Step 2: Saving to database (90-100%)
