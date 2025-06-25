@@ -224,9 +224,15 @@ async def check_channel_accessibility(channel_username: str, account: Dict) -> b
 async def save_channel_info_real(task_id: str, channel_info: Dict, db_session: AsyncSession):
     """Save real channel information to database."""
     try:
+        # Get the correct task ID from database
+        task_db_id = await get_task_db_id(task_id, db_session)
+        if not task_db_id:
+            logger.error(f"❌ Task {task_id} not found in database")
+            return
+            
         username = channel_info.get('username', 'unknown')
         result = ParseResult(
-            task_id=int(task_id.split('_')[1]) if '_' in task_id else hash(task_id) % 1000000,
+            task_id=task_db_id,
             platform=Platform.TELEGRAM,
             source_id=channel_info.get('id') or f"@{username}",
             source_name=username,
