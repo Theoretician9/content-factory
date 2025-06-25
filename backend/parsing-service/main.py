@@ -424,16 +424,17 @@ async def execute_real_parsing(task):
             message_limit=message_limit
         )
         
-        # Step 2: Saving to database (90-100%)
+        # Step 2: Saving to database (95-100%)
         task["progress"] = 95
         task["updated_at"] = datetime.utcnow().isoformat()
-        logger.info(f"💾 Saving {num_results} results to database...")
+        logger.info(f"📊 Progress: 95% - Saving {num_results} results to database...")
         
         await asyncio.sleep(1)  # Brief save time
         
         # Step 3: Complete the task with real statistics
         task["progress"] = 100
         task["status"] = "completed"
+        logger.info(f"📊 Progress: 100% - Task completed successfully!")
         task["completed_at"] = datetime.utcnow().isoformat()
         task["result_count"] = num_results
         task["processed_messages"] = num_results
