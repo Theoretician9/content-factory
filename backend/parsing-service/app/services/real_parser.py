@@ -60,9 +60,15 @@ async def perform_real_parsing(task_id: str, platform: str, link: str, user_id: 
         async with AsyncSessionLocal() as db_session:
             results_saved = 0
             
+            # Get the correct task DB ID once
+            task_db_id = await get_task_db_id(task_id, db_session)
+            if not task_db_id:
+                logger.error(f"❌ Task {task_id} not found in database, cannot save results")
+                return 0
+            
             # Save channel info
             if channel_data.get('channel_info'):
-                await save_channel_info_real(task_id, channel_data['channel_info'], db_session)
+                await save_channel_info_real(task_db_id, channel_data['channel_info'], db_session)
                 results_saved += 1
             
             # Save real participants (if any)
@@ -70,7 +76,7 @@ async def perform_real_parsing(task_id: str, platform: str, link: str, user_id: 
                 for participant in channel_data['participants']:
                     # Only save if essential fields are present
                     if participant.get('source_id') and participant.get('content_id'):
-                        await save_participant_real(task_id, participant, db_session)
+                        await save_participant_real(task_db_id, participant, db_session)
                         results_saved += 1
                     else:
                         logger.warning(f"⚠️ Skipping participant with missing fields: {participant.get('content_id', 'unknown')}")
@@ -80,7 +86,7 @@ async def perform_real_parsing(task_id: str, platform: str, link: str, user_id: 
                 for message in channel_data['messages']:
                     # Only save if essential fields are present
                     if message.get('source_id') and message.get('content_id'):
-                        await save_message_real(task_id, message, db_session)
+                        await save_message_real(task_db_id, message, db_session)
                         results_saved += 1
                     else:
                         logger.warning(f"⚠️ Skipping message with missing fields: {message.get('content_id', 'unknown')}")
