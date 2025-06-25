@@ -36,7 +36,6 @@ class TelegramAdapter(BasePlatformAdapter):
     def __init__(self):
         super().__init__(Platform.TELEGRAM)
         self.client = None
-        self.session_file_path = None
         self.api_id = None
         self.api_hash = None
         
@@ -67,44 +66,45 @@ class TelegramAdapter(BasePlatformAdapter):
             
             self.logger.info(f"🔐 Using API credentials from integration-service: api_id={self.api_id}")
             
-            # Создаем временный session файл из данных integration-service
-            with tempfile.NamedTemporaryFile(suffix='.session', delete=False) as f:
-                if isinstance(session_data, dict):
-                    # Session_data из БД - это JSON объект с ключом "encrypted_session"
-                    if 'encrypted_session' in session_data:
-                        # Декодируем base64 данные сессии
-                        encrypted_session = session_data['encrypted_session']
-                        try:
-                            import base64
-                            session_bytes = base64.b64decode(encrypted_session)
-                            self.logger.info(f"✅ Decoded session data from base64: {len(session_bytes)} bytes")
-                        except Exception as decode_error:
-                            self.logger.error(f"❌ Failed to decode base64 session: {decode_error}")
-                            session_bytes = encrypted_session.encode()
-                    else:
-                        # Если JSON содержит другие данные сессии
-                        self.logger.warning(f"⚠️ Unexpected session_data format: {list(session_data.keys())}")
-                        import json
-                        session_bytes = json.dumps(session_data).encode()
-                elif isinstance(session_data, str):
-                    # Если данные в base64 или строка, декодируем
+            # Получаем StringSession из данных integration-service  
+            session_string = None
+            
+            if isinstance(session_data, dict):
+                # Session_data из БД - это JSON объект с ключом "encrypted_session"
+                if 'encrypted_session' in session_data:
+                    # Декодируем base64 → получаем StringSession как строку
+                    encrypted_session = session_data['encrypted_session']
                     try:
                         import base64
-                        session_bytes = base64.b64decode(session_data)
-                    except:
-                        session_bytes = session_data.encode()
+                        session_bytes = base64.b64decode(encrypted_session)
+                        session_string = session_bytes.decode('utf-8')
+                        self.logger.info(f"✅ Decoded StringSession from base64: {len(session_string)} chars")
+                    except Exception as decode_error:
+                        self.logger.error(f"❌ Failed to decode base64 session: {decode_error}")
+                        session_string = encrypted_session
                 else:
-                    # Другие типы данных (bytes)
-                    session_bytes = session_data
-                    
-                f.write(session_bytes)
-                self.session_file_path = f.name
+                    # Если JSON содержит другие данные сессии
+                    self.logger.warning(f"⚠️ Unexpected session_data format: {list(session_data.keys())}")
+                    session_string = None
+            elif isinstance(session_data, str):
+                # Если данные в base64 или уже строка
+                try:
+                    import base64
+                    session_bytes = base64.b64decode(session_data)
+                    session_string = session_bytes.decode('utf-8')
+                except:
+                    session_string = session_data
             
-            self.logger.info(f"📁 Created temporary session file: {self.session_file_path}")
+            if not session_string:
+                self.logger.error("❌ Could not extract StringSession from session_data")
+                return False
             
-            # Initialize Telegram client
+            self.logger.info(f"📱 Using StringSession directly (length: {len(session_string)})")
+            
+            # Initialize Telegram client with StringSession (НЕ файл!)
+            from telethon.sessions import StringSession
             self.client = TelegramClient(
-                session=self.session_file_path,
+                session=StringSession(session_string),
                 api_id=int(self.api_id),
                 api_hash=self.api_hash,
                 device_model="Content Factory Parser",
@@ -342,15 +342,11 @@ class TelegramAdapter(BasePlatformAdapter):
         return media_types
     
     async def cleanup(self):
-        """Clean up Telegram client and session file."""
+        """Clean up Telegram client."""
         try:
             if self.client:
                 await self.client.disconnect()
                 self.client = None
-            
-            if self.session_file_path and os.path.exists(self.session_file_path):
-                os.unlink(self.session_file_path)
-                self.session_file_path = None
                 
             self.logger.info("🗑️ Telegram adapter cleaned up")
             
