@@ -385,10 +385,8 @@ async def get_active_accounts_internal(
         result = []
         for s in all_sessions:
             try:
-                # Получаем session данные из Vault
-                session_path = f"integration-service/sessions/{s.id}"
-                session_vault_data = vault_client.get_secret(session_path)
-                session_data = session_vault_data.get('session_data') if session_vault_data else None
+                # Session данные берем из БД, а не из Vault!
+                session_data = s.session_data if hasattr(s, 'session_data') and s.session_data else None
                 
                 account_data = {
                     "id": str(s.id),
@@ -400,7 +398,7 @@ async def get_active_accounts_internal(
                     "api_id": api_id,
                     "api_hash": api_hash,
                     "session_id": str(s.id),
-                    "session_data": session_data,  # Session данные из Vault
+                    "session_data": session_data,  # Session данные из БД
                     "connection_ready": session_data is not None
                 }
                 result.append(account_data)
