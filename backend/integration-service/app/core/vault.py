@@ -166,19 +166,16 @@ class IntegrationVaultClient:
 
     def get_integration_credentials(self, platform: str) -> Dict[str, Any]:
         try:
-            # ✅ ИСПРАВЛЕНО: Секреты Telegram находятся в integration-service, не в integrations/telegram
-            return self.get_secret('integration-service')
+            return self.get_secret(f'integrations/{platform}')
         except Exception as e:
             logger.error(f"Error getting credentials for {platform}: {e}")
             return {}
 
     def update_integration_credentials(self, platform: str, credentials: Dict[str, Any]) -> None:
-        # ✅ ИСПРАВЛЕНО: Используем правильный путь integration-service
-        self.put_secret('integration-service', credentials)
+        self.put_secret(f'integrations/{platform}', credentials)
 
     def delete_integration_credentials(self, platform: str) -> None:
-        # ✅ ИСПРАВЛЕНО: Используем правильный путь integration-service  
-        self.delete_secret('integration-service')
+        self.delete_secret(f'integrations/{platform}')
 
     def list_integrations(self) -> list:
         try:
