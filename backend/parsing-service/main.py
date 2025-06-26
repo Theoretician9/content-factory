@@ -386,32 +386,41 @@ async def process_pending_tasks():
     except Exception as e:
         logger.error(f"❌ Ошибка обработки задач через AccountManager: {e}")
 
-async def execute_real_parsing(task):
-    """Execute REAL parsing with database storage and real-time progress updates."""
+async def execute_real_parsing_with_account_manager(task, assigned_account_id: str):
+    """Execute REAL parsing with Account Manager and Parsing Speed support."""
     try:
-        from app.services.real_parser import perform_real_parsing_with_progress
+        from app.services.real_parser import perform_real_parsing_with_progress  
+        from app.core.account_manager import account_manager
+        from app.core.parsing_speed import parse_speed_from_string, get_speed_config
         
-        logger.info(f"🚀 Starting REAL parsing for task {task['id']}: {task['link']}")
+        logger.info(f"🚀 AccountManager: Starting REAL parsing for task {task['id']} on account {assigned_account_id}: {task['link']}")
         
-        # Update task to running status
-        task["status"] = "running" 
+        # Get parsing speed configuration
+        speed_str = task.get("settings", {}).get("parsing_speed", "medium")
+        parsing_speed = parse_speed_from_string(speed_str)
+        speed_config = get_speed_config(parsing_speed)
+        
+        logger.info(f"⚡ Using parsing speed: {speed_config.name} ({parsing_speed.value})")
+        logger.info(f"⚡ Speed settings: {speed_config.user_request_delay}s user delay, {speed_config.user_requests_per_minute} req/min")
+        
+        # Update task status
+        task["status"] = "running"
         task["progress"] = 0
         task["updated_at"] = datetime.utcnow().isoformat()
         
-        # Get message limit from task config (support both field names)
+        # Get message limit from task config
         settings = task.get("settings", {})
         message_limit = settings.get("message_limit") or settings.get("max_depth", 100)
         logger.info(f"🎯 Using message limit: {message_limit} (from settings: {settings})")
         
-        # Create progress callback function with 1% granularity
+        # Create progress callback with account context
         last_progress_reported = 0
         
         async def update_progress(current_users: int, estimated_total: int = None):
-            """Update task progress based on real parsing data with 1% granularity."""
+            """Update task progress with account-specific logging."""
             nonlocal last_progress_reported
             
             try:
-                # Use message_limit as estimated_total if not provided
                 if estimated_total is None:
                     estimated_total = message_limit
                 
@@ -419,7 +428,7 @@ async def execute_real_parsing(task):
                 parsing_progress = min(95, int(95 * current_users / estimated_total))
                 total_progress = parsing_progress
                 
-                # Only update if progress changed by at least 1%
+                # Only update if progress changed significantly
                 if abs(total_progress - last_progress_reported) >= 1 or total_progress == 0 or total_progress >= 95:
                     task["progress"] = total_progress
                     task["updated_at"] = datetime.utcnow().isoformat()
@@ -427,7 +436,7 @@ async def execute_real_parsing(task):
                     task["estimated_total"] = estimated_total
                     last_progress_reported = total_progress
                     
-                    # Also update database task
+                    # Update database task
                     try:
                         from app.database import AsyncSessionLocal
                         from app.models.parse_task import ParseTask
@@ -444,54 +453,99 @@ async def execute_real_parsing(task):
                     except Exception as db_error:
                         logger.debug(f"DB progress update error: {db_error}")
                     
-                    logger.info(f"📊 Progress: {total_progress}% ({current_users}/{estimated_total} users found)")
+                    logger.info(f"📊 Account {assigned_account_id}: Progress {total_progress}% ({current_users}/{estimated_total} users)")
             except Exception as e:
                 logger.debug(f"Progress update error: {e}")
         
-        # Step 1: Perform actual parsing with progress callback
+        # Step 1: Perform parsing with speed configuration
         num_results = await perform_real_parsing_with_progress(
             task_id=task["id"],
-            platform=task["platform"], 
+            platform=task["platform"],
             link=task["link"],
             user_id=task.get("user_id", 1),
             progress_callback=update_progress,
-            message_limit=message_limit
+            message_limit=message_limit,
+            speed_config=speed_config  # Pass speed configuration
         )
         
-        # Step 2: Saving to database (95-100%)
+        # Step 2: Saving phase (95-100%)
         task["progress"] = 95
         task["updated_at"] = datetime.utcnow().isoformat()
-        logger.info(f"📊 Progress: 95% - Saving {num_results} results to database...")
+        logger.info(f"📊 Account {assigned_account_id}: Saving {num_results} results to database...")
         
         await asyncio.sleep(1)  # Brief save time
         
-        # Step 3: Complete the task with real statistics
+        # Step 3: Complete the task
         task["progress"] = 100
         task["status"] = "completed"
-        logger.info(f"📊 Progress: 100% - Task completed successfully!")
         task["completed_at"] = datetime.utcnow().isoformat()
         task["result_count"] = num_results
-        task["processed_messages"] = num_results
-        task["processed_users"] = num_results  # Each result is a user
         task["updated_at"] = datetime.utcnow().isoformat()
         
-        # Add real parsing statistics
+        # Calculate statistics
         duration = (datetime.fromisoformat(task["completed_at"]) - datetime.fromisoformat(task["created_at"])).total_seconds()
         task["parsing_stats"] = {
             "messages": num_results,
             "users_found": num_results,
             "phone_numbers_found": int(num_results * 0.4),  # ~40% have phones
             "parsing_duration_seconds": int(duration),
-            "average_speed": round(num_results / max(1, duration), 2)
+            "average_speed": round(num_results / max(1, duration), 2),
+            "assigned_account_id": assigned_account_id,
+            "parsing_speed_used": speed_config.name,
+            "speed_config": {
+                "user_request_delay": speed_config.user_request_delay,
+                "user_requests_per_minute": speed_config.user_requests_per_minute
+            }
         }
         
-        logger.info(f"✅ REAL parsing completed for {task['id']}: {num_results} users saved to database")
+        logger.info(f"✅ AccountManager: Task {task['id']} completed on account {assigned_account_id}: {num_results} users")
+        
+        # Free the account
+        await account_manager.free_account_from_task(task["id"])
+        
+        # Process next pending tasks
+        await process_pending_tasks()
         
     except Exception as e:
         task["status"] = "failed"
         task["error_message"] = str(e)
         task["updated_at"] = datetime.utcnow().isoformat()
-        logger.error(f"❌ Real parsing failed for task {task['id']}: {e}")
+        
+        logger.error(f"❌ AccountManager: Task {task['id']} failed on account {assigned_account_id}: {e}")
+        
+        # Handle FloodWait errors specifically
+        if "FloodWaitError" in str(e) or "flood" in str(e).lower():
+            import re
+            # Extract seconds from error message
+            match = re.search(r'(\d+)', str(e))
+            seconds = int(match.group(1)) if match else 300  # Default 5 min
+            
+            await account_manager.handle_flood_wait(
+                account_id=assigned_account_id,
+                seconds=seconds,
+                error_message=str(e)
+            )
+        else:
+            # Free the account for other types of errors
+            await account_manager.free_account_from_task(task["id"])
+
+# Legacy function kept for compatibility
+async def execute_real_parsing(task):
+    """Legacy function - redirects to new Account Manager version."""
+    logger.info(f"🔄 Legacy execute_real_parsing called for task {task['id']}, using AccountManager version")
+    
+    # Try to assign account and use new function
+    from app.core.account_manager import account_manager
+    assigned_account_id = await account_manager.assign_task_to_account(task["id"])
+    
+    if assigned_account_id:
+        task["assigned_account_id"] = assigned_account_id
+        await execute_real_parsing_with_account_manager(task, assigned_account_id)
+    else:
+        logger.error(f"❌ No accounts available for legacy task {task['id']}")
+        task["status"] = "failed"
+        task["error_message"] = "No Telegram accounts available"
+        task["updated_at"] = datetime.utcnow().isoformat()
 
 async def estimate_channel_size(channel_link: str) -> int:
     """Оценка размера канала для вычисления реального прогресса."""
