@@ -21,8 +21,7 @@ from app.database import init_database
 from app.schemas.base import HealthResponse
 
 # API routers
-# Temporarily disable external routers due to null bytes issue
-# from app.api.v1.endpoints.health import router as health_router
+# Health endpoints are implemented directly in main.py, no separate router needed
 
 # Legacy imports (keep for compatibility)
 import uvicorn
