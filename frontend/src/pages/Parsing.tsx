@@ -724,8 +724,9 @@ const Parsing = () => {
                                     👁️
                                   </button>
                                   <button
-                                    onClick={() => handleExportResults(task.id, 'json')}
+                                    onClick={() => handleExportResults(task.id, 'excel')}
                                     className="text-green-600 hover:text-green-700 text-sm"
+                                    title="Скачать Excel"
                                   >
                                     📥
                                   </button>
@@ -763,6 +764,12 @@ const Parsing = () => {
                         className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded-md hover:bg-green-200"
                       >
                         CSV
+                      </button>
+                      <button
+                        onClick={() => handleExportResults(selectedTaskId, 'excel')}
+                        className="px-3 py-1 text-sm bg-purple-100 text-purple-700 rounded-md hover:bg-purple-200"
+                      >
+                        Excel
                       </button>
                       <button
                         onClick={() => setSelectedTaskId('')}

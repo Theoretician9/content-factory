@@ -211,7 +211,7 @@ export const parsingApi = {
   results: {
     // Получение результатов задачи
     get: (taskId: string, params: {
-      format?: 'json' | 'csv' | 'ndjson';
+      format?: 'json' | 'csv' | 'excel';
       platform_filter?: string;
       limit?: number;
       offset?: number;
@@ -226,7 +226,7 @@ export const parsingApi = {
     },
     
     // Экспорт результатов
-    export: (taskId: string, format: 'json' | 'csv' | 'ndjson') => 
+    export: (taskId: string, format: 'json' | 'csv' | 'excel') => 
       apiFetch(`/api/parsing/results/${taskId}/export?format=${format}`)
   },
   
