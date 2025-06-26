@@ -64,10 +64,15 @@ class TelegramService:
         """Получение API ID и Hash из Vault"""
         try:
             credentials = self.vault_client.get_integration_credentials('telegram')
-            api_id = credentials.get('api_id')
-            api_hash = credentials.get('api_hash')
+            # ✅ DEBUG: Логируем что именно вернул Vault
+            logger.info(f"DEBUG: Vault returned credentials: {credentials}")
+            logger.info(f"DEBUG: Credentials type: {type(credentials)}")
             
-            logger.info(f"Retrieved credentials from Vault - API ID: {api_id}, Hash: {api_hash[:10]}...")
+            # ✅ ИСПРАВЛЕНО: В Vault ключи называются telegram_api_id и telegram_api_hash
+            api_id = credentials.get('telegram_api_id')
+            api_hash = credentials.get('telegram_api_hash')
+            
+            logger.info(f"Retrieved credentials from Vault - API ID: {api_id}, Hash: {api_hash[:10] if api_hash else 'None'}...")
             
             if not api_id or not api_hash:
                 logger.error("Telegram API credentials not found in Vault")
