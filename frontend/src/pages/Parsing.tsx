@@ -116,28 +116,83 @@ const Parsing = () => {
     loadTasks();
   }, [tasksFilter]);
 
-  // Real-time обновление прогресса для активных задач
+  // Real-time обновление прогресса с Server-Sent Events
   useEffect(() => {
-    const hasActiveTasks = tasks.some(task => 
+    const activeTasksSSE = new Map<string, EventSource>();
+
+    // Находим активные задачи
+    const activeTasks = tasks.filter(task => 
       task.status === 'pending' || task.status === 'running'
     );
 
-    let intervalId: number;
+    // Подключаем SSE для каждой активной задачи
+    activeTasks.forEach(task => {
+      if (!activeTasksSSE.has(task.id)) {
+        const eventSource = new EventSource(
+          `http://localhost:8002/api/v1/tasks/${task.id}/progress-stream`
+        );
 
-    if (hasActiveTasks) {
-      // Запускаем автообновление каждые 3 секунды для активных задач
-      intervalId = setInterval(() => {
-        loadTasks();
-      }, 3000);
-    }
+        eventSource.onmessage = (event) => {
+          try {
+            const progressData = JSON.parse(event.data);
+            
+            // Обновляем конкретную задачу в состоянии
+            setTasks(prevTasks => 
+              prevTasks.map(t => 
+                t.id === task.id 
+                  ? { ...t, 
+                      progress: progressData.progress, 
+                      status: progressData.status,
+                      updated_at: progressData.timestamp 
+                    }
+                  : t
+              )
+            );
 
-    // Очищаем interval при размонтировании или когда нет активных задач
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
+            // Если задача завершена, закрываем SSE
+            if (['completed', 'failed', 'cancelled'].includes(progressData.status)) {
+              eventSource.close();
+              activeTasksSSE.delete(task.id);
+            }
+          } catch (err) {
+            console.error('Error parsing SSE data:', err);
+          }
+        };
+
+        eventSource.onerror = (error) => {
+          console.error('SSE error for task', task.id, error);
+          eventSource.close();
+          activeTasksSSE.delete(task.id);
+        };
+
+        activeTasksSSE.set(task.id, eventSource);
       }
+    });
+
+    // Закрываем SSE для неактивных задач
+    activeTasksSSE.forEach((eventSource, taskId) => {
+      const isStillActive = activeTasks.some(task => task.id === taskId);
+      if (!isStillActive) {
+        eventSource.close();
+        activeTasksSSE.delete(taskId);
+      }
+    });
+
+    // Cleanup при размонтировании
+    return () => {
+      activeTasksSSE.forEach(eventSource => eventSource.close());
+      activeTasksSSE.clear();
     };
-  }, [tasks, tasksFilter]); // Пересоздаем interval при изменении задач или фильтров
+  }, [tasks.map(t => `${t.id}:${t.status}`).join(',')]); // Реагируем на изменения в статусах задач
+
+  // Fallback: обновление списка задач каждые 10 секунд для синхронизации
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      loadTasks();
+    }, 10000); // Реже чем раньше, так как SSE обновляет в реальном времени
+
+    return () => clearInterval(intervalId);
+  }, [tasksFilter]);
 
   const loadTasks = async () => {
     setLoading(true);
