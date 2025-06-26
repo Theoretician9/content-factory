@@ -320,46 +320,71 @@ async def v1_list_results():
 # In-memory storage for created tasks (for demo purposes)
 created_tasks = []
 
-# Function to check available Telegram accounts from integration-service
+# Function to check available Telegram accounts using AccountManager
 async def check_telegram_accounts():
-    """Check available Telegram accounts from integration-service."""
+    """Check available Telegram accounts using Account Manager."""
     try:
-        async with aiohttp.ClientSession() as session:
-            # Используем internal endpoint без авторизации
-            async with session.get("http://integration-service:8000/api/v1/telegram/internal/active-accounts") as response:
-                if response.status == 200:
-                    accounts = await response.json()
-                    logger.info(f"🔧 Получено активных Telegram аккаунтов: {len(accounts)}")
-                    return len(accounts) > 0
-                else:
-                    logger.warning(f"⚠️ Не удалось получить Telegram аккаунты: {response.status}")
-                    return False
+        from app.core.account_manager import account_manager
+        
+        # Sync accounts from integration-service first
+        await account_manager.sync_accounts_from_integration_service()
+        
+        # Get available accounts
+        available_accounts = await account_manager.get_available_accounts()
+        logger.info(f"🔧 AccountManager: {len(available_accounts)} доступных аккаунтов")
+        return len(available_accounts) > 0
+        
     except Exception as e:
-        logger.error(f"❌ Ошибка проверки Telegram аккаунтов: {e}")
+        logger.error(f"❌ Ошибка проверки аккаунтов через AccountManager: {e}")
         return False
 
-# Background task to process pending tasks
+# Background task to process pending tasks with Account Manager
 async def process_pending_tasks():
-    """Process pending tasks if Telegram accounts are available."""
-    telegram_available = await check_telegram_accounts()
-    
-    if not telegram_available:
-        logger.warning("⚠️ Нет доступных Telegram аккаунтов для запуска задач")
-        return  # Возвращаем control если нет аккаунтов
-    
-    # Найти pending задачи для Telegram
-    pending_tasks = [task for task in created_tasks if task["status"] == "pending" and task["platform"] == "telegram"]
-    
-    for task in pending_tasks[:1]:  # Запускаем по одной задаче за раз
-        task["status"] = "running"
-        task["progress"] = 10  # Начальный прогресс
-        task["updated_at"] = datetime.utcnow().isoformat()
+    """Process pending tasks using Account Manager for proper account distribution."""
+    try:
+        from app.core.account_manager import account_manager
         
-        logger.info(f"🚀 Запущена задача парсинга: {task['id']} для {task['link']}")
+        # Sync accounts first
+        await account_manager.sync_accounts_from_integration_service()
         
-        # Имитация прогресса (в реальной версии здесь будет Celery worker)
-        import asyncio
-        asyncio.create_task(execute_real_parsing(task))
+        # Get available accounts
+        available_accounts = await account_manager.get_available_accounts()
+        
+        if not available_accounts:
+            logger.warning("⚠️ AccountManager: Нет доступных аккаунтов для запуска задач")
+            return
+        
+        # Get pending tasks for Telegram
+        pending_tasks = [task for task in created_tasks if task["status"] == "pending" and task["platform"] == "telegram"]
+        
+        if not pending_tasks:
+            logger.debug("📝 Нет pending задач для обработки")
+            return
+        
+        logger.info(f"🎯 AccountManager: {len(available_accounts)} аккаунтов доступно, {len(pending_tasks)} задач в очереди")
+        
+        # Assign tasks to available accounts (up to number of available accounts)
+        tasks_to_process = pending_tasks[:len(available_accounts)]
+        
+        for task in tasks_to_process:
+            # Try to assign task to an account
+            assigned_account_id = await account_manager.assign_task_to_account(task["id"])
+            
+            if assigned_account_id:
+                task["status"] = "running"
+                task["progress"] = 0
+                task["updated_at"] = datetime.utcnow().isoformat()
+                task["assigned_account_id"] = assigned_account_id  # Track account assignment
+                
+                logger.info(f"🚀 AccountManager: Запущена задача {task['id']} на аккаунте {assigned_account_id}")
+                
+                # Start parsing in background
+                asyncio.create_task(execute_real_parsing_with_account_manager(task, assigned_account_id))
+            else:
+                logger.warning(f"⚠️ AccountManager: Не удалось назначить аккаунт для задачи {task['id']}")
+                
+    except Exception as e:
+        logger.error(f"❌ Ошибка обработки задач через AccountManager: {e}")
 
 async def execute_real_parsing(task):
     """Execute REAL parsing with database storage and real-time progress updates."""
