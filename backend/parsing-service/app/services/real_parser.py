@@ -13,6 +13,8 @@ from ..database import AsyncSessionLocal
 from ..models.parse_result import ParseResult
 from ..models.parse_task import ParseTask
 from ..core.config import Platform
+from ..core.vault import get_vault_client
+from ..adapters.telegram import TelegramAdapter
 from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
