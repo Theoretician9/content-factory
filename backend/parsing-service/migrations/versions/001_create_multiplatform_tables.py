@@ -19,26 +19,14 @@ depends_on = None
 def upgrade() -> None:
     """Create multi-platform parsing tables."""
     
-    # Create Platform enum
-    platform_enum = postgresql.ENUM(
-        'telegram', 'instagram', 'whatsapp', 'facebook',
-        name='platform', create_type=True
-    )
-    platform_enum.create(op.get_bind())
+    # Create Platform enum with IF NOT EXISTS check
+    op.execute("CREATE TYPE platform AS ENUM ('telegram', 'instagram', 'whatsapp', 'facebook') IF NOT EXISTS")
     
-    # Create TaskStatus enum
-    task_status_enum = postgresql.ENUM(
-        'pending', 'running', 'paused', 'completed', 'failed', 'waiting',
-        name='taskstatus', create_type=True
-    )
-    task_status_enum.create(op.get_bind())
+    # Create TaskStatus enum with IF NOT EXISTS check  
+    op.execute("CREATE TYPE taskstatus AS ENUM ('pending', 'running', 'paused', 'completed', 'failed', 'waiting') IF NOT EXISTS")
     
-    # Create TaskPriority enum
-    task_priority_enum = postgresql.ENUM(
-        'low', 'normal', 'high',
-        name='taskpriority', create_type=True
-    )
-    task_priority_enum.create(op.get_bind())
+    # Create TaskPriority enum with IF NOT EXISTS check
+    op.execute("CREATE TYPE taskpriority AS ENUM ('low', 'normal', 'high') IF NOT EXISTS")
     
     # Parse Tasks table
     op.create_table(
@@ -48,13 +36,13 @@ def upgrade() -> None:
         sa.Column('updated_at', sa.DateTime(), nullable=False),
         sa.Column('task_id', sa.String(length=36), nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=False),
-        sa.Column('platform', platform_enum, nullable=False),
+        sa.Column('platform', postgresql.ENUM('telegram', 'instagram', 'whatsapp', 'facebook', name='platform', create_type=False), nullable=False),
         sa.Column('task_type', sa.String(length=50), nullable=False),
         sa.Column('title', sa.String(length=255), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('config', sa.JSON(), nullable=False),
-        sa.Column('status', task_status_enum, nullable=False),
-        sa.Column('priority', task_priority_enum, nullable=False),
+        sa.Column('status', postgresql.ENUM('pending', 'running', 'paused', 'completed', 'failed', 'waiting', name='taskstatus', create_type=False), nullable=False),
+        sa.Column('priority', postgresql.ENUM('low', 'normal', 'high', name='taskpriority', create_type=False), nullable=False),
         sa.Column('progress', sa.Integer(), nullable=False, default=0),
         sa.Column('total_items', sa.Integer(), nullable=False, default=0),
         sa.Column('processed_items', sa.Integer(), nullable=False, default=0),
@@ -91,7 +79,7 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.Column('updated_at', sa.DateTime(), nullable=False),
         sa.Column('task_id', sa.Integer(), nullable=False),
-        sa.Column('platform', platform_enum, nullable=False),
+        sa.Column('platform', postgresql.ENUM('telegram', 'instagram', 'whatsapp', 'facebook', name='platform', create_type=False), nullable=False),
         sa.Column('source_id', sa.String(length=255), nullable=False),
         sa.Column('source_name', sa.String(length=255), nullable=True),
         sa.Column('source_type', sa.String(length=50), nullable=False),
@@ -173,7 +161,7 @@ def upgrade() -> None:
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.Column('updated_at', sa.DateTime(), nullable=False),
-        sa.Column('platform', platform_enum, nullable=False),
+        sa.Column('platform', postgresql.ENUM('telegram', 'instagram', 'whatsapp', 'facebook', name='platform', create_type=False), nullable=False),
         sa.Column('chat_id', sa.String(length=255), nullable=False),
         sa.Column('username', sa.String(length=255), nullable=True),
         sa.Column('title', sa.String(length=500), nullable=True),
