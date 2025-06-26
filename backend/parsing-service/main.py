@@ -908,8 +908,87 @@ async def export_task_results(task_id: str, format: str = "json"):
                     headers={"Content-Disposition": f"attachment; filename=parsing_results_{task_id}.csv"}
                 )
             
+            # Export in Excel
+            elif format.lower() in ["excel", "xlsx"]:
+                from openpyxl import Workbook
+                from openpyxl.styles import Font, PatternFill
+                
+                # Create workbook and worksheet
+                wb = Workbook()
+                ws = wb.active
+                ws.title = f"Parsing Results {task_id}"
+                
+                if formatted_results:
+                    # Flatten the data for Excel
+                    flattened_results = []
+                    for result in formatted_results:
+                        flat_result = {
+                            "ID": result["id"],
+                            "Task ID": result["task_id"],
+                            "Platform": result["platform"],
+                            "Platform ID": result["platform_id"],
+                            "Username": result.get("username", ""),
+                            "Display Name": result.get("display_name", ""),
+                            "Phone": result.get("author_phone", ""),
+                            "Created At": result["created_at"],
+                        }
+                        
+                        # Add platform-specific data as separate columns
+                        if result.get("platform_specific_data"):
+                            for k, v in result["platform_specific_data"].items():
+                                flat_result[f"Extra {k}"] = str(v) if v is not None else ""
+                        
+                        flattened_results.append(flat_result)
+                    
+                    if flattened_results:
+                        # Get all unique field names
+                        all_fieldnames = set()
+                        for result in flattened_results:
+                            all_fieldnames.update(result.keys())
+                        
+                        # Sort fieldnames for consistent output
+                        sorted_fieldnames = sorted(all_fieldnames)
+                        
+                        # Write header row with styling
+                        header_font = Font(bold=True, color="FFFFFF")
+                        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+                        
+                        for col_idx, fieldname in enumerate(sorted_fieldnames, 1):
+                            cell = ws.cell(row=1, column=col_idx, value=fieldname)
+                            cell.font = header_font
+                            cell.fill = header_fill
+                        
+                        # Write data rows
+                        for row_idx, result in enumerate(flattened_results, 2):
+                            for col_idx, fieldname in enumerate(sorted_fieldnames, 1):
+                                ws.cell(row=row_idx, column=col_idx, value=result.get(fieldname, ""))
+                        
+                        # Auto-adjust column widths
+                        for column in ws.columns:
+                            max_length = 0
+                            column_letter = column[0].column_letter
+                            for cell in column:
+                                try:
+                                    if len(str(cell.value)) > max_length:
+                                        max_length = len(str(cell.value))
+                                except:
+                                    pass
+                            adjusted_width = min(max_length + 2, 50)  # Max width 50
+                            ws.column_dimensions[column_letter].width = adjusted_width
+                
+                # Save to BytesIO
+                excel_buffer = io.BytesIO()
+                wb.save(excel_buffer)
+                excel_buffer.seek(0)
+                
+                return StreamingResponse(
+                    excel_buffer,
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f"attachment; filename=parsing_results_{task_id}.xlsx"}
+                )
+            
             else:
-                raise HTTPException(status_code=400, detail="Unsupported format. Use 'json' or 'csv'")
+                raise HTTPException(status_code=400, detail="Unsupported format. Use 'json', 'csv', or 'excel'")
             
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is
