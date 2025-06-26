@@ -19,14 +19,32 @@ depends_on = None
 def upgrade() -> None:
     """Create multi-platform parsing tables."""
     
-    # Create Platform enum with IF NOT EXISTS check
-    op.execute("CREATE TYPE platform AS ENUM ('telegram', 'instagram', 'whatsapp', 'facebook') IF NOT EXISTS")
+    # Create Platform enum with existence check (PostgreSQL way)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE platform AS ENUM ('telegram', 'instagram', 'whatsapp', 'facebook');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
     
-    # Create TaskStatus enum with IF NOT EXISTS check  
-    op.execute("CREATE TYPE taskstatus AS ENUM ('pending', 'running', 'paused', 'completed', 'failed', 'waiting') IF NOT EXISTS")
+    # Create TaskStatus enum with existence check
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE taskstatus AS ENUM ('pending', 'running', 'paused', 'completed', 'failed', 'waiting');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
     
-    # Create TaskPriority enum with IF NOT EXISTS check
-    op.execute("CREATE TYPE taskpriority AS ENUM ('low', 'normal', 'high') IF NOT EXISTS")
+    # Create TaskPriority enum with existence check
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE taskpriority AS ENUM ('low', 'normal', 'high');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
     
     # Parse Tasks table
     op.create_table(
