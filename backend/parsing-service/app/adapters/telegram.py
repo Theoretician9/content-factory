@@ -426,6 +426,20 @@ class TelegramAdapter(BasePlatformAdapter):
                 full_user = await self.client(GetFullUserRequest(user))
                 if hasattr(full_user.user, 'phone') and full_user.user.phone:
                     return f"+{full_user.user.phone}"
+            except FloodWaitError as e:
+                self.logger.warning(f"FloodWait {e.seconds}s while getting full user info for {user.id}")
+                try:
+                    await asyncio.sleep(e.seconds + 1)
+                    # Retry after FloodWait
+                    full_user = await self.client(GetFullUserRequest(user))
+                    if hasattr(full_user.user, 'phone') and full_user.user.phone:
+                        return f"+{full_user.user.phone}"
+                except asyncio.CancelledError:
+                    self.logger.warning(f"⚠️ FloodWait cancelled during {e.seconds}s wait for user {user.id}")
+                    return None
+                except Exception:
+                    self.logger.debug(f"Could not get phone after FloodWait retry for user {user.id}")
+                    return None
             except Exception as full_user_error:
                 self.logger.debug(f"Could not get full user info for {user.id}: {full_user_error}")
             
