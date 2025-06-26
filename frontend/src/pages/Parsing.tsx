@@ -313,7 +313,7 @@ const Parsing = () => {
     }
   };
 
-  const handleExportResults = async (taskId: string, format: 'json' | 'csv' | 'ndjson') => {
+  const handleExportResults = async (taskId: string, format: 'json' | 'csv' | 'excel') => {
     try {
       const res = await parsingApi.results.export(taskId, format);
       if (res.ok) {
