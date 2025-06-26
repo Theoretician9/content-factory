@@ -66,14 +66,14 @@ class VaultClient:
         if self.token_expires_at is None:
             return True  # Для статических токенов
         
-        import time
         return time.time() < self.token_expires_at
     
     def _refresh_token_if_needed(self):
         """Обновление токена при необходимости."""
         if not self._is_token_valid() and self.role_id and self.secret_id:
-            logger.info("🔄 Token expired, refreshing with AppRole...")
+            logger.info("🔄 PARSING-SERVICE: Token expired or invalid, refreshing with AppRole...")
             self._authenticate_with_approle()
+            logger.info("✅ PARSING-SERVICE: Token refreshed successfully")
     
     def get_secret(self, path: str) -> Optional[Dict[str, Any]]:
         """
@@ -100,10 +100,11 @@ class VaultClient:
             
             # Обработка ошибки 403 (токен истек)
             if response.status_code == 403:
-                logger.warning("🔄 Received 403, attempting to refresh token...")
+                logger.warning("🔄 PARSING-SERVICE: Received 403, attempting to refresh token...")
                 self._authenticate_with_approle()
                 headers = {"X-Vault-Token": self.vault_token}
                 response = requests.get(url, headers=headers)
+                logger.info("✅ PARSING-SERVICE: Token refreshed, retrying request")
             
             response.raise_for_status()
             

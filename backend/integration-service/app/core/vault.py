@@ -95,8 +95,9 @@ class IntegrationVaultClient:
     def _refresh_token_if_needed(self):
         """Обновление токена при необходимости."""
         if not self._is_token_valid() and self.role_id and self.secret_id:
-            logger.info("🔄 Token expired, refreshing with AppRole...")
+            logger.info("🔄 INTEGRATION-SERVICE: Token expired or invalid, refreshing with AppRole...")
             self._authenticate_with_approle()
+            logger.info("✅ INTEGRATION-SERVICE: Token refreshed successfully")
 
     def get_secret(self, path: str) -> Dict[str, Any]:
         """
