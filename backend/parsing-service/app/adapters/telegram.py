@@ -636,16 +636,30 @@ class TelegramAdapter(BasePlatformAdapter):
         return media_types
     
     async def cleanup(self):
-        """Clean up Telegram client."""
+        """Clean up Telegram client with proper exception handling."""
         try:
             if self.client:
-                await self.client.disconnect()
-                self.client = None
+                # Безопасное отключение клиента с таймаутом
+                try:
+                    # Принудительно отменяем все pending операции
+                    if self.client.is_connected():
+                        await asyncio.wait_for(self.client.disconnect(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    self.logger.warning("⚠️ Telegram client disconnect timeout, forcing cleanup")
+                except (asyncio.CancelledError, GeneratorExit):
+                    self.logger.warning("⚠️ Telegram client disconnect cancelled")
+                except Exception as disconnect_error:
+                    self.logger.warning(f"⚠️ Telegram client disconnect error: {disconnect_error}")
+                finally:
+                    # Принудительно очищаем клиент
+                    self.client = None
                 
             self.logger.info("🗑️ Telegram adapter cleaned up")
             
         except Exception as e:
             self.logger.error(f"Error during cleanup: {e}")
+            # Принудительно очищаем клиент даже при ошибке
+            self.client = None
     
     def normalize_target(self, target: str) -> str:
         """Normalize Telegram target identifier."""

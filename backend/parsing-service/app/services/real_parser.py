@@ -244,11 +244,19 @@ async def parse_telegram_channel_real_with_progress(link: str, account: Dict, pr
                 return {"participants": [], "messages": [], "channel_info": None}
                 
         finally:
-            # Always cleanup adapter
+            # Always cleanup adapter with timeout protection
             try:
-                await telegram_adapter.cleanup()
+                # Защита от зависания cleanup
+                await asyncio.wait_for(telegram_adapter.cleanup(), timeout=10.0)
+            except asyncio.TimeoutError:
+                logger.warning("⚠️ TelegramAdapter cleanup timeout, forcing exit")
+            except (asyncio.CancelledError, GeneratorExit):
+                logger.warning("⚠️ TelegramAdapter cleanup cancelled")
             except Exception as cleanup_error:
                 logger.warning(f"⚠️ TelegramAdapter cleanup error: {cleanup_error}")
+            finally:
+                # Принудительно очищаем ссылку
+                telegram_adapter = None
         
     except Exception as e:
         logger.error(f"❌ Real TelegramAdapter parsing failed: {e}")
