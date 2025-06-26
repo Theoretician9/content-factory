@@ -354,7 +354,11 @@ const Parsing = () => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `parsing_results_${taskId}.${format}`;
+        
+        // Правильные расширения файлов
+        const fileExtension = format === 'excel' ? 'xlsx' : format;
+        a.download = `parsing_results_${taskId}.${fileExtension}`;
+        
         a.click();
         window.URL.revokeObjectURL(url);
       }
