@@ -10,6 +10,7 @@ import tempfile
 import json
 import logging
 import requests
+import time
 from typing import Optional, Dict, Any
 import hvac
 from hvac.exceptions import VaultError

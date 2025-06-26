@@ -10,6 +10,7 @@ class IntegrationVaultClient:
     def __init__(self, vault_addr: str = None, vault_token: str = None, role_id: str = None, secret_id: str = None):
         self.vault_addr = vault_addr or os.getenv('VAULT_ADDR', 'http://vault:8201')
         self.vault_token = None
+        self.token_expires_at = None  # Время истечения токена
         
         # Поддержка AppRole Authentication
         self.role_id = role_id or os.getenv('VAULT_ROLE_ID')
@@ -49,8 +50,14 @@ class IntegrationVaultClient:
             
             auth_result = response.json()
             self.vault_token = auth_result["auth"]["client_token"]
+            
+            # Сохраняем время истечения токена
+            lease_duration = auth_result["auth"]["lease_duration"]
+            self.token_expires_at = time.time() + lease_duration - 300  # Обновляем за 5 минут до истечения
+            
             logger.info("DEBUG VaultClient._authenticate_with_approle: Successfully authenticated via AppRole")
             logger.info(f"DEBUG VaultClient._authenticate_with_approle: token = {self.vault_token[:20]}...")
+            logger.info(f"DEBUG VaultClient._authenticate_with_approle: Token valid for {lease_duration} seconds")
             
         except Exception as e:
             logger.error(f"ERROR VaultClient._authenticate_with_approle: Failed to authenticate: {e}")
