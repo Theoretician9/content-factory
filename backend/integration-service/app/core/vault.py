@@ -166,7 +166,8 @@ class IntegrationVaultClient:
 
     def get_integration_credentials(self, platform: str) -> Dict[str, Any]:
         try:
-            return self.get_secret(f'integrations/{platform}')
+            # Секреты находятся в integration-service (как показано в Vault UI)
+            return self.get_secret('integration-service')
         except Exception as e:
             logger.error(f"Error getting credentials for {platform}: {e}")
             return {}
