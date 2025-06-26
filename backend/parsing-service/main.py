@@ -378,9 +378,13 @@ async def execute_real_parsing(task):
         message_limit = settings.get("message_limit") or settings.get("max_depth", 100)
         logger.info(f"🎯 Using message limit: {message_limit} (from settings: {settings})")
         
-        # Create progress callback function
+        # Create progress callback function with 1% granularity
+        last_progress_reported = 0
+        
         async def update_progress(current_users: int, estimated_total: int = None):
-            """Update task progress based on real parsing data."""
+            """Update task progress based on real parsing data with 1% granularity."""
+            nonlocal last_progress_reported
+            
             try:
                 # Use message_limit as estimated_total if not provided
                 if estimated_total is None:
@@ -390,29 +394,32 @@ async def execute_real_parsing(task):
                 parsing_progress = min(95, int(95 * current_users / estimated_total))
                 total_progress = parsing_progress
                 
-                task["progress"] = total_progress
-                task["updated_at"] = datetime.utcnow().isoformat()
-                task["current_users"] = current_users
-                task["estimated_total"] = estimated_total
-                
-                # Also update database task
-                try:
-                    from app.database import AsyncSessionLocal
-                    from app.models.parse_task import ParseTask
-                    from sqlalchemy import select
+                # Only update if progress changed by at least 1%
+                if abs(total_progress - last_progress_reported) >= 1 or total_progress == 0 or total_progress >= 95:
+                    task["progress"] = total_progress
+                    task["updated_at"] = datetime.utcnow().isoformat()
+                    task["current_users"] = current_users
+                    task["estimated_total"] = estimated_total
+                    last_progress_reported = total_progress
                     
-                    async with AsyncSessionLocal() as db_session:
-                        stmt = select(ParseTask).where(ParseTask.task_id == task["id"])
-                        result = await db_session.execute(stmt)
-                        db_task = result.scalar_one_or_none()
-                        if db_task:
-                            db_task.progress = total_progress
-                            db_task.updated_at = datetime.utcnow()
-                            await db_session.commit()
-                except Exception as db_error:
-                    logger.debug(f"DB progress update error: {db_error}")
-                
-                logger.info(f"📊 Progress: {total_progress}% ({current_users}/{estimated_total} users found)")
+                    # Also update database task
+                    try:
+                        from app.database import AsyncSessionLocal
+                        from app.models.parse_task import ParseTask
+                        from sqlalchemy import select
+                        
+                        async with AsyncSessionLocal() as db_session:
+                            stmt = select(ParseTask).where(ParseTask.task_id == task["id"])
+                            result = await db_session.execute(stmt)
+                            db_task = result.scalar_one_or_none()
+                            if db_task:
+                                db_task.progress = total_progress
+                                db_task.updated_at = datetime.utcnow()
+                                await db_session.commit()
+                    except Exception as db_error:
+                        logger.debug(f"DB progress update error: {db_error}")
+                    
+                    logger.info(f"📊 Progress: {total_progress}% ({current_users}/{estimated_total} users found)")
             except Exception as e:
                 logger.debug(f"Progress update error: {e}")
         
