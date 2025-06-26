@@ -411,6 +411,10 @@ async def get_active_accounts_internal(
                     "session_data": session_data,  # Session данные из БД
                     "connection_ready": session_data is not None
                 }
+                
+                # КРИТИЧЕСКОЕ ЛОГИРОВАНИЕ: проверяем что передаем в parsing-service
+                logger.info(f"📤 Account {s.id}: api_id={account_data['api_id']}, api_hash={'***' if account_data['api_hash'] else None}, has_session_data={account_data['connection_ready']}")
+                
                 result.append(account_data)
                 
             except Exception as account_error:
