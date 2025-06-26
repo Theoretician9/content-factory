@@ -141,13 +141,13 @@ async def root():
 
 
 # Include new API routers
-# app.include_router(health_router, prefix="/v1/health", tags=["Health"])
+# Note: health endpoints are already implemented directly in main.py
 
 # Include other routers
-# Temporarily disable external routers due to null bytes issue
-# from app.api.v1.endpoints.tasks import router as tasks_router
+# Re-enable external routers with fixed issues
+from app.api.v1.endpoints.tasks import router as tasks_router
 from app.api.v1.endpoints.results import router as results_router
-# app.include_router(tasks_router, prefix="/v1/tasks", tags=["Parse Tasks"])
+app.include_router(tasks_router, prefix="/v1/tasks", tags=["Parse Tasks"])
 app.include_router(results_router, prefix="/v1/results", tags=["Parse Results"])
 
 
@@ -1205,6 +1205,79 @@ async def estimate_parsing_time(request_data: dict):
             "error": str(e),
             "data": {}
         }
+
+@app.get("/metrics", tags=["Monitoring"])
+async def get_metrics():
+    """Get Prometheus-style metrics for monitoring."""
+    try:
+        from app.core.account_manager import account_manager
+        
+        # Get account status
+        account_status = await account_manager.get_account_status()
+        
+        # Get task queue status
+        queue_status = await account_manager.get_task_queue_status()
+        
+        # Calculate basic metrics from created_tasks
+        total_tasks = len(created_tasks)
+        running_tasks = len([t for t in created_tasks if t.get("status") == "running"])
+        completed_tasks = len([t for t in created_tasks if t.get("status") == "completed"])
+        failed_tasks = len([t for t in created_tasks if t.get("status") == "failed"])
+        pending_tasks = len([t for t in created_tasks if t.get("status") == "pending"])
+        
+        # Generate Prometheus-style metrics
+        metrics_text = f"""# HELP parse_tasks_total Total number of parsing tasks
+# TYPE parse_tasks_total counter
+parse_tasks_total {total_tasks}
+
+# HELP parse_tasks_running Current number of running tasks
+# TYPE parse_tasks_running gauge
+parse_tasks_running {running_tasks}
+
+# HELP parse_tasks_completed Total number of completed tasks
+# TYPE parse_tasks_completed counter
+parse_tasks_completed {completed_tasks}
+
+# HELP parse_tasks_failed Total number of failed tasks
+# TYPE parse_tasks_failed counter
+parse_tasks_failed {failed_tasks}
+
+# HELP parse_tasks_pending Current number of pending tasks
+# TYPE parse_tasks_pending gauge
+parse_tasks_pending {pending_tasks}
+
+# HELP telegram_accounts_total Total number of Telegram accounts
+# TYPE telegram_accounts_total gauge
+telegram_accounts_total {account_status['status_counts']['total']}
+
+# HELP telegram_accounts_available Number of available Telegram accounts
+# TYPE telegram_accounts_available gauge
+telegram_accounts_available {account_status['status_counts']['free']}
+
+# HELP telegram_accounts_busy Number of busy Telegram accounts
+# TYPE telegram_accounts_busy gauge
+telegram_accounts_busy {account_status['status_counts']['busy']}
+
+# HELP telegram_accounts_blocked Number of blocked Telegram accounts
+# TYPE telegram_accounts_blocked gauge
+telegram_accounts_blocked {account_status['status_counts']['blocked']}
+
+# HELP parsing_service_up Service health status
+# TYPE parsing_service_up gauge
+parsing_service_up 1
+"""
+        
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(content=metrics_text, media_type="text/plain")
+        
+    except Exception as e:
+        logger.error(f"❌ Error generating metrics: {e}")
+        error_metrics = """# HELP parsing_service_up Service health status
+# TYPE parsing_service_up gauge
+parsing_service_up 0
+"""
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(content=error_metrics, media_type="text/plain")
 
 if __name__ == "__main__":
     uvicorn.run(
