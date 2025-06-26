@@ -327,11 +327,25 @@ class TelegramAdapter(BasePlatformAdapter):
         self.logger.info(f"📊 Channel parsing complete: {processed_messages} messages processed, {len(unique_users)} unique users found")
         return parsed_results
     
-    async def _parse_group(self, task: ParseTask, chat: Chat, message_limit: int, progress_callback=None):
+    async def _parse_group(self, task: ParseTask, chat: Chat, message_limit: int, progress_callback=None, speed_config=None):
         """Parse users from a Telegram group by collecting all participants."""
         self.logger.info(f"👥 Parsing group users: {chat.title} (USER LIMIT: {message_limit} users)")
         
+        # Apply speed configuration defaults if not provided
+        if speed_config:
+            message_delay = speed_config.message_delay
+            user_request_delay = speed_config.user_request_delay
+            batch_size = speed_config.batch_size
+            self.logger.info(f"⚡ Group parsing speed: {message_delay}s msg delay, {user_request_delay}s user delay, batch {batch_size}")
+        else:
+            # Default speed settings (medium)
+            message_delay = 0.8
+            user_request_delay = 1.5
+            batch_size = 25
+            self.logger.info("⚡ Using default speed settings")
+        
         unique_users = {}  # user_id -> user_data
+        request_count = 0  # Track requests for batch processing
         
         # Parse group participants (primary focus)
         participant_count = 0
@@ -348,6 +362,7 @@ class TelegramAdapter(BasePlatformAdapter):
                         user_data = await self._extract_user_data(task, participant, chat, "participant")
                         unique_users[user_id] = user_data
                         participant_count += 1
+                        request_count += 1
                         
                         # 🔥 ПРОВЕРКА ЛИМИТА ПОЛЬЗОВАТЕЛЕЙ
                         if participant_count >= message_limit:
@@ -367,8 +382,10 @@ class TelegramAdapter(BasePlatformAdapter):
                                     await progress_callback(participant_count, message_limit)
                                 except Exception as e:
                                     self.logger.debug(f"Progress callback error: {e}")
-                            # Rate limiting for large groups
-                            await asyncio.sleep(0.1)
+                        
+                        # Speed-configurable rate limiting for large groups
+                        if request_count % batch_size == 0:
+                            await asyncio.sleep(user_request_delay)
                     
                     except FloodWaitError as e:
                         self.logger.warning(f"FloodWait {e.seconds}s while processing participant {user_id}")
