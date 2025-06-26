@@ -25,6 +25,7 @@ class VaultClient:
         self.vault_addr = os.getenv('VAULT_ADDR', 'http://vault:8201')
         self.client = hvac.Client(url=self.vault_addr)
         self.vault_token = None
+        self.token_expires_at = None  # Время истечения токена
         
         # AppRole Authentication
         self.role_id = os.getenv('VAULT_ROLE_ID')
