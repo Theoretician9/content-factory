@@ -43,14 +43,32 @@ async def perform_real_parsing(task_id: str, platform: str, link: str, user_id: 
     return await perform_real_parsing_with_progress(task_id, platform, link, user_id, None)
 
 
-async def perform_real_parsing_with_progress(task_id: str, platform: str, link: str, user_id: int = 1, progress_callback=None, message_limit: int = 100):
-    """Perform REAL Telegram parsing with real-time progress updates."""
+async def perform_real_parsing_with_progress(
+    task_id: str,
+    platform: str, 
+    link: str,
+    user_id: int = 1,
+    progress_callback=None,
+    message_limit: int = 100,
+    speed_config=None  # New parameter for parsing speed configuration
+) -> int:
+    """
+    ГЛАВНАЯ функция парсинга - оркестрирует весь процесс:
+    
+    1. Получение активных аккаунтов от Integration Service
+    2. Создание и настройка Platform Adapter
+    3. Аутентификация с платформой
+    4. Парсинг с real-time progress callbacks и speed configuration
+    5. Сохранение результатов в PostgreSQL
+    6. Cleanup всех ресурсов
+    """
+    
+    if speed_config:
+        logger.info(f"🚀 Starting REAL parsing for task {task_id}: {link} (USER LIMIT: {message_limit}, SPEED: {speed_config.name})")
+    else:
+        logger.info(f"🚀 Starting REAL parsing for task {task_id}: {link} (USER LIMIT: {message_limit})")
+    
     try:
-        logger.info(f"🚀 Starting REAL Telegram parsing for task {task_id}: {link} (USER LIMIT: {message_limit})")
-        
-        if platform != "telegram":
-            raise Exception(f"Platform {platform} not yet supported for real parsing")
-        
         # Step 1: Get real Telegram accounts from integration-service
         accounts = await get_real_telegram_accounts()
         if not accounts:
@@ -58,56 +76,57 @@ async def perform_real_parsing_with_progress(task_id: str, platform: str, link: 
         
         logger.info(f"📱 Using {len(accounts)} real Telegram accounts for parsing")
         
-        # Step 2: Parse channel using real Telegram API with progress callback
-        channel_data = await parse_telegram_channel_real_with_progress(link, accounts[0], progress_callback, message_limit)
+        # Step 2: Select best account (least recently used)
+        selected_account = min(accounts, key=lambda x: x.get('last_used_at', ''))
+        session_id = selected_account.get('session_id')
         
-        # Step 3: Save ONLY real results to database
-        async with AsyncSessionLocal() as db_session:
-            results_saved = 0
-            
-            # Get the correct task DB ID once
-            task_db_id = await get_task_db_id(task_id, db_session)
-            if not task_db_id:
-                logger.error(f"❌ Task {task_id} not found in database, cannot save results")
-                return 0
-            
-            # Save channel info
-            if channel_data.get('channel_info'):
-                await save_channel_info_real(task_db_id, channel_data['channel_info'], db_session)
-                results_saved += 1
-            
-            # Save real participants (if any)
-            if channel_data.get('participants'):
-                logger.info(f"📝 Saving {len(channel_data['participants'])} participants to database")
-                for participant in channel_data['participants']:
-                    # Check essential fields - be more lenient
-                    content_id = participant.get('content_id', f"user_{participant.get('author_id', 'unknown')}")
-                    source_id = participant.get('source_id', 'unknown')
-                    
-                    if content_id and source_id:
-                        await save_participant_real(task_db_id, participant, db_session)
-                        results_saved += 1
-                    else:
-                        logger.warning(f"⚠️ Skipping participant with missing fields: content_id={content_id}, source_id={source_id}")
-                        logger.debug(f"Participant data: {participant}")
-            
-            # Save real messages (if any)
-            if channel_data.get('messages'):
-                for message in channel_data['messages']:
-                    # Only save if essential fields are present
-                    if message.get('source_id') and message.get('content_id'):
-                        await save_message_real(task_db_id, message, db_session)
-                        results_saved += 1
-                    else:
-                        logger.warning(f"⚠️ Skipping message with missing fields: {message.get('content_id', 'unknown')}")
-            
-            await db_session.commit()
-            
-            logger.info(f"💾 Saved {results_saved} REAL parsing results to database")
-            return results_saved
-            
+        # Step 3: Get API credentials from Vault + session data from Integration Service
+        vault_client = get_vault_client()
+        api_keys = vault_client.get_secret("integration-service")
+        
+        credentials = {
+            'session_id': session_id,
+            'api_id': api_keys.get('telegram_api_id'),
+            'api_hash': api_keys.get('telegram_api_hash'),
+            'session_data': selected_account.get('session_data')  # From Integration DB
+        }
+        
+        # Step 4: Create and authenticate adapter
+        adapter = TelegramAdapter()
+        
+        if not await adapter.authenticate(session_id, credentials):
+            raise Exception(f"Failed to authenticate with session {session_id}")
+        
+        # Step 5: Parse target with progress tracking and speed configuration
+        if speed_config:
+            logger.info(f"🔧 TelegramAdapter config: message_limit={message_limit}, speed={speed_config.name}")
+        else:
+            logger.info(f"🔧 TelegramAdapter config: message_limit={message_limit}")
+        
+        results = await adapter.parse_target(
+            link,
+            message_limit=message_limit,
+            progress_callback=progress_callback,
+            speed_config=speed_config  # Pass speed configuration to adapter
+        )
+        
+        # Step 6: Save results to PostgreSQL database
+        if results:
+            await save_parsing_results(task_id, results)
+        
+        # Step 7: Cleanup resources
+        await adapter.cleanup()
+        
+        result_count = len(results) if results else 0
+        if speed_config:
+            logger.info(f"✅ REAL parsing completed with {speed_config.name} speed: {result_count} results")
+        else:
+            logger.info(f"✅ REAL parsing completed: {result_count} results")
+        
+        return result_count
+        
     except Exception as e:
-        logger.error(f"❌ Real Telegram parsing failed for task {task_id}: {e}")
+        logger.error(f"❌ Real parsing failed: {e}")
         raise
 
 
