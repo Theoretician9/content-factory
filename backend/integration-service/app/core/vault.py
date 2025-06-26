@@ -173,10 +173,12 @@ class IntegrationVaultClient:
             return {}
 
     def update_integration_credentials(self, platform: str, credentials: Dict[str, Any]) -> None:
-        self.put_secret(f'integrations/{platform}', credentials)
+        # Обновляем секреты в integration-service
+        self.put_secret('integration-service', credentials)
 
     def delete_integration_credentials(self, platform: str) -> None:
-        self.delete_secret(f'integrations/{platform}')
+        # Удаляем секреты из integration-service
+        self.delete_secret('integration-service')
 
     def list_integrations(self) -> list:
         try:

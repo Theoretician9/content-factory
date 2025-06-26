@@ -54,7 +54,7 @@ async def detailed_health_check(
     # Проверка Vault
     try:
         vault_client = IntegrationVaultClient()
-        # ✅ ИСПРАВЛЕНО: Проверяем правильный путь integration-service
+        # Проверяем доступ к секретам integration-service
         vault_client.get_secret('integration-service')
         health_status["components"]["vault"] = {
             "status": "healthy",
