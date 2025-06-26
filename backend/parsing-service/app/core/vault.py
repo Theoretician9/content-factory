@@ -48,7 +48,6 @@ class VaultClient:
             self.client.token = self.vault_token
             
             # Сохраняем время истечения токена
-            import time
             lease_duration = response["auth"]["lease_duration"]
             self.token_expires_at = time.time() + lease_duration - 300  # Обновляем за 5 минут до истечения
             

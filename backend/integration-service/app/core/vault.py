@@ -82,12 +82,31 @@ class IntegrationVaultClient:
                     logger.error(f"Vault is not available after {max_attempts} attempts: {e}")
                     raise
 
+    def _is_token_valid(self) -> bool:
+        """Проверка валидности токена."""
+        if not self.vault_token:
+            return False
+        
+        if self.token_expires_at is None:
+            return True  # Для статических токенов
+        
+        return time.time() < self.token_expires_at
+    
+    def _refresh_token_if_needed(self):
+        """Обновление токена при необходимости."""
+        if not self._is_token_valid() and self.role_id and self.secret_id:
+            logger.info("🔄 Token expired, refreshing with AppRole...")
+            self._authenticate_with_approle()
+
     def get_secret(self, path: str) -> Dict[str, Any]:
         """
         Получить секрет из Vault
         :param path: путь к секрету (например, 'integration-service')
         :return: данные секрета
         """
+        # Проверяем и обновляем токен при необходимости
+        self._refresh_token_if_needed()
+        
         # Автоматически добавляем kv/data/ префикс для KV v2 engine
         full_path = f"kv/data/{path}"
         url = f"{self.vault_addr}/v1/{full_path}"
@@ -103,6 +122,15 @@ class IntegrationVaultClient:
             response = requests.get(url, headers=headers)
             logger.debug(f"DEBUG VaultClient.get_secret: response.status_code = {response.status_code}")
             logger.debug(f"DEBUG VaultClient.get_secret: response.url = {response.url}")
+            
+            # Обработка ошибки 403 (токен истек)
+            if response.status_code == 403:
+                logger.warning("🔄 Received 403, attempting to refresh token...")
+                self._authenticate_with_approle()
+                headers = {"X-Vault-Token": self.vault_token}
+                response = requests.get(url, headers=headers)
+                logger.debug(f"DEBUG VaultClient.get_secret: retry response.status_code = {response.status_code}")
+            
             response.raise_for_status()
             return response.json()["data"]["data"]
         except Exception as e:
