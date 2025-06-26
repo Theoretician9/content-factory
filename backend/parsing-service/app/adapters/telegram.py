@@ -227,8 +227,8 @@ class TelegramAdapter(BasePlatformAdapter):
             # Check if message has comments/replies (only for channels with comments enabled)
             if hasattr(message, 'replies') and message.replies and message.replies.replies > 0:
                 try:
-                    # Rate limiting: small delay between requests
-                    await asyncio.sleep(0.1)
+                    # Rate limiting: speed-configurable delay between message requests
+                    await asyncio.sleep(message_delay)
                     
                     # Get comments/replies for this message
                     comment_count = 0
@@ -250,6 +250,7 @@ class TelegramAdapter(BasePlatformAdapter):
                                 unique_users[user_id] = user_data
                                 found_commenters += 1
                                 comment_count += 1
+                                request_count += 1
                                 
                                 # 🔥 ПРОВЕРКА ЛИМИТА ПОЛЬЗОВАТЕЛЕЙ
                                 if found_commenters >= message_limit:
@@ -270,9 +271,9 @@ class TelegramAdapter(BasePlatformAdapter):
                                         except Exception as e:
                                             self.logger.debug(f"Progress callback error: {e}")
                                 
-                                # Rate limiting for user requests
-                                if comment_count % 5 == 0:
-                                    await asyncio.sleep(0.5)
+                                # Speed-configurable rate limiting for user requests
+                                if request_count % batch_size == 0:
+                                    await asyncio.sleep(user_request_delay)
                                     
                             except FloodWaitError as e:
                                 self.logger.warning(f"FloodWait {e.seconds}s - pausing...")
