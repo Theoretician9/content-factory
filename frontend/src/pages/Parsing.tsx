@@ -77,6 +77,7 @@ const Parsing = () => {
     platform: 'telegram' as const,
     links: [''],
     priority: 'normal' as const,
+    parsing_speed: 'medium' as const,
     settings: {
       max_depth: 10000,
       include_media: true,
@@ -86,6 +87,11 @@ const Parsing = () => {
   });
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+  
+  // Parsing speeds state
+  const [availableSpeeds, setAvailableSpeeds] = useState<any>({});
+  const [speedsLoading, setSpeedsLoading] = useState(false);
+  const [timeEstimate, setTimeEstimate] = useState<any>(null);
   
   // Результаты задачи
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
@@ -260,6 +266,7 @@ const Parsing = () => {
         platform: createForm.platform,
         links: validLinks,
         priority: createForm.priority,
+        parsing_speed: createForm.parsing_speed,
         settings: createForm.settings
       });
 
@@ -563,7 +570,7 @@ const Parsing = () => {
               </div>
 
               {/* Настройки */}
-              <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-3 gap-4 mb-6">
                 <div>
                   <label className="block text-sm font-medium mb-2">Приоритет</label>
                   <select
@@ -575,6 +582,27 @@ const Parsing = () => {
                     <option value="normal">Обычный</option>
                     <option value="high">Высокий</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Скорость парсинга</label>
+                  <select
+                    value={createForm.parsing_speed}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, parsing_speed: e.target.value as any }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="safe">🟢 Безопасный (медленно)</option>
+                    <option value="medium">🟡 Средний (рекомендуемый)</option>
+                    <option value="fast">🔴 Быстрый (опасно)</option>
+                  </select>
+                  {availableSpeeds[createForm.parsing_speed] && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      {availableSpeeds[createForm.parsing_speed].description}
+                      <br />
+                      <span className="text-blue-600">
+                        {availableSpeeds[createForm.parsing_speed].estimated_speed}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-2">Максимальная глубина</label>
@@ -589,6 +617,15 @@ const Parsing = () => {
                     }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
+                  {timeEstimate && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      Оценка времени: <span className="text-blue-600">{timeEstimate.estimated_minutes} мин</span>
+                      <br />
+                      Риск: <span className={timeEstimate.risk_level === 'Очень низкий' ? 'text-green-600' : timeEstimate.risk_level === 'Средний' ? 'text-yellow-600' : 'text-red-600'}>
+                        {timeEstimate.risk_level}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 

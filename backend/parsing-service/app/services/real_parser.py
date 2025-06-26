@@ -103,12 +103,32 @@ async def perform_real_parsing_with_progress(
         else:
             logger.info(f"🔧 TelegramAdapter config: message_limit={message_limit}")
         
-        results = await adapter.parse_target(
-            link,
-            message_limit=message_limit,
-            progress_callback=progress_callback,
-            speed_config=speed_config  # Pass speed configuration to adapter
-        )
+        # Create mock task object for adapter compatibility
+        from app.models.parse_task import ParseTask
+        from datetime import datetime
+        
+        # Get task from database or create minimal task object
+        async with AsyncSessionLocal() as db_session:
+            task_db_id = await get_task_db_id(task_id, db_session)
+            
+            if task_db_id:
+                # Use existing task
+                from sqlalchemy import select
+                stmt = select(ParseTask).where(ParseTask.id == task_db_id)
+                result = await db_session.execute(stmt)
+                task = result.scalar_one_or_none()
+            else:
+                # Create minimal task object for compatibility
+                task = type('Task', (), {'id': 1, 'task_id': task_id})()
+        
+        # Create config dictionary for adapter
+        config = {
+            'message_limit': message_limit,
+            'progress_callback': progress_callback,
+            'speed_config': speed_config
+        }
+        
+        results = await adapter.parse_target(task, link, config)
         
         # Step 6: Save results to PostgreSQL database
         if results:

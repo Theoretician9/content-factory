@@ -161,6 +161,7 @@ export const parsingApi = {
       platform: 'telegram' | 'instagram' | 'whatsapp';
       links: string[];
       priority?: 'low' | 'normal' | 'high';
+      parsing_speed?: 'safe' | 'medium' | 'fast';
       settings?: {
         max_depth?: number;
         include_media?: boolean;
