@@ -4,8 +4,9 @@ uvicorn[standard]==0.24.0
 pydantic==2.5.0
 pydantic-settings==2.1.0
 
-# Database drivers - PostgreSQL (async only)
-asyncpg==0.29.0
+# Database drivers - PostgreSQL 
+asyncpg==0.29.0  # For async app runtime
+psycopg2-binary==2.9.9  # For Alembic migrations (sync)
 sqlalchemy==2.0.23
 alembic==1.13.1
 
