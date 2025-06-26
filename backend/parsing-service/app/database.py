@@ -38,16 +38,10 @@ async def get_db():
             await session.close()
 
 
-def create_tables():
-    """Create database tables."""
-    Base.metadata.create_all(bind=engine)
-    logger.info("✅ Database tables created")
-
-
 async def init_database():
     """Initialize database connection."""
     try:
-        # Test connection
+        # Test connection and create tables
         async with async_engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         

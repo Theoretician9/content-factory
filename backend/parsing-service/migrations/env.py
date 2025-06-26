@@ -5,15 +5,11 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
-from dotenv import load_dotenv
 import os
 import sys
 
 # Add parent directory to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Load environment variables
-load_dotenv()
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -26,7 +22,7 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-from main import Base
+from app.models.base import Base
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
@@ -65,11 +61,6 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    # Override sqlalchemy.url with DATABASE_URL from environment
-    database_url = os.getenv('DATABASE_URL')
-    if database_url:
-        config.set_main_option('sqlalchemy.url', database_url)
-        
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
