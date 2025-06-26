@@ -257,13 +257,22 @@ class TelegramAdapter(BasePlatformAdapter):
                                     
                             except FloodWaitError as e:
                                 self.logger.warning(f"FloodWait {e.seconds}s - pausing...")
-                                await asyncio.sleep(e.seconds + 1)
+                                try:
+                                    # Защищенное ожидание FloodWait от отмены
+                                    await asyncio.sleep(e.seconds + 1)
+                                except asyncio.CancelledError:
+                                    self.logger.warning(f"⚠️ FloodWait cancelled during {e.seconds}s wait")
+                                    raise
                             except Exception as e:
                                 self.logger.debug(f"Could not get commenter data for user {user_id}: {e}")
                 
                 except FloodWaitError as e:
                     self.logger.warning(f"FloodWait {e.seconds}s while getting replies for message {message.id}")
-                    await asyncio.sleep(e.seconds + 1)
+                    try:
+                        await asyncio.sleep(e.seconds + 1)
+                    except asyncio.CancelledError:
+                        self.logger.warning(f"⚠️ FloodWait cancelled during {e.seconds}s wait for message {message.id}")
+                        raise
                 except Exception as e:
                     self.logger.debug(f"Could not get replies for message {message.id}: {e}")
             
