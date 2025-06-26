@@ -352,7 +352,11 @@ class TelegramAdapter(BasePlatformAdapter):
                     
                     except FloodWaitError as e:
                         self.logger.warning(f"FloodWait {e.seconds}s while processing participant {user_id}")
-                        await asyncio.sleep(e.seconds + 1)
+                        try:
+                            await asyncio.sleep(e.seconds + 1)
+                        except asyncio.CancelledError:
+                            self.logger.warning(f"⚠️ FloodWait cancelled during {e.seconds}s wait for participant {user_id}")
+                            raise
                     except Exception as e:
                         self.logger.debug(f"Could not process participant {user_id}: {e}")
         
@@ -392,7 +396,11 @@ class TelegramAdapter(BasePlatformAdapter):
                                 return final_results
                         except FloodWaitError as e:
                             self.logger.warning(f"FloodWait {e.seconds}s while getting message author {user_id}")
-                            await asyncio.sleep(e.seconds + 1)
+                            try:
+                                await asyncio.sleep(e.seconds + 1)
+                            except asyncio.CancelledError:
+                                self.logger.warning(f"⚠️ FloodWait cancelled during {e.seconds}s wait for message author {user_id}")
+                                raise
                         except Exception as e:
                             self.logger.debug(f"Could not get message author data for user {user_id}: {e}")
                 
