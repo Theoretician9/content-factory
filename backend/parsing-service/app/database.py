@@ -1,9 +1,8 @@
 """
-Database connection and session management for MySQL.
+Database connection and session management for PostgreSQL.
 """
 
 import logging
-from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -12,30 +11,21 @@ from .models.base import Base
 
 logger = logging.getLogger(__name__)
 
-# Create sync engine for migrations (MySQL)
-sync_url = settings.DATABASE_URL
-if sync_url.startswith("mysql://"):
-    sync_url = sync_url.replace("mysql://", "mysql+pymysql://")
-
-engine = create_engine(
-    sync_url,
-    echo=settings.DEBUG
-)
-
-# Create async engine for application (MySQL) 
-async_url = settings.DATABASE_URL
-if async_url.startswith("mysql://"):
-    async_url = async_url.replace("mysql://", "mysql+aiomysql://")
-
+# Create async engine for PostgreSQL
 async_engine = create_async_engine(
-    async_url,
-    echo=settings.DEBUG
+    settings.DATABASE_URL,
+    echo=settings.DEBUG,  # SQL logging in development
+    pool_size=20,         # Connection pool size
+    max_overflow=30,      # Additional connections
+    pool_timeout=30,      # Connection timeout
+    pool_recycle=3600     # Connection recycling
 )
 
-# Create session makers
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Create async session maker
 AsyncSessionLocal = sessionmaker(
-    async_engine, class_=AsyncSession, expire_on_commit=False
+    async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False
 )
 
 
