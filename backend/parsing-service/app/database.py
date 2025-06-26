@@ -1,5 +1,5 @@
 """
-Database connection and session management for PostgreSQL.
+Database connection and session management for MySQL.
 """
 
 import logging
@@ -12,15 +12,23 @@ from .models.base import Base
 
 logger = logging.getLogger(__name__)
 
-# Create sync engine for migrations
+# Create sync engine for migrations (MySQL)
+sync_url = settings.DATABASE_URL
+if sync_url.startswith("mysql://"):
+    sync_url = sync_url.replace("mysql://", "mysql+pymysql://")
+
 engine = create_engine(
-    settings.DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://"),
+    sync_url,
     echo=settings.DEBUG
 )
 
-# Create async engine for application
+# Create async engine for application (MySQL) 
+async_url = settings.DATABASE_URL
+if async_url.startswith("mysql://"):
+    async_url = async_url.replace("mysql://", "mysql+aiomysql://")
+
 async_engine = create_async_engine(
-    settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
+    async_url,
     echo=settings.DEBUG
 )
 
