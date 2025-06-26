@@ -155,13 +155,18 @@ class TelegramAdapter(BasePlatformAdapter):
         return results
     
     async def parse_target(self, task: ParseTask, target: str, config: Dict[str, Any]):
-        """Parse messages from a Telegram target."""
+        """Parse messages from a Telegram target with speed configuration support."""
         try:
             normalized_target = self.normalize_target(target)
             message_limit = config.get('message_limit', 10000)
             progress_callback = config.get('progress_callback')
+            speed_config = config.get('speed_config')  # New: speed configuration
             
-            self.logger.info(f"📥 Starting to parse {normalized_target} (USER LIMIT: {message_limit} users)")
+            if speed_config:
+                self.logger.info(f"📥 Starting to parse {normalized_target} (USER LIMIT: {message_limit} users, SPEED: {speed_config.name})")
+                self.logger.info(f"⚡ Speed settings: {speed_config.user_request_delay}s user delay, {speed_config.user_requests_per_minute} req/min")
+            else:
+                self.logger.info(f"📥 Starting to parse {normalized_target} (USER LIMIT: {message_limit} users, DEFAULT SPEED)")
             
             # Get entity (Channel/Group)
             entity = await self.client.get_entity(normalized_target)
@@ -169,9 +174,9 @@ class TelegramAdapter(BasePlatformAdapter):
             parsed_results = []
             
             if isinstance(entity, Channel):
-                parsed_results = await self._parse_channel(task, entity, message_limit, progress_callback)
+                parsed_results = await self._parse_channel(task, entity, message_limit, progress_callback, speed_config)
             elif isinstance(entity, Chat):
-                parsed_results = await self._parse_group(task, entity, message_limit, progress_callback)
+                parsed_results = await self._parse_group(task, entity, message_limit, progress_callback, speed_config)
             else:
                 raise ValueError(f"Unsupported entity type: {type(entity)}")
             
@@ -182,13 +187,27 @@ class TelegramAdapter(BasePlatformAdapter):
             self.logger.error(f"❌ Failed to parse {target}: {e}")
             raise
     
-    async def _parse_channel(self, task: ParseTask, channel: Channel, message_limit: int, progress_callback=None):
+    async def _parse_channel(self, task: ParseTask, channel: Channel, message_limit: int, progress_callback=None, speed_config=None):
         """Parse users from a Telegram channel by collecting commenters from posts."""
         self.logger.info(f"📱 Parsing channel users: {channel.title} (USER LIMIT: {message_limit} users)")
+        
+        # Apply speed configuration defaults if not provided
+        if speed_config:
+            message_delay = speed_config.message_delay
+            user_request_delay = speed_config.user_request_delay
+            batch_size = speed_config.batch_size
+            self.logger.info(f"⚡ Channel parsing speed: {message_delay}s msg delay, {user_request_delay}s user delay, batch {batch_size}")
+        else:
+            # Default speed settings (medium)
+            message_delay = 0.8
+            user_request_delay = 1.5
+            batch_size = 25
+            self.logger.info("⚡ Using default speed settings")
         
         unique_users = {}  # user_id -> user_data
         processed_messages = 0
         found_commenters = 0
+        request_count = 0  # Track requests for batch processing
         
         # Get recent messages to find users who commented
         # Use larger message limit since we're limiting by USERS, not messages
