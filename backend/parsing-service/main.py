@@ -617,9 +617,21 @@ async def list_tasks(
 
 @app.post("/tasks", tags=["Tasks API"])
 async def create_task(task_data: dict):
-    """Create new parsing task."""
+    """Create new parsing task with Account Manager and Parsing Speed support."""
     import uuid
     from datetime import datetime
+    from app.core.parsing_speed import parse_speed_from_string, get_speed_config, calculate_estimated_time
+    
+    # Parse and validate parsing speed
+    speed_str = task_data.get("parsing_speed", "medium")
+    parsing_speed = parse_speed_from_string(speed_str)
+    speed_config = get_speed_config(parsing_speed)
+    
+    # Calculate estimated time
+    message_limit = task_data.get("message_limit") or task_data.get("settings", {}).get("message_limit") or task_data.get("settings", {}).get("max_depth", 100)
+    time_estimate = calculate_estimated_time(message_limit, parsing_speed)
+    
+    logger.info(f"🆕 Creating task with speed: {speed_config.name}, estimated time: {time_estimate['estimated_minutes']} min")
     
     # Создаем задачи для каждой ссылки
     created_task_ids = []
@@ -638,8 +650,9 @@ async def create_task(task_data: dict):
                 description=f"Parsing task for {link}",
                 config={
                     "target": link,
-                    "message_limit": task_data.get("message_limit") or task_data.get("settings", {}).get("message_limit") or task_data.get("settings", {}).get("max_depth", 100),
+                    "message_limit": message_limit,
                     "include_media": task_data.get("include_media", True),
+                    "parsing_speed": speed_str,
                     "settings": task_data.get("settings", {})
                 },
                 status=TaskStatus.PENDING,
@@ -665,28 +678,40 @@ async def create_task(task_data: dict):
                 "updated_at": datetime.utcnow().isoformat(),
                 "settings": {
                     **task_data.get("settings", {}),
-                    "message_limit": task_data.get("message_limit") or task_data.get("settings", {}).get("message_limit") or task_data.get("settings", {}).get("max_depth", 100)
+                    "message_limit": message_limit,
+                    "parsing_speed": speed_str  # Add parsing speed to settings
                 },
-                "result_count": 0
+                "result_count": 0,
+                "speed_config": {
+                    "name": speed_config.name,
+                    "speed": speed_str,
+                    "estimated_time": time_estimate
+                }
             }
             
             # Добавляем в in-memory хранилище для совместимости с фронтендом
             created_tasks.append(new_task)
             created_task_ids.append(task_id)
             
-            logger.info(f"🆕 Создана задача парсинга: {task_id} (БД ID: {db_task.id}) для {link}")
+            logger.info(f"🆕 Создана задача парсинга: {task_id} (БД ID: {db_task.id}) для {link} со скоростью {speed_config.name}")
         
         await db_session.commit()
     
-    # Автоматически запускаем обработку pending задач
+    # Автоматически запускаем обработку pending задач через AccountManager
     asyncio.create_task(process_pending_tasks())
     
     return {
         "task_ids": created_task_ids,
         "status": "pending", 
-        "message": f"Создано задач: {len(created_task_ids)}",
+        "message": f"Создано задач: {len(created_task_ids)} со скоростью {speed_config.name}",
         "platform": task_data.get("platform", "telegram"),
-        "links": task_data.get("links", [])
+        "links": task_data.get("links", []),
+        "parsing_speed": {
+            "name": speed_config.name,
+            "speed": speed_str,
+            "estimated_time": time_estimate,
+            "risk_level": speed_config.risk_level
+        }
     }
 
 @app.get("/status", tags=["Status API"])
