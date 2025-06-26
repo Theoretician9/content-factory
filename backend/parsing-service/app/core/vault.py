@@ -42,13 +42,38 @@ class VaultClient:
         try:
             auth_data = {"role_id": self.role_id, "secret_id": self.secret_id}
             response = self.client.auth.approle.login(**auth_data)
+            
             self.vault_token = response["auth"]["client_token"]
             self.client.token = self.vault_token
-            logger.info("✅ AppRole authentication successful")
+            
+            # Сохраняем время истечения токена
+            import time
+            lease_duration = response["auth"]["lease_duration"]
+            self.token_expires_at = time.time() + lease_duration - 300  # Обновляем за 5 минут до истечения
+            
+            logger.info(f"✅ AppRole authentication successful. Token valid for {lease_duration} seconds")
         except Exception as e:
             logger.error(f"❌ AppRole authentication failed: {e}")
             self.vault_token = os.getenv('VAULT_TOKEN')
             self.client.token = self.vault_token
+            self.token_expires_at = None
+    
+    def _is_token_valid(self) -> bool:
+        """Проверка валидности токена."""
+        if not self.vault_token:
+            return False
+        
+        if self.token_expires_at is None:
+            return True  # Для статических токенов
+        
+        import time
+        return time.time() < self.token_expires_at
+    
+    def _refresh_token_if_needed(self):
+        """Обновление токена при необходимости."""
+        if not self._is_token_valid() and self.role_id and self.secret_id:
+            logger.info("🔄 Token expired, refreshing with AppRole...")
+            self._authenticate_with_approle()
     
     def get_secret(self, path: str) -> Optional[Dict[str, Any]]:
         """
@@ -61,6 +86,9 @@ class VaultClient:
             Secret data or None if not found
         """
         try:
+            # Проверяем и обновляем токен при необходимости
+            self._refresh_token_if_needed()
+            
             # Используем прямой HTTP запрос как в integration-service
             # для правильного обращения к KV engine с именем 'kv'
             url = f"{self.vault_addr}/v1/kv/data/{path}"
@@ -69,6 +97,14 @@ class VaultClient:
             logger.debug(f"🔍 Getting secret from URL: {url}")
             
             response = requests.get(url, headers=headers)
+            
+            # Обработка ошибки 403 (токен истек)
+            if response.status_code == 403:
+                logger.warning("🔄 Received 403, attempting to refresh token...")
+                self._authenticate_with_approle()
+                headers = {"X-Vault-Token": self.vault_token}
+                response = requests.get(url, headers=headers)
+            
             response.raise_for_status()
             
             return response.json()["data"]["data"]
