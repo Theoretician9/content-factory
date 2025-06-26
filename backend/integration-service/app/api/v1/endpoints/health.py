@@ -54,8 +54,8 @@ async def detailed_health_check(
     # Проверка Vault
     try:
         vault_client = IntegrationVaultClient()
-        # Простая проверка доступности Vault
-        vault_client.get_secret('secret/data/integrations/telegram')
+        # ✅ ИСПРАВЛЕНО: Проверяем правильный путь integration-service
+        vault_client.get_secret('integration-service')
         health_status["components"]["vault"] = {
             "status": "healthy",
             "type": "HashiCorp Vault"

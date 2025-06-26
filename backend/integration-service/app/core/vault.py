@@ -166,7 +166,8 @@ class IntegrationVaultClient:
 
     def get_integration_credentials(self, platform: str) -> Dict[str, Any]:
         try:
-            return self.get_secret(f'integrations/{platform}')
+            # ✅ ИСПРАВЛЕНО: Секреты Telegram находятся в integration-service, не в integrations/telegram
+            return self.get_secret('integration-service')
         except Exception as e:
             logger.error(f"Error getting credentials for {platform}: {e}")
             return {}
