@@ -373,14 +373,24 @@ async def get_active_accounts_internal(
         
         try:
             # Получаем Telegram API ключи из Vault
+            logger.info("🔑 Trying to get Telegram API credentials from Vault...")
             telegram_config = vault_client.get_secret("integration-service")
+            logger.info(f"🔑 Vault response: {telegram_config}")
             api_id = telegram_config.get('telegram_api_id')
             api_hash = telegram_config.get('telegram_api_hash')
+            logger.info(f"🔑 Got from Vault: api_id={api_id}, api_hash={'***' if api_hash else None}")
         except Exception as e:
-            logger.warning(f"⚠️ Vault error, using fallback credentials: {e}")
+            logger.error(f"❌ Vault error, using fallback credentials: {e}")
             # Fallback на переменные окружения
             api_id = os.getenv('TELEGRAM_API_ID')
             api_hash = os.getenv('TELEGRAM_API_HASH')
+            logger.info(f"🔑 Got from ENV: api_id={api_id}, api_hash={'***' if api_hash else None}")
+        
+        # КРИТИЧЕСКАЯ ПРОВЕРКА: логируем финальные значения credentials
+        logger.info(f"🔍 FINAL CREDENTIALS CHECK: api_id={api_id}, api_hash={'***' if api_hash else None}")
+        
+        if not api_id or not api_hash:
+            logger.error(f"❌ CRITICAL: Missing API credentials! api_id={api_id}, api_hash={api_hash}")
         
         result = []
         for s in all_sessions:
