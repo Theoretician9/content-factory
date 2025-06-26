@@ -40,6 +40,62 @@ async def get_task_db_id(task_id: str, db_session: AsyncSession) -> Optional[int
         return None
 
 
+async def save_parsing_results(task_id: str, results: List[Dict]):
+    """Save parsing results to database."""
+    try:
+        async with AsyncSessionLocal() as db_session:
+            # Get task database ID
+            task_db_id = await get_task_db_id(task_id, db_session)
+            if not task_db_id:
+                logger.error(f"❌ Task {task_id} not found in database, cannot save results")
+                return 0
+            
+            results_saved = 0
+            
+            for result_data in results:
+                try:
+                    # Create ParseResult from TelegramAdapter data
+                    result = ParseResult(
+                        task_id=task_db_id,
+                        platform=result_data.get('platform', Platform.TELEGRAM),
+                        source_id=result_data.get('source_id', 'unknown'),
+                        source_name=result_data.get('source_name', 'unknown'),
+                        source_type=result_data.get('source_type', 'channel'),
+                        content_id=result_data.get('content_id', 'unknown'),
+                        content_type=result_data.get('content_type', 'user'),
+                        content_text=result_data.get('content_text', ''),
+                        author_id=result_data.get('author_id'),
+                        author_username=result_data.get('author_username'),
+                        author_name=result_data.get('author_name', ''),
+                        author_phone=result_data.get('author_phone'),
+                        content_created_at=result_data.get('content_created_at') or datetime.utcnow(),
+                        views_count=result_data.get('views_count', 0),
+                        has_media=result_data.get('has_media', False),
+                        media_count=result_data.get('media_count', 0),
+                        media_types=result_data.get('media_types', []),
+                        is_forwarded=result_data.get('is_forwarded', False),
+                        is_reply=result_data.get('is_reply', False),
+                        platform_data=result_data.get('platform_data', {}),
+                        raw_data=result_data.get('raw_data', {}),
+                        created_at=datetime.utcnow()
+                    )
+                    
+                    db_session.add(result)
+                    results_saved += 1
+                    
+                except Exception as e:
+                    logger.error(f"❌ Error saving individual result: {e}")
+                    continue
+            
+            await db_session.commit()
+            logger.info(f"💾 Saved {results_saved} parsing results to database")
+            return results_saved
+            
+    except Exception as e:
+        logger.error(f"❌ Error saving parsing results: {e}")
+        return 0
+
+
 async def perform_real_parsing(task_id: str, platform: str, link: str, user_id: int = 1):
     """Perform REAL Telegram parsing using actual integration-service accounts."""
     return await perform_real_parsing_with_progress(task_id, platform, link, user_id, None)
