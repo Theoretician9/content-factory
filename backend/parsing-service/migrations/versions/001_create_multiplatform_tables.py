@@ -1,6 +1,6 @@
 """Create multi-platform parsing tables
 
-Revision ID: 001_multiplatform
+Revision ID: 001_create_multiplatform_tables
 Revises: 
 Create Date: 2024-01-15 12:00:00.000000
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers
-revision = '001_multiplatform'
+revision = '001_create_multiplatform_tables'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -19,55 +19,24 @@ depends_on = None
 def upgrade() -> None:
     """Create multi-platform parsing tables."""
     
-    # Create enums
-    op.execute("CREATE TYPE platform AS ENUM ('telegram', 'instagram', 'whatsapp', 'facebook')")
-    op.execute("CREATE TYPE taskstatus AS ENUM ('pending', 'running', 'completed', 'failed')")
-    op.execute("CREATE TYPE taskpriority AS ENUM ('low', 'normal', 'high')")
-    
-    # Parse Tasks table
-    op.create_table(
-        'parse_tasks',
-        sa.Column('id', sa.Integer(), primary_key=True),
-        sa.Column('created_at', sa.DateTime(), nullable=False),
-        sa.Column('updated_at', sa.DateTime(), nullable=False),
-        sa.Column('task_id', sa.String(36), nullable=False, unique=True),
-        sa.Column('user_id', sa.Integer(), nullable=False),
-        sa.Column('platform', postgresql.ENUM('telegram', 'instagram', 'whatsapp', 'facebook', name='platform'), nullable=False),
-        sa.Column('task_type', sa.String(50), nullable=False),
-        sa.Column('title', sa.String(255), nullable=False),
-        sa.Column('description', sa.Text()),
-        sa.Column('config', sa.JSON(), nullable=False),
-        sa.Column('status', postgresql.ENUM('pending', 'running', 'completed', 'failed', name='taskstatus'), nullable=False),
-        sa.Column('priority', postgresql.ENUM('low', 'normal', 'high', name='taskpriority'), nullable=False),
-        sa.Column('progress', sa.Integer(), default=0),
-        sa.Column('result_count', sa.Integer(), default=0)
+    # Create Platform enum
+    platform_enum = postgresql.ENUM(
+        'telegram', 'instagram', 'whatsapp', 'facebook',
+        name='platform', create_type=True
     )
-    
-    # Parse Results table
-    op.create_table(
-        'parse_results',
-        sa.Column('id', sa.Integer(), primary_key=True),
-        sa.Column('created_at', sa.DateTime(), nullable=False),
-        sa.Column('task_id', sa.Integer(), sa.ForeignKey('parse_tasks.id')),
-        sa.Column('platform', postgresql.ENUM('telegram', 'instagram', 'whatsapp', 'facebook', name='platform'), nullable=False),
-        sa.Column('source_id', sa.String(255), nullable=False),
-        sa.Column('content_text', sa.Text()),
-        sa.Column('author_username', sa.String(255)),
-        sa.Column('content_created_at', sa.DateTime()),
-        sa.Column('raw_data', sa.JSON())
-    )
+    platform_enum.create(op.get_bind())
     
     # Create TaskStatus enum
     task_status_enum = postgresql.ENUM(
         'pending', 'running', 'paused', 'completed', 'failed', 'waiting',
-        name='taskstatus', create_type=False
+        name='taskstatus', create_type=True
     )
     task_status_enum.create(op.get_bind())
     
     # Create TaskPriority enum
     task_priority_enum = postgresql.ENUM(
         'low', 'normal', 'high',
-        name='taskpriority', create_type=False
+        name='taskpriority', create_type=True
     )
     task_priority_enum.create(op.get_bind())
     
@@ -86,23 +55,23 @@ def upgrade() -> None:
         sa.Column('config', sa.JSON(), nullable=False),
         sa.Column('status', task_status_enum, nullable=False),
         sa.Column('priority', task_priority_enum, nullable=False),
-        sa.Column('progress', sa.Integer(), nullable=False),
-        sa.Column('total_items', sa.Integer(), nullable=False),
-        sa.Column('processed_items', sa.Integer(), nullable=False),
+        sa.Column('progress', sa.Integer(), nullable=False, default=0),
+        sa.Column('total_items', sa.Integer(), nullable=False, default=0),
+        sa.Column('processed_items', sa.Integer(), nullable=False, default=0),
         sa.Column('scheduled_at', sa.DateTime(), nullable=True),
         sa.Column('started_at', sa.DateTime(), nullable=True),
         sa.Column('completed_at', sa.DateTime(), nullable=True),
         sa.Column('failed_at', sa.DateTime(), nullable=True),
         sa.Column('error_message', sa.Text(), nullable=True),
-        sa.Column('retry_count', sa.Integer(), nullable=False),
-        sa.Column('max_retries', sa.Integer(), nullable=False),
+        sa.Column('retry_count', sa.Integer(), nullable=False, default=0),
+        sa.Column('max_retries', sa.Integer(), nullable=False, default=3),
         sa.Column('account_ids', sa.JSON(), nullable=True),
         sa.Column('current_account_id', sa.String(length=100), nullable=True),
         sa.Column('resume_data', sa.JSON(), nullable=True),
-        sa.Column('output_format', sa.String(length=20), nullable=False),
-        sa.Column('include_metadata', sa.Boolean(), nullable=False),
+        sa.Column('output_format', sa.String(length=20), nullable=False, default='json'),
+        sa.Column('include_metadata', sa.Boolean(), nullable=False, default=True),
         sa.Column('result_file_path', sa.String(length=500), nullable=True),
-        sa.Column('result_count', sa.Integer(), nullable=False),
+        sa.Column('result_count', sa.Integer(), nullable=False, default=0),
         sa.Column('celery_task_id', sa.String(length=100), nullable=True),
         sa.PrimaryKeyConstraint('id')
     )
@@ -133,16 +102,16 @@ def upgrade() -> None:
         sa.Column('author_id', sa.String(length=255), nullable=True),
         sa.Column('author_username', sa.String(length=255), nullable=True),
         sa.Column('author_name', sa.String(length=255), nullable=True),
-        sa.Column('author_verified', sa.Boolean(), nullable=False),
+        sa.Column('author_verified', sa.Boolean(), nullable=False, default=False),
         sa.Column('content_created_at', sa.DateTime(), nullable=True),
         sa.Column('content_edited_at', sa.DateTime(), nullable=True),
-        sa.Column('views_count', sa.BigInteger(), nullable=False),
-        sa.Column('likes_count', sa.BigInteger(), nullable=False),
-        sa.Column('shares_count', sa.BigInteger(), nullable=False),
-        sa.Column('comments_count', sa.BigInteger(), nullable=False),
-        sa.Column('reactions_count', sa.BigInteger(), nullable=False),
-        sa.Column('has_media', sa.Boolean(), nullable=False),
-        sa.Column('media_count', sa.Integer(), nullable=False),
+        sa.Column('views_count', sa.BigInteger(), nullable=False, default=0),
+        sa.Column('likes_count', sa.BigInteger(), nullable=False, default=0),
+        sa.Column('shares_count', sa.BigInteger(), nullable=False, default=0),
+        sa.Column('comments_count', sa.BigInteger(), nullable=False, default=0),
+        sa.Column('reactions_count', sa.BigInteger(), nullable=False, default=0),
+        sa.Column('has_media', sa.Boolean(), nullable=False, default=False),
+        sa.Column('media_count', sa.Integer(), nullable=False, default=0),
         sa.Column('media_types', sa.JSON(), nullable=True),
         sa.Column('location_name', sa.String(length=255), nullable=True),
         sa.Column('latitude', sa.String(length=50), nullable=True),
@@ -153,11 +122,11 @@ def upgrade() -> None:
         sa.Column('urls', sa.JSON(), nullable=True),
         sa.Column('mentions', sa.JSON(), nullable=True),
         sa.Column('hashtags', sa.JSON(), nullable=True),
-        sa.Column('is_forwarded', sa.Boolean(), nullable=False),
-        sa.Column('is_reply', sa.Boolean(), nullable=False),
-        sa.Column('is_edited', sa.Boolean(), nullable=False),
-        sa.Column('is_deleted', sa.Boolean(), nullable=False),
-        sa.Column('is_pinned', sa.Boolean(), nullable=False),
+        sa.Column('is_forwarded', sa.Boolean(), nullable=False, default=False),
+        sa.Column('is_reply', sa.Boolean(), nullable=False, default=False),
+        sa.Column('is_edited', sa.Boolean(), nullable=False, default=False),
+        sa.Column('is_deleted', sa.Boolean(), nullable=False, default=False),
+        sa.Column('is_pinned', sa.Boolean(), nullable=False, default=False),
         sa.Column('raw_data', sa.JSON(), nullable=True),
         sa.Column('search_vector', sa.Text(), nullable=True),
         sa.ForeignKeyConstraint(['task_id'], ['parse_tasks.id']),
@@ -188,7 +157,7 @@ def upgrade() -> None:
         sa.Column('width', sa.Integer(), nullable=True),
         sa.Column('height', sa.Integer(), nullable=True),
         sa.Column('duration', sa.Integer(), nullable=True),
-        sa.Column('is_downloaded', sa.Boolean(), nullable=False),
+        sa.Column('is_downloaded', sa.Boolean(), nullable=False, default=False),
         sa.Column('download_error', sa.Text(), nullable=True),
         sa.Column('platform_media_data', sa.JSON(), nullable=True),
         sa.ForeignKeyConstraint(['result_id'], ['parse_results.id']),
@@ -210,10 +179,10 @@ def upgrade() -> None:
         sa.Column('title', sa.String(length=500), nullable=True),
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('chat_type', sa.String(length=50), nullable=False),
-        sa.Column('is_verified', sa.Boolean(), nullable=False),
-        sa.Column('is_private', sa.Boolean(), nullable=False),
-        sa.Column('members_count', sa.BigInteger(), nullable=False),
-        sa.Column('messages_count', sa.BigInteger(), nullable=False),
+        sa.Column('is_verified', sa.Boolean(), nullable=False, default=False),
+        sa.Column('is_private', sa.Boolean(), nullable=False, default=False),
+        sa.Column('members_count', sa.BigInteger(), nullable=False, default=0),
+        sa.Column('messages_count', sa.BigInteger(), nullable=False, default=0),
         sa.Column('platform_data', sa.JSON(), nullable=True),
         sa.Column('keywords', sa.JSON(), nullable=True),
         sa.Column('last_parsed', sa.DateTime(), nullable=True),
