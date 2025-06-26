@@ -184,7 +184,7 @@ class AccountManager:
                 # Find account assigned to this task
                 stmt = select(AccountState).where(AccountState.current_task_id == task_id)
                 result = await db_session.execute(stmt)
-                account_state = result.scalar_one_or_none()
+                account_state = result.scalars().first()
                 
                 if account_state:
                     account_state.complete_task()
@@ -210,7 +210,7 @@ class AccountManager:
                 # Find account state
                 stmt = select(AccountState).where(AccountState.account_id == account_id)
                 result = await db_session.execute(stmt)
-                account_state = result.scalar_one_or_none()
+                account_state = result.scalars().first()
                 
                 if account_state:
                     # Free current task if any (it will be reassigned to another account)
