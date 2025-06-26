@@ -1102,6 +1102,110 @@ async def export_task_results(task_id: str, format: str = "json"):
         logger.error(f"❌ {error_detail}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=error_detail)
 
+# New Account Manager endpoints
+@app.get("/accounts/status", tags=["Account Manager"])
+async def get_accounts_status():
+    """Get status of all Telegram accounts managed by Account Manager."""
+    try:
+        from app.core.account_manager import account_manager
+        
+        # Sync accounts first
+        await account_manager.sync_accounts_from_integration_service()
+        
+        # Get comprehensive account status
+        status = await account_manager.get_account_status()
+        
+        return {
+            "success": True,
+            "data": status,
+            "message": "Account status retrieved successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting account status: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "data": {
+                "status_counts": {"free": 0, "busy": 0, "blocked": 0, "error": 0, "total": 0},
+                "accounts": []
+            }
+        }
+
+@app.get("/accounts/queue", tags=["Account Manager"])  
+async def get_task_queue():
+    """Get task queue status and account assignments."""
+    try:
+        from app.core.account_manager import account_manager
+        
+        queue_status = await account_manager.get_task_queue_status()
+        
+        return {
+            "success": True,
+            "data": queue_status,
+            "message": "Task queue status retrieved successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting task queue: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "data": {
+                "pending_tasks": 0,
+                "running_tasks": 0,
+                "busy_accounts": 0
+            }
+        }
+
+@app.get("/parsing/speeds", tags=["Parsing Speed"])
+async def get_available_parsing_speeds():
+    """Get available parsing speeds for frontend selection."""
+    try:
+        from app.core.parsing_speed import get_available_speeds
+        
+        speeds = get_available_speeds()
+        
+        return {
+            "success": True,
+            "data": speeds,
+            "message": "Available parsing speeds retrieved successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting parsing speeds: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "data": {}
+        }
+
+@app.post("/parsing/estimate", tags=["Parsing Speed"])
+async def estimate_parsing_time(request_data: dict):
+    """Estimate parsing time for given user count and speed."""
+    try:
+        from app.core.parsing_speed import parse_speed_from_string, calculate_estimated_time
+        
+        user_count = request_data.get("user_count", 100)
+        speed_str = request_data.get("parsing_speed", "medium")
+        
+        parsing_speed = parse_speed_from_string(speed_str)
+        estimate = calculate_estimated_time(user_count, parsing_speed)
+        
+        return {
+            "success": True,
+            "data": estimate,
+            "message": f"Time estimate calculated for {user_count} users"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error calculating time estimate: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "data": {}
+        }
+
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
