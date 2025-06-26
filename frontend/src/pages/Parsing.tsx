@@ -91,6 +91,9 @@ const Parsing = () => {
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
   const [taskResults, setTaskResults] = useState<ParseResult[]>([]);
   const [resultsLoading, setResultsLoading] = useState(false);
+  const [resultsOffset, setResultsOffset] = useState(0);
+  const [resultsHasMore, setResultsHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   
   // Поиск сообществ
   const [searchForm, setSearchForm] = useState({
@@ -299,17 +302,47 @@ const Parsing = () => {
   const handleViewResults = async (taskId: string) => {
     setSelectedTaskId(taskId);
     setResultsLoading(true);
+    setResultsOffset(0);
+    setTaskResults([]);
     
     try {
-      const res = await parsingApi.results.get(taskId);
+      const res = await parsingApi.results.get(taskId, {
+        limit: 100,
+        offset: 0
+      });
       if (res.ok) {
         const data = await res.json();
-        setTaskResults(data.results || data);
+        setTaskResults(data.results || []);
+        setResultsHasMore(data.pagination?.has_more || false);
+        setResultsOffset(100);
       }
     } catch (err) {
       console.error('Error loading results:', err);
     } finally {
       setResultsLoading(false);
+    }
+  };
+
+  const handleLoadMoreResults = async () => {
+    if (!selectedTaskId || loadingMore) return;
+    
+    setLoadingMore(true);
+    
+    try {
+      const res = await parsingApi.results.get(selectedTaskId, {
+        limit: 100,
+        offset: resultsOffset
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTaskResults(prev => [...prev, ...(data.results || [])]);
+        setResultsHasMore(data.pagination?.has_more || false);
+        setResultsOffset(prev => prev + 100);
+      }
+    } catch (err) {
+      console.error('Error loading more results:', err);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -819,6 +852,36 @@ const Parsing = () => {
                           ))}
                         </tbody>
                       </table>
+                      
+                      {/* Кнопка "Показать еще" */}
+                      {resultsHasMore && (
+                        <div className="flex justify-center mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                          <button
+                            onClick={handleLoadMoreResults}
+                            disabled={loadingMore}
+                            className={`px-4 py-2 text-sm font-medium rounded-md border ${
+                              loadingMore
+                                ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500'
+                            }`}
+                          >
+                            {loadingMore ? (
+                              <div className="flex items-center">
+                                <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin mr-2"></div>
+                                Загружаем...
+                              </div>
+                            ) : (
+                              `Показать еще (${taskResults.length} из ${taskResults.length + 100}+)`
+                            )}
+                          </button>
+                        </div>
+                      )}
+                      
+                      {/* Счетчик результатов */}
+                      <div className="text-center text-sm text-gray-500 dark:text-gray-400 mt-2">
+                        Показано результатов: {taskResults.length}
+                        {!resultsHasMore && taskResults.length > 0 && ' (все результаты загружены)'}
+                      </div>
                     </div>
                   )}
                 </div>
