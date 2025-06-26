@@ -19,6 +19,7 @@ class IntegrationVaultClient:
         # Fallback на токенную аутентификацию
         if not self.role_id or not self.secret_id:
             self.vault_token = vault_token or os.getenv('VAULT_TOKEN')
+            self.token_expires_at = None  # Статические токены не истекают
             logger.info("DEBUG VaultClient.__init__: Using token authentication")
             logger.info(f"DEBUG VaultClient.__init__: vault_addr = {self.vault_addr}")
             logger.info(f"DEBUG VaultClient.__init__: vault_token = {self.vault_token[:20]}..." if self.vault_token else "No token")
@@ -126,10 +127,11 @@ class IntegrationVaultClient:
             
             # Обработка ошибки 403 (токен истек)
             if response.status_code == 403:
-                logger.warning("🔄 Received 403, attempting to refresh token...")
+                logger.warning("🔄 INTEGRATION-SERVICE: Received 403, attempting to refresh token...")
                 self._authenticate_with_approle()
                 headers = {"X-Vault-Token": self.vault_token}
                 response = requests.get(url, headers=headers)
+                logger.info("✅ INTEGRATION-SERVICE: Token refreshed, retrying request")
                 logger.debug(f"DEBUG VaultClient.get_secret: retry response.status_code = {response.status_code}")
             
             response.raise_for_status()
