@@ -155,7 +155,7 @@ class AccountManager:
                 ).order_by(AccountState.last_activity.asc())  # Prefer least recently used
                 
                 result = await db_session.execute(stmt)
-                account_state = result.scalar_one_or_none()
+                account_state = result.scalars().first()
                 
                 if not account_state:
                     logger.warning(f"⚠️ No available accounts for task {task_id}")
