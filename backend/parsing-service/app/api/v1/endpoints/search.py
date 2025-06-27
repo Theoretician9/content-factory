@@ -50,14 +50,25 @@ async def search_communities(
         
         # Get active account for this platform
         integration_client = get_integration_client()
-        accounts = await integration_client.get_active_telegram_accounts()
         
-        if not accounts:
+        # Extract JWT token from request
+        auth_header = request.headers.get("authorization", "")
+        jwt_token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
+        
+        if not jwt_token:
+            raise HTTPException(401, "Missing JWT token")
+        
+        # Get available account for search
+        selected_account = await integration_client.get_available_account(
+            user_id=user_id,
+            platform=Platform.TELEGRAM,
+            jwt_token=jwt_token
+        )
+        
+        if not selected_account:
             raise HTTPException(503, "No active Telegram accounts available for search")
         
-        # Select the first available account
-        selected_account = accounts[0]
-        session_id = selected_account.get('session_id')
+        session_id = selected_account.get('account_id')
         
         logger.info(f"🔑 Using Telegram account {session_id} for search")
         
@@ -66,11 +77,14 @@ async def search_communities(
         vault_client = get_vault_client()
         api_keys = vault_client.get_secret("integration-service")
         
+        # Get session data from account credentials
+        account_credentials = selected_account.get('credentials', {})
+        
         credentials = {
             'session_id': session_id,
             'api_id': api_keys.get('telegram_api_id'),
             'api_hash': api_keys.get('telegram_api_hash'),
-            'session_data': selected_account.get('session_data')
+            'session_data': account_credentials.get('session_data')
         }
         
         # Create and authenticate adapter
