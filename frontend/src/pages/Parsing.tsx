@@ -26,6 +26,17 @@ interface ParseTask {
   estimated_total?: number;
   processed_media?: number;
   parsing_stats?: { average_speed: number };
+  settings?: {
+    parsing_speed?: 'safe' | 'medium' | 'fast';
+    max_depth?: number;
+    [key: string]: any;
+  };
+  speed_config?: {
+    name: string;
+    speed: string;
+    estimated_time?: any;
+    risk_level?: string;
+  };
 }
 
 interface ParseResult {
