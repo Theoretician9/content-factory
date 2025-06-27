@@ -1053,8 +1053,15 @@ class TelegramAdapter(BasePlatformAdapter):
                     about = ''
                 
             elif isinstance(entity, Chat):
-                # Group filtering - skip private groups
-                if hasattr(entity, 'access_hash') and not entity.access_hash:
+                # Group filtering - only open groups
+                # Check if group is restricted/private
+                if getattr(entity, 'restricted', False):
+                    self.logger.debug(f"Skipping restricted group: {title}")
+                    return None
+                
+                # Check if it's a deactivated group
+                if getattr(entity, 'deactivated', False):
+                    self.logger.debug(f"Skipping deactivated group: {title}")
                     return None
                 
                 # Get detailed chat info
@@ -1062,9 +1069,15 @@ class TelegramAdapter(BasePlatformAdapter):
                     full_chat = await self.client(GetFullChatRequest(entity.id))
                     participants_count = getattr(full_chat.full_chat, 'participants_count', 0)
                     about = getattr(full_chat.full_chat, 'about', '')
+                    self.logger.debug(f"✅ Found open group: {title} ({participants_count} members)")
                 except:
                     participants_count = getattr(entity, 'participants_count', 0)
                     about = ''
+                    self.logger.debug(f"✅ Found group: {title} (limited info)")
+            else:
+                # Unknown entity type
+                self.logger.debug(f"Skipping unknown entity type: {type(entity).__name__}")
+                return None
             
             # Generate community link
             if username:
@@ -1090,11 +1103,7 @@ class TelegramAdapter(BasePlatformAdapter):
                 }
             }
             
-            # Additional filtering - only include communities with decent member count
-            if participants_count < 10:  # Skip very small communities
-                self.logger.debug(f"Skipping {title} - too few members ({participants_count})")
-                return None
-            
+            # No minimum member count restriction - all open communities are valid
             self.logger.debug(f"✅ Found community: {title} (@{username}) - {participants_count} members")
             return community_data
             
