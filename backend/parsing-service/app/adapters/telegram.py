@@ -771,26 +771,54 @@ class TelegramAdapter(BasePlatformAdapter):
         
         try:
             from telethon.tl.functions.contacts import SearchRequest
+            from telethon.tl.functions.messages import SearchGlobalRequest
             from telethon.tl.types import Channel, Chat
             
             results = []
             search_results = []
             
-            # Try different search approaches to get more results
-            search_methods = [
-                # Method 1: Global search for channels
-                self._search_global_channels(query),
-                # Method 2: Search in dialogs
-                self._search_dialogs(query),
-            ]
+            # Generate search query variations for better results
+            search_queries = [query]
             
-            for search_method in search_methods:
-                try:
-                    method_results = await search_method
-                    search_results.extend(method_results)
-                except Exception as e:
-                    self.logger.warning(f"Search method failed: {e}")
-                    continue
+            # Add transliteration variations if query contains cyrillic
+            if any(ord(c) > 127 for c in query):
+                # Add English transliteration attempts
+                transliterations = self._generate_transliterations(query)
+                search_queries.extend(transliterations)
+            
+            # Add common suffixes for sports/topics
+            base_suffixes = ['_channel', '_official', '_news', '_chat']
+            for suffix in base_suffixes:
+                search_queries.append(f"{query}{suffix}")
+            
+            self.logger.info(f"🔍 Searching with {len(search_queries)} query variations: {search_queries[:3]}...")
+            
+            # Try different search approaches to get more results
+            for search_query in search_queries[:5]:  # Limit to avoid too many API calls
+                search_methods = [
+                    # Method 1: Global search for channels
+                    self._search_global_channels(search_query),
+                    # Method 2: Search in dialogs  
+                    self._search_dialogs(search_query),
+                    # Method 3: Global search (newer API)
+                    self._search_global_new(search_query),
+                ]
+                
+                for search_method in search_methods:
+                    try:
+                        method_results = await search_method
+                        search_results.extend(method_results)
+                        
+                        # Break if we have enough results to avoid rate limiting
+                        if len(search_results) > 100:
+                            break
+                    except Exception as e:
+                        self.logger.debug(f"Search method failed for '{search_query}': {e}")
+                        continue
+                
+                # Break if we have enough results
+                if len(search_results) > 100:
+                    break
             
             # Remove duplicates by username/id
             unique_results = {}
