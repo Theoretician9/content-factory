@@ -1053,6 +1053,7 @@ class TelegramService:
     def _cleanup_old_qr_sessions(self) -> None:
         """Очистка старых QR sessions для предотвращения утечек памяти"""
         try:
+            # ✅ ИСПРАВЛЕНИЕ: global declaration в начале функции
             global _GLOBAL_QR_SESSIONS
             current_time = int(time.time())
             expired_keys = []
@@ -1079,8 +1080,10 @@ class TelegramService:
     async def _cleanup_qr_session(self, user_id: int) -> None:
         """Очистка конкретной QR сессии пользователя"""
         try:
-            qr_key = f"qr_{user_id}"
+            # ✅ ИСПРАВЛЕНИЕ: global declaration в начале функции
             global _GLOBAL_QR_SESSIONS
+            
+            qr_key = f"qr_{user_id}"
             
             # Отключаем клиент если есть
             if qr_key in _GLOBAL_QR_SESSIONS:
