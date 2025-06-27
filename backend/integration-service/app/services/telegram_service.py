@@ -907,6 +907,7 @@ class TelegramService:
                     )
                 else:
                     logger.info(f"⏳ QR authorization pending for user {user_id}")
+                    logger.info(f"🔍 DEBUG: Returning qr_waiting status because client.is_user_authorized() = False")
                     return TelegramConnectResponse(
                         status="qr_waiting",
                         message="Ожидание авторизации по QR коду. Отсканируйте QR код в Telegram"
