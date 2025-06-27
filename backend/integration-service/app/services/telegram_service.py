@@ -726,11 +726,97 @@ class TelegramService:
     async def check_qr_authorization(
         self,
         session: AsyncSession,
-        user_id: int
+        user_id: int,
+        password: Optional[str] = None
     ) -> TelegramConnectResponse:
-        """Проверка авторизации по QR коду с правильным использованием сохраненного клиента"""
+        """Проверка авторизации по QR коду с полной поддержкой 2FA"""
         try:
-            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем сохраненный клиент с qr_login
+            # ✅ ОБРАБОТКА ПАРОЛЯ 2FA ДЛЯ QR ПОДКЛЮЧЕНИЯ
+            if password:
+                # Если передан пароль, обрабатываем 2FA для QR
+                qr_key = f"qr_{user_id}"
+                global _GLOBAL_QR_SESSIONS
+                
+                if qr_key not in _GLOBAL_QR_SESSIONS:
+                    return TelegramConnectResponse(
+                        status="qr_expired",
+                        message="QR сессия истекла. Сгенерируйте новый QR код"
+                    )
+                
+                qr_session = _GLOBAL_QR_SESSIONS[qr_key]
+                
+                # Проверяем что QR сессия требует 2FA
+                if not qr_session.get('requires_2fa', False):
+                    return TelegramConnectResponse(
+                        status="error",
+                        message="2FA не требуется для этого QR подключения"
+                    )
+                
+                try:
+                    client = qr_session['client']
+                    logger.info(f"🔐 QR 2FA: Используем сохраненный клиент для ввода пароля user_id={user_id}")
+                    
+                    # Проверяем подключение клиента
+                    if not client.is_connected():
+                        logger.info(f"🔌 QR 2FA client disconnected, reconnecting...")
+                        await client.connect()
+                    
+                    # Вводим пароль 2FA
+                    await client.sign_in(password=password)
+                    
+                    # Получаем информацию о пользователе
+                    me = await client.get_me()
+                    phone = getattr(me, 'phone', 'unknown')
+                    
+                    session_string = client.session.save()
+                    encrypted_session = await self._encrypt_session_data(session_string)
+                    
+                    session_data = {
+                        "user_id": user_id,
+                        "phone": phone,
+                        "session_data": {"encrypted_session": encrypted_session},
+                        "session_metadata": {"method": "qr_code_2fa", "telegram_id": me.id}
+                    }
+                    
+                    telegram_session = await self.session_service.create(session, session_data)
+                    
+                    await self.log_service.log_action(
+                        session, user_id, "telegram", "qr_connect_2fa_success", "success",
+                        details={"session_id": str(telegram_session.id), "telegram_id": me.id}
+                    )
+                    
+                    # Очищаем QR сессию
+                    await self._cleanup_qr_session(user_id)
+                    
+                    logger.info(f"✅ QR 2FA password authentication successful for user {user_id}")
+                    
+                    return TelegramConnectResponse(
+                        status="success",
+                        session_id=telegram_session.id,
+                        message="Аккаунт успешно подключен через QR код с 2FA"
+                    )
+                    
+                except PasswordHashInvalidError:
+                    # Неверный пароль - НЕ отключаем клиент, даем возможность повторить
+                    logger.warning(f"❌ Invalid QR 2FA password for user {user_id}")
+                    
+                    return TelegramConnectResponse(
+                        status="2fa_required",
+                        message="Неверный пароль двухфакторной аутентификации. Попробуйте еще раз."
+                    )
+                except Exception as e:
+                    error_msg = str(e)
+                    logger.error(f"❌ Error during QR 2FA sign_in: {e}")
+                    
+                    # При критической ошибке - очищаем QR сессию
+                    await self._cleanup_qr_session(user_id)
+                    
+                    return TelegramConnectResponse(
+                        status="error",
+                        message=f"Ошибка QR 2FA входа: {error_msg}"
+                    )
+            
+            # ✅ ОБЫЧНАЯ ПРОВЕРКА QR АВТОРИЗАЦИИ (без пароля)
             qr_key = f"qr_{user_id}"
             global _GLOBAL_QR_SESSIONS
             
@@ -761,45 +847,81 @@ class TelegramService:
             except Exception as e:
                 logger.info(f"🔍 QR recreate not needed or failed: {e}")
             
-            # Проверяем авторизацию через правильный клиент
-            if await client.is_user_authorized():
-                logger.info(f"✅ QR authorization successful for user {user_id}")
+            # ✅ НОВАЯ ЛОГИКА: Проверяем авторизацию с обработкой 2FA
+            try:
+                # Проверяем авторизацию через правильный клиент
+                if await client.is_user_authorized():
+                    logger.info(f"✅ QR authorization successful for user {user_id}")
+                    
+                    # Пользователь авторизован через QR БЕЗ 2FA
+                    session_string = client.session.save()
+                    encrypted_session = await self._encrypt_session_data(session_string)
+                    
+                    # Получаем информацию о пользователе
+                    me = await client.get_me()
+                    phone = getattr(me, 'phone', 'unknown')
+                    
+                    session_data = {
+                        "user_id": user_id,
+                        "phone": phone,
+                        "session_data": {"encrypted_session": encrypted_session},
+                        "session_metadata": {"method": "qr_code", "telegram_id": me.id}
+                    }
+                    
+                    telegram_session = await self.session_service.create(session, session_data)
+                    
+                    await self.log_service.log_action(
+                        session, user_id, "telegram", "qr_connect_success", "success",
+                        details={"session_id": str(telegram_session.id), "telegram_id": me.id}
+                    )
+                    
+                    # Очищаем QR сессию и токен из Redis
+                    await self._cleanup_qr_session(user_id)
+                    
+                    return TelegramConnectResponse(
+                        status="success",
+                        session_id=telegram_session.id,
+                        message="Аккаунт успешно подключен через QR код"
+                    )
+                else:
+                    logger.info(f"⏳ QR authorization pending for user {user_id}")
+                    return TelegramConnectResponse(
+                        status="qr_waiting",
+                        message="Ожидание авторизации по QR коду. Отсканируйте QR код в Telegram"
+                    )
+                    
+            except SessionPasswordNeededError:
+                # ✅ КРИТИЧЕСКИ ВАЖНО: НЕ отключаем клиент! Он нужен для ввода пароля 2FA
+                logger.info(f"🔐 QR SessionPasswordNeededError: 2FA required for user {user_id}")
                 
-                # Пользователь авторизован через QR
-                session_string = client.session.save()
-                encrypted_session = await self._encrypt_session_data(session_string)
+                # Сохраняем информацию о необходимости 2FA в QR сессии
+                _GLOBAL_QR_SESSIONS[qr_key]['requires_2fa'] = True
                 
-                # Получаем информацию о пользователе
-                me = await client.get_me()
-                phone = getattr(me, 'phone', 'unknown')
-                
-                session_data = {
-                    "user_id": user_id,
-                    "phone": phone,
-                    "session_data": {"encrypted_session": encrypted_session},
-                    "session_metadata": {"method": "qr_code", "telegram_id": me.id}
-                }
-                
-                telegram_session = await self.session_service.create(session, session_data)
-                
-                await self.log_service.log_action(
-                    session, user_id, "telegram", "qr_connect_success", "success",
-                    details={"session_id": str(telegram_session.id), "telegram_id": me.id}
+                return TelegramConnectResponse(
+                    status="2fa_required",
+                    message="Требуется пароль двухфакторной аутентификации. Введите его в поле 'Пароль 2FA'."
                 )
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"❌ Error checking QR authorization: {e}")
                 
-                # Очищаем QR сессию и токен из Redis
+                # ✅ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: RpcError на SESSION_PASSWORD_NEEDED для QR
+                if "SESSION_PASSWORD_NEEDED" in error_msg or "session password needed" in error_msg.lower():
+                    logger.info(f"🔐 QR RpcError SESSION_PASSWORD_NEEDED: 2FA required for user {user_id}")
+                    
+                    # Сохраняем информацию о необходимости 2FA в QR сессии
+                    _GLOBAL_QR_SESSIONS[qr_key]['requires_2fa'] = True
+                    
+                    return TelegramConnectResponse(
+                        status="2fa_required",
+                        message="Требуется пароль двухфакторной аутентификации. Введите его в поле 'Пароль 2FA'."
+                    )
+                
+                # Для других ошибок - очищаем QR сессию
                 await self._cleanup_qr_session(user_id)
-                
                 return TelegramConnectResponse(
-                    status="success",
-                    session_id=telegram_session.id,
-                    message="Аккаунт успешно подключен через QR код"
-                )
-            else:
-                logger.info(f"⏳ QR authorization pending for user {user_id}")
-                return TelegramConnectResponse(
-                    status="qr_waiting",
-                    message="Ожидание авторизации по QR коду. Отсканируйте QR код в Telegram"
+                    status="error",
+                    message=f"Ошибка проверки QR авторизации: {str(e)}"
                 )
                 
         except Exception as e:
@@ -809,7 +931,7 @@ class TelegramService:
             return TelegramConnectResponse(
                 status="error",
                 message=f"Ошибка проверки QR авторизации: {str(e)}"
-            ) 
+            )
 
     async def _save_auth_session(self, auth_key: str, client: TelegramClient, phone_code_hash: str) -> None:
         """Сохранение состояния авторизации в Redis И в глобальной памяти"""
