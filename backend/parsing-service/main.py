@@ -400,7 +400,7 @@ async def process_pending_tasks():
                 task["updated_at"] = datetime.utcnow().isoformat()
                 task["assigned_account_id"] = assigned_account_id  # Track account assignment
                 
-                logger.info(f"🚀 AccountManager: Запущена задача {task['id']} на аккаунте {assigned_account_id}")
+                logger.info(f"🚀 AccountManager: Запущена задача {task['id']} (приоритет: {task.get('priority', 'normal').upper()}) на аккаунте {assigned_account_id}")
                 
                 # Start parsing in background
                 asyncio.create_task(execute_real_parsing_with_account_manager(task, assigned_account_id))
@@ -763,7 +763,7 @@ async def create_task(task_data: dict):
             created_tasks.append(new_task)
             created_task_ids.append(task_id)
             
-            logger.info(f"🆕 Создана задача парсинга: {task_id} (БД ID: {db_task.id}) для {link} со скоростью {speed_config.name}")
+            logger.info(f"🆕 Создана задача парсинга: {task_id} (БД ID: {db_task.id}) для {link} со скоростью {speed_config.name}, приоритет: {priority_str.upper()}")
         
         await db_session.commit()
     
