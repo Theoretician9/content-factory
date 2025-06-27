@@ -673,6 +673,9 @@ class TelegramService:
     async def generate_qr_code(self, user_id: int) -> str:
         """Генерация QR кода для входа с правильным сохранением клиента"""
         try:
+            # ✅ ИСПРАВЛЕНИЕ: global declaration в начале функции
+            global _GLOBAL_QR_SESSIONS
+            
             # Очищаем старые QR сессии
             self._cleanup_old_qr_sessions()
             
@@ -684,7 +687,6 @@ class TelegramService:
             
             # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сохраняем весь клиент с qr_login объектом
             qr_key = f"qr_{user_id}"
-            global _GLOBAL_QR_SESSIONS
             _GLOBAL_QR_SESSIONS[qr_key] = {
                 'client': client,
                 'qr_login': qr_login,
