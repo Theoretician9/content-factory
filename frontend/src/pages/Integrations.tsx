@@ -242,15 +242,98 @@ const Integrations = () => {
     }
   };
 
-  const handleGenerateQR = async () => {
+  // ✅ ФУНКЦИЯ ПРОВЕРКИ QR АВТОРИЗАЦИИ
+  const checkQRAuthorization = async () => {
     try {
+      const res = await integrationApi.telegram.checkQRAuthorization();
+      if (res.ok) {
+        const data = await res.json();
+        console.log('🔍 QR check response:', data);
+        
+        if (data.status === 'success') {
+          setQrStatus('success');
+          setQrPolling(false);
+          setConnectForm(prev => ({ ...prev, step: 'success' }));
+          loadData(); // Перезагружаем список аккаунтов
+          return true;
+        } else if (data.status === 'qr_expired') {
+          setQrStatus('expired');
+          setQrPolling(false);
+          setQrError('QR код истек. Сгенерируйте новый');
+          return false;
+        } else if (data.status === 'qr_waiting') {
+          // Продолжаем ожидание, без изменений
+          return false;
+        } else if (data.status === 'error') {
+          setQrStatus('error');
+          setQrPolling(false);
+          setQrError(data.message || 'Ошибка QR авторизации');
+          return false;
+        }
+      } else {
+        console.error('QR check API error:', res.status);
+        return false;
+      }
+    } catch (err) {
+      console.error('Error checking QR authorization:', err);
+      return false;
+    }
+    return false;
+  };
+
+  // ✅ ФУНКЦИЯ POLLING QR СТАТУСА
+  const startQRPolling = () => {
+    if (qrPolling) return; // Предотвращаем множественный polling
+    
+    setQrPolling(true);
+    setQrStatus('waiting');
+    
+    const pollInterval = setInterval(async () => {
+      console.log('🔄 Polling QR status...');
+      const success = await checkQRAuthorization();
+      
+      if (success || qrStatus === 'expired' || qrStatus === 'error') {
+        clearInterval(pollInterval);
+        setQrPolling(false);
+      }
+    }, 3000); // Проверяем каждые 3 секунды
+    
+    // Автоматическая остановка через 5 минут (QR код живет 5 минут)
+    setTimeout(() => {
+      if (qrPolling) {
+        clearInterval(pollInterval);
+        setQrPolling(false);
+        if (qrStatus === 'waiting') {
+          setQrStatus('expired');
+          setQrError('QR код истек. Сгенерируйте новый');
+        }
+      }
+    }, 300000); // 5 минут
+  };
+
+  const handleGenerateQR = async () => {
+    setQrStatus('generating');
+    setQrError('');
+    setConnectError('');
+    
+    try {
+      console.log('🔑 Generating QR code...');
       const res = await integrationApi.telegram.generateQR();
       if (res.ok) {
         const data = await res.json();
         setQrCode(data.qr_code);
+        console.log('✅ QR code generated, starting polling...');
+        
+        // ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Запускаем polling сразу после генерации
+        startQRPolling();
+      } else {
+        setQrStatus('error');
+        setQrError('Ошибка генерации QR кода');
       }
     } catch (err) {
       console.error('Error generating QR:', err);
+      setQrStatus('error');
+      setQrError('Ошибка сети при генерации QR кода');
     }
   };
 
