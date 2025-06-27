@@ -275,8 +275,29 @@ class TelegramService:
                         message="Сначала запросите SMS код"
                     )
                 
+                # ✅ КРИТИЧЕСКИ ВАЖНО: Проверяем требуется ли 2FA
+                if not auth_data.get('requires_2fa', False):
+                    return TelegramConnectResponse(
+                        status="error", 
+                        message="2FA не требуется для этого аккаунта. Введите сначала SMS код."
+                    )
+                
                 try:
-                    client = await self._create_client_from_session(auth_data['session_string'])
+                    # ✅ ИСПОЛЬЗУЕМ СОХРАНЕННЫЙ КЛИЕНТ вместо создания нового!
+                    if 'client' in auth_data:
+                        client = auth_data['client']
+                        logger.info(f"🔐 Using saved client for 2FA password input")
+                        
+                        # Проверяем подключение клиента
+                        if not client.is_connected():
+                            logger.info(f"🔌 2FA client disconnected, reconnecting...")
+                            await client.connect()
+                    else:
+                        # Fallback если клиент не сохранился (создаем из session)
+                        client = await self._create_client_from_session(auth_data['session_string'])
+                        logger.info(f"🔄 Fallback: created client from session for 2FA")
+                    
+                    # Вводим пароль 2FA
                     await client.sign_in(password=auth_request.password)
                     
                     session_string = client.session.save()
@@ -303,14 +324,26 @@ class TelegramService:
                     return TelegramConnectResponse(
                         status="success",
                         session_id=telegram_session.id,
-                        message="Аккаунт успешно подключен"
+                        message="Аккаунт успешно подключен с 2FA"
                     )
                     
                 except PasswordHashInvalidError:
-                    await client.disconnect()
+                    # НЕ отключаем клиент при неверном пароле - даем возможность повторить
                     return TelegramConnectResponse(
                         status="2fa_required",
-                        message="Неверный пароль двухфакторной аутентификации"
+                        message="Неверный пароль двухфакторной аутентификации. Попробуйте еще раз."
+                    )
+                except Exception as e:
+                    error_msg = str(e)
+                    logger.error(f"❌ Error during 2FA sign_in: {e}")
+                    
+                    # При других ошибках - отключаем и очищаем
+                    await client.disconnect()
+                    await self._delete_auth_session(auth_key)
+                    
+                    return TelegramConnectResponse(
+                        status="error",
+                        message=f"Ошибка 2FA входа: {error_msg}"
                     )
             
             # Проверяем есть ли уже активная auth session (защита от спама)
