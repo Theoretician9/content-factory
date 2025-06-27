@@ -113,10 +113,10 @@ async def get_telegram_accounts(
         # Изоляция пользователей
         user_id = await get_user_id_from_request(request)
         
-        # ПРИНУДИТЕЛЬНОЕ ЛОГИРОВАНИЕ С ERROR УРОВНЕМ
-        logger.error(f"🔍 GET /accounts - User ID: {user_id}, active_only: {active_only}")
+        # Информационное логирование
+        logger.info(f"🔍 GET /accounts - User ID: {user_id}, active_only: {active_only}")
         sessions = await telegram_service.get_user_sessions(session, user_id, active_only)
-        logger.error(f"📋 Found {len(sessions)} sessions for user {user_id}")
+        logger.info(f"📋 Found {len(sessions)} sessions for user {user_id}")
         
         # КРИТИЧЕСКАЯ ПРОВЕРКА БЕЗОПАСНОСТИ: фильтруем сессии еще раз
         filtered_sessions = [s for s in sessions if s.user_id == user_id]
