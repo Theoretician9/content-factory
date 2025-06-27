@@ -956,12 +956,22 @@ async def resume_task(task_id: str, request: Request):
 @app.get("/results/{task_id}", tags=["Results API"])
 async def get_task_results(
     task_id: str,
+    request: Request,
     format: Optional[str] = "json",
     platform_filter: Optional[str] = None,
     limit: int = 1000,
     offset: int = 0
 ):
     """Get parsing results for specific task (frontend compatible endpoint)."""
+    
+    # ✅ JWT АВТОРИЗАЦИЯ: Получаем user_id из JWT токена
+    try:
+        user_id = await get_user_id_from_request(request)
+        logger.info(f"🔐 JWT Authorization successful for get_task_results: user_id={user_id}")
+    except Exception as auth_error:
+        logger.error(f"❌ JWT Authorization failed for get_task_results: {auth_error}")
+        raise HTTPException(status_code=401, detail=f"Authorization failed: {str(auth_error)}")
+    
     try:
         from app.database import AsyncSessionLocal
         from app.models.parse_result import ParseResult
@@ -986,6 +996,21 @@ async def get_task_results(
                         "has_more": False
                     },
                     "message": f"Task {task_id} not found in database"
+                }
+            
+            # ✅ USER ISOLATION: Проверяем что задача принадлежит пользователю
+            if db_task.user_id != user_id:
+                return {
+                    "task_id": task_id,
+                    "results": [],
+                    "total": 0,
+                    "format": format,
+                    "pagination": {
+                        "offset": offset,
+                        "limit": limit,
+                        "has_more": False
+                    },
+                    "message": f"Task {task_id} not found"  # 404 вместо 403 для безопасности
                 }
             
             # Use the database primary key for results lookup
