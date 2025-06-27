@@ -57,11 +57,15 @@
 - [x] Настроить пути в Vault: `kv/integrations/{platform}/sessions/{session_id}`
 - [x] **КРИТИЧЕСКИ ВАЖНО**: Исправлен circular import config.py ↔ vault.py через lazy import
 
-### 2.3. Интеграция с API Gateway (универсальная)
-- [x] Настроить JWT аутентификацию для parsing endpoints
-- [x] Реализовать middleware для извлечения user_id из JWT токена
-- [x] Создать декораторы для проверки прав доступа
-- [x] Добавить валидацию параметра platform в запросах
+### 2.3. Интеграция с API Gateway (универсальная) ✅ **ПОЛНОСТЬЮ РЕАЛИЗОВАНО**
+- [x] Настроить JWT аутентификацию для parsing endpoints ✅
+- [x] Реализовать middleware для извлечения user_id из JWT токена ✅
+- [x] Создать декораторы для проверки прав доступа ✅
+- [x] Добавить валидацию параметра platform в запросах ✅
+- [x] **JWT АВТОРИЗАЦИЯ**: Все endpoints защищены с полной user isolation ✅
+- [x] **email → user_id conversion**: Через API Gateway `/internal/users/by-email` ✅
+- [x] **Database-level isolation**: Фильтрация данных по user_id из JWT ✅
+- [x] **Security audit logging**: Все авторизационные события логируются ✅
 
 ## ЭТАП 3: Реализация мультиплатформенных API endpoints
 
@@ -406,11 +410,12 @@
 3. **SyntaxError null bytes** - пересоздан tasks.py без артефактов ✅
 4. **Task processing блокировка** - AccountManager корректно назначает аккаунты ✅
 
-#### **✅ РЕШЕНЫ ФИНАЛЬНЫЕ UX И BACKEND ПРОБЛЕМЫ (2025-01-24)**:
+#### **✅ РЕШЕНЫ ФИНАЛЬНЫЕ UX И BACKEND ПРОБЛЕМЫ (2025-01-30)**:
 1. **Результаты парсинга** - исправлена bytes сериализация, данные сохраняются и отображаются ✅
 2. **Скорость парсинга** - frontend корректно показывает выбранную скорость ✅
 3. **Приоритизация задач** - HIGH priority обрабатывается первым ✅
 4. **PostgreSQL интеграция** - устранены ошибки сохранения JSON с bytes ✅
+5. **JWT авторизация** - полная интеграция с user isolation, все endpoints защищены ✅
 
 #### **⚠️ ОСТАЮТСЯ FRONTEND UX УЛУЧШЕНИЯ (не блокируют функциональность)**:
 1. **Excel export кнопка** - прямая загрузка без просмотра (UX convenience)
