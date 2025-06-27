@@ -48,44 +48,51 @@ async def search_communities(
         if platform != "telegram":
             raise HTTPException(501, f"Search not implemented for platform: {platform}")
         
-        # Get active account for this platform
+        # Get active account for this platform (using same method as parsing)
         integration_client = get_integration_client()
         
-        # Extract JWT token from request
-        auth_header = request.headers.get("authorization", "")
-        jwt_token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
-        
-        if not jwt_token:
-            raise HTTPException(401, "Missing JWT token")
-        
-        # Get available account for search
-        selected_account = await integration_client.get_available_account(
-            user_id=user_id,
-            platform=Platform.TELEGRAM,
-            jwt_token=jwt_token
-        )
-        
-        if not selected_account:
-            raise HTTPException(503, "No active Telegram accounts available for search")
-        
-        session_id = selected_account.get('account_id')
-        
-        logger.info(f"🔑 Using Telegram account {session_id} for search")
-        
-        # Get credentials from integration service
-        from ....core.vault import get_vault_client
-        vault_client = get_vault_client()
-        api_keys = vault_client.get_secret("integration-service")
-        
-        # Get session data from account credentials
-        account_credentials = selected_account.get('credentials', {})
-        
-        credentials = {
-            'session_id': session_id,
-            'api_id': api_keys.get('telegram_api_id'),
-            'api_hash': api_keys.get('telegram_api_hash'),
-            'session_data': account_credentials.get('session_data')
-        }
+        # Use the same method that works in parsing - get all active accounts
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{integration_client.base_url}/api/v1/telegram/internal/active-accounts"
+                )
+                
+                if response.status_code == 200:
+                    all_accounts = response.json()
+                    logger.info(f"✅ Retrieved {len(all_accounts)} accounts from internal endpoint")
+                    
+                    # Filter accounts for this user
+                    user_accounts = [acc for acc in all_accounts if acc.get('user_id') == user_id]
+                    
+                    if not user_accounts:
+                        raise HTTPException(503, f"No active Telegram accounts available for user {user_id}")
+                    
+                    # Select the first available account
+                    selected_account = user_accounts[0]
+                    session_id = selected_account.get('session_id') or selected_account.get('id')
+                    
+                    logger.info(f"🔑 Using Telegram account {session_id} for search")
+                    
+                    # Get credentials (same structure as parsing)
+                    credentials = {
+                        'session_id': session_id,
+                        'api_id': selected_account.get('api_id'),
+                        'api_hash': selected_account.get('api_hash'),
+                        'session_data': selected_account.get('session_data')
+                    }
+                    
+                    if not credentials['session_data']:
+                        raise HTTPException(503, f"No session data available for account {session_id}")
+                        
+                else:
+                    logger.error(f"❌ Failed to get accounts from internal endpoint: {response.status_code}")
+                    raise HTTPException(503, "Integration service unavailable")
+                    
+        except httpx.RequestError as e:
+            logger.error(f"❌ Network error getting accounts: {e}")
+            raise HTTPException(503, "Integration service unavailable")
         
         # Create and authenticate adapter
         adapter = TelegramAdapter()
