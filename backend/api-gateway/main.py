@@ -657,7 +657,7 @@ async def proxy_parsing_service(request: Request, path: str):
         target_url += f"?{query_params}"
     
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:  # Увеличено до 3 минут для поиска сообществ
             # Получение body для POST/PUT запросов
             body = None
             if request.method in ["POST", "PUT", "PATCH"]:
