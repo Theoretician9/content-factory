@@ -7,12 +7,13 @@ backward compatibility with existing parsing functionality.
 
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 # New multi-platform imports
 from app.core.config import settings, Platform as PlatformEnum, TaskStatus, TaskPriority
+from app.core.auth import get_user_id_from_request
 from app.models.parse_task import ParseTask
 from app.database import AsyncSessionLocal
 # Temporarily disable metrics to fix CollectorRegistry duplication error
