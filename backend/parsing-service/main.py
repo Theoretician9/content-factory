@@ -868,20 +868,34 @@ async def get_task(task_id: str, request: Request):
     return task
 
 @app.delete("/tasks/{task_id}", tags=["Tasks API"])
-async def delete_task(task_id: str):
+async def delete_task(task_id: str, request: Request):
     """Delete parsing task."""
     global created_tasks
+    
+    # ✅ JWT АВТОРИЗАЦИЯ: Получаем user_id из JWT токена
+    try:
+        user_id = await get_user_id_from_request(request)
+        logger.info(f"🔐 JWT Authorization successful for delete_task: user_id={user_id}")
+    except Exception as auth_error:
+        logger.error(f"❌ JWT Authorization failed for delete_task: {auth_error}")
+        raise HTTPException(status_code=401, detail=f"Authorization failed: {str(auth_error)}")
+    
     task_index = next((i for i, t in enumerate(created_tasks) if t["id"] == task_id), None)
     if task_index is None:
         raise HTTPException(status_code=404, detail="Task not found")
     
+    # ✅ USER ISOLATION: Проверяем что задача принадлежит пользователю
+    task = created_tasks[task_index]
+    if task.get("user_id") != user_id:
+        raise HTTPException(status_code=404, detail="Task not found")  # 404 вместо 403 для безопасности
+    
     deleted_task = created_tasks.pop(task_index)
-    logger.info(f"🗑️ Удалена задача парсинга: {task_id}")
+    logger.info(f"🗑️ Удалена задача парсинга: {task_id} (user_id: {user_id})")
     
     return {"message": "Task deleted successfully", "task_id": task_id}
 
 @app.post("/tasks/{task_id}/pause", tags=["Tasks API"])
-async def pause_task(task_id: str):
+async def pause_task(task_id: str, request: Request):
     """Pause parsing task."""
     task = next((t for t in created_tasks if t["id"] == task_id), None)
     if not task:
