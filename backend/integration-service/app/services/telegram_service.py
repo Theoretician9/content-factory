@@ -854,17 +854,23 @@ class TelegramService:
                 # ✅ НОВАЯ ПРОВЕРКА: Если ошибка содержит информацию о 2FA - обрабатываем её
                 if "Two-steps verification is enabled and a password is required" in error_msg:
                     logger.info(f"🔐 QR recreate failed due to 2FA requirement for user {user_id}")
+                    logger.info(f"🔐 DEBUG: About to return 2fa_required status for user {user_id}")
                     
                     # Сохраняем информацию о необходимости 2FA в QR сессии
                     _GLOBAL_QR_SESSIONS[qr_key]['requires_2fa'] = True
                     
-                    return TelegramConnectResponse(
+                    response = TelegramConnectResponse(
                         status="2fa_required",
                         message="QR код отсканирован! Теперь введите пароль двухфакторной аутентификации."
                     )
+                    logger.info(f"🔐 DEBUG: Returning response: {response.status} - {response.message}")
+                    return response
+            
+            logger.info(f"🔍 DEBUG: Continuing after QR recreate check for user {user_id}")
             
             # ✅ НОВАЯ ЛОГИКА: Проверяем авторизацию с обработкой 2FA
             try:
+                logger.info(f"🔍 DEBUG: Checking client authorization for user {user_id}")
                 # Проверяем авторизацию через правильный клиент
                 if await client.is_user_authorized():
                     logger.info(f"✅ QR authorization successful for user {user_id}")
