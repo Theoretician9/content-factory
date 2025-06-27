@@ -1191,8 +1191,69 @@ class TelegramAdapter(BasePlatformAdapter):
             self.logger.debug(f"Transliteration failed: {e}")
             return []
     
+    async def _check_channel_has_comments(self, entity) -> bool:
+        """
+        Проверить, есть ли реальные комментарии в канале.
+        Проверяет последние 10-15 сообщений на наличие хотя бы одного комментария.
+        
+        Это критически важно - нет смысла показывать каналы без комментариев,
+        поскольку парсинг работает именно через комментарии к сообщениям.
+        """
+        try:
+            from telethon.tl.types import Channel, Message
+            
+            if not isinstance(entity, Channel):
+                return True  # Группы (Chat) всегда ОК
+            
+            # Для broadcast каналов проверяем наличие реальных комментариев
+            is_broadcast = getattr(entity, 'broadcast', False)
+            is_megagroup = getattr(entity, 'megagroup', False)
+            
+            if is_megagroup:
+                return True  # Мегагруппы всегда ОК - в них можно писать сообщения
+            
+            if not is_broadcast:
+                return True  # Не broadcast канал - ОК
+            
+            # Для broadcast каналов проверяем реальные комментарии
+            title = getattr(entity, 'title', 'Unknown')
+            self.logger.debug(f"🔍 Проверяем комментарии в broadcast канале: {title}")
+            
+            comments_found = 0
+            messages_checked = 0
+            max_messages_to_check = 15  # Проверяем последние 15 сообщений
+            
+            # Проверяем последние сообщения канала
+            async for message in self.client.iter_messages(entity, limit=max_messages_to_check):
+                if not isinstance(message, Message):
+                    continue
+                
+                messages_checked += 1
+                
+                # Проверяем есть ли комментарии к сообщению
+                if hasattr(message, 'replies') and message.replies and message.replies.replies > 0:
+                    comments_found += 1
+                    self.logger.debug(f"✅ Сообщение {message.id} имеет {message.replies.replies} комментариев")
+                    
+                    # Если нашли хотя бы 1 комментарий - канал подходит
+                    if comments_found >= 1:
+                        self.logger.debug(f"✅ Канал {title} ПОДХОДИТ - найден {comments_found} комментарий из {messages_checked} сообщений")
+                        return True
+                
+                # Небольшая задержка для избежания флуда
+                await asyncio.sleep(0.1)
+            
+            # Если проверили все сообщения и не нашли комментариев
+            self.logger.debug(f"❌ Канал {title} НЕ ПОДХОДИТ - 0 комментариев из {messages_checked} сообщений")
+            return False
+            
+        except Exception as e:
+            # При ошибке проверки - исключаем канал из результатов (безопаснее)
+            self.logger.debug(f"❌ Ошибка проверки комментариев: {e}")
+            return False
+
     async def _extract_community_data(self, entity) -> Optional[Dict[str, Any]]:
-        """Extract community data from Telegram entity with filtering."""
+        """Extract community data from Telegram entity with STRICT filtering for channels with comments."""
         try:
             from telethon.tl.types import Channel, Chat
             from telethon.tl.functions.channels import GetFullChannelRequest
@@ -1220,8 +1281,13 @@ class TelegramAdapter(BasePlatformAdapter):
                 is_megagroup = getattr(entity, 'megagroup', False)
                 is_broadcast = getattr(entity, 'broadcast', False)
                 
+                # 🔥 КРИТИЧЕСКИ ВАЖНАЯ ПРОВЕРКА: только каналы с реальными комментариями
+                if not await self._check_channel_has_comments(entity):
+                    self.logger.debug(f"❌ Пропускаем канал {title} - нет активных комментариев")
+                    return None
+                
                 if is_broadcast and not is_megagroup:
-                    # This is a broadcast channel - MUST have comments enabled
+                    # Broadcast канал - дополнительная проверка настроек
                     try:
                         full_channel = await self.client(GetFullChannelRequest(entity))
                         
@@ -1234,15 +1300,14 @@ class TelegramAdapter(BasePlatformAdapter):
                         comments_disabled = getattr(full_channel.full_chat, 'can_view_participants', True) == False
                         
                         if not has_discussion and comments_disabled:
-                            self.logger.debug(f"Skipping broadcast channel {title} - no comments enabled")
+                            self.logger.debug(f"Skipping broadcast channel {title} - no comments enabled in settings")
                             return None
                         
                         self.logger.debug(f"✅ Broadcast channel {title} has comments enabled")
                         
                     except Exception as e:
-                        # If we can't check comments, skip to be safe
-                        self.logger.debug(f"Skipping channel {title} - can't verify comments: {e}")
-                        return None
+                        # If we can't check comments settings, rely on real comment check above
+                        self.logger.debug(f"Warning: couldn't check comment settings for {title}: {e}")
                 elif is_megagroup:
                     # Megagroup (supergroup) - these are fine, they're essentially large groups
                     self.logger.debug(f"✅ Found megagroup: {title}")
@@ -1307,12 +1372,13 @@ class TelegramAdapter(BasePlatformAdapter):
                     'is_megagroup': getattr(entity, 'megagroup', False),
                     'is_broadcast': getattr(entity, 'broadcast', False),
                     'verified': getattr(entity, 'verified', False),
-                    'restricted': getattr(entity, 'restricted', False)
+                    'restricted': getattr(entity, 'restricted', False),
+                    'has_comments': True  # Мы проверили выше что комментарии есть
                 }
             }
             
             # No minimum member count restriction - all open communities are valid
-            self.logger.debug(f"✅ Found community: {title} (@{username}) - {participants_count} members")
+            self.logger.debug(f"✅ Found valid community: {title} (@{username}) - {participants_count} members")
             return community_data
             
         except Exception as e:
