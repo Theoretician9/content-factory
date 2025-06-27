@@ -749,6 +749,288 @@ async def get_task_results(
 
 ## 🔐 SECURITY & INTEGRATIONS
 
+### **🔐 JWT АВТОРИЗАЦИЯ И USER ISOLATION (Production Ready):**
+
+**Parsing Service полностью интегрирован с централизованной системой авторизации на базе JWT токенов. Все endpoints защищены и поддерживают полную изоляцию пользователей.**
+
+#### **🔑 Архитектура JWT авторизации:**
+
+```python
+# app/core/auth.py - Полная JWT авторизация для parsing-service
+from fastapi import HTTPException, Request, status
+import jwt
+import httpx
+import logging
+from .config import get_settings
+
+logger = logging.getLogger(__name__)
+API_GATEWAY_URL = "http://api-gateway:8000"
+
+async def get_user_id_from_request(request: Request) -> int:
+    """
+    Основная функция авторизации для parsing-service.
+    Извлекает user_id из JWT токена в заголовке Authorization.
+    
+    Процесс:
+    1. Извлечение JWT токена из Authorization header
+    2. Декодирование токена с JWT_SECRET_KEY из Vault
+    3. Получение email из поля 'sub' JWT payload
+    4. Конвертация email → user_id через API Gateway  
+    5. Возврат user_id для изоляции данных
+    """
+    auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+    if not auth_header:
+        logger.error("🚫 Missing Authorization header")
+        raise HTTPException(401, "Authorization header missing")
+    
+    if not auth_header.startswith("Bearer "):
+        logger.error("🚫 Invalid Authorization header format")
+        raise HTTPException(401, "Invalid Authorization header format")
+    
+    token = auth_header[7:]  # Remove 'Bearer ' prefix
+    logger.info(f"🔍 Processing JWT token: {token[:30]}...")
+    
+    settings = get_settings()
+    try:
+        # Декодируем JWT токен с секретом из Vault
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
+        email = payload.get("sub")
+        if not email:
+            logger.error(f"🚫 JWT token missing 'sub' field: {payload}")
+            raise HTTPException(401, "Invalid token: missing email")
+        
+        logger.info(f"🔍 JWT PAYLOAD: {payload}")
+        logger.info(f"🔍 USER EMAIL: '{email}'")
+        
+        # Получаем user_id по email через API Gateway
+        if "@" in email:
+            user_id = await get_user_id_by_email_via_api_gateway(email)
+            if not user_id:
+                logger.error(f"🚫 User not found for email: {email}")
+                raise HTTPException(401, "Invalid token: user not found")
+            
+            logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
+            return user_id
+        else:
+            # Если в токене уже user_id (legacy формат)
+            user_id = int(email)
+            logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
+            return user_id
+            
+    except jwt.ExpiredSignatureError:
+        logger.error("🚫 JWT token expired")
+        raise HTTPException(401, "Token expired")
+    except jwt.InvalidTokenError as e:
+        logger.error(f"🚫 Invalid JWT token: {e}")
+        raise HTTPException(401, "Invalid token")
+    except Exception as e:
+        logger.error(f"🚫 Authentication error: {e}")
+        raise HTTPException(401, "Authentication failed")
+
+async def get_user_id_by_email_via_api_gateway(email: str) -> int:
+    """Получить user_id по email через API Gateway"""
+    logger.info(f"🔍 parsing-service: запрос user_id для email: '{email}'")
+    url = f"{API_GATEWAY_URL}/internal/users/by-email?email={email}"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data["id"]
+        elif resp.status_code == 404:
+            return None
+        else:
+            logger.error(f"API Gateway error: {resp.status_code} {resp.text}")
+            raise HTTPException(401, "User service unavailable")
+```
+
+#### **🛡️ User Isolation - полная изоляция пользователей:**
+
+**Все endpoints автоматически фильтруют данные по user_id из JWT токена:**
+
+```python
+# Пример защищенного endpoint с user isolation:
+@app.post("/tasks", tags=["Tasks API"])
+async def create_task(task_data: dict, request: Request):
+    """Create new parsing task with JWT authorization."""
+    
+    # ✅ JWT АВТОРИЗАЦИЯ: Получаем user_id из JWT токена
+    try:
+        user_id = await get_user_id_from_request(request)
+        logger.info(f"🔐 JWT Authorization successful: user_id={user_id}")
+    except Exception as auth_error:
+        logger.error(f"❌ JWT Authorization failed: {auth_error}")
+        raise HTTPException(status_code=401, detail=f"Authorization failed: {str(auth_error)}")
+    
+    # Создаем задачу с реальным user_id из токена
+    db_task = ParseTask(
+        task_id=task_id,
+        user_id=user_id,  # ✅ JWT: Реальный user_id из токена
+        platform=PlatformEnum.TELEGRAM,
+        title=f"Parse {link}",
+        status=TaskStatus.PENDING,
+        priority=db_priority
+    )
+    
+    # Сохраняем в БД
+    db_session.add(db_task)
+    await db_session.commit()
+    
+    return {"task_id": task_id, "user_id": user_id, "status": "created"}
+
+@app.get("/tasks", tags=["Tasks API"])
+async def list_tasks(request: Request, platform: Optional[str] = None):
+    """List tasks with automatic user isolation."""
+    
+    # ✅ JWT АВТОРИЗАЦИЯ: Получаем user_id из JWT токена
+    user_id = await get_user_id_from_request(request)
+    
+    # ✅ USER ISOLATION: Возвращаем только задачи этого пользователя
+    user_tasks = [task for task in created_tasks if task.get("user_id") == user_id]
+    
+    return {"tasks": user_tasks, "user_id": user_id, "total": len(user_tasks)}
+
+@app.get("/results/{task_id}", tags=["Results API"])
+async def get_task_results(task_id: str, request: Request):
+    """Get results with ownership verification."""
+    
+    # JWT авторизация
+    user_id = await get_user_id_from_request(request)
+    
+    # Найти задачу в БД
+    async with AsyncSessionLocal() as db_session:
+        task_query = select(ParseTask).where(ParseTask.task_id == task_id)
+        task_result = await db_session.execute(task_query)
+        db_task = task_result.scalar_one_or_none()
+        
+        if not db_task:
+            raise HTTPException(404, "Task not found")
+        
+        # ✅ USER ISOLATION: Проверяем что задача принадлежит пользователю
+        if db_task.user_id != user_id:
+            raise HTTPException(404, "Task not found")  # 404 вместо 403 для безопасности
+        
+        # Возвращаем результаты только для задач пользователя
+        results = await get_results_for_task(task_id)
+        return {"results": results, "task_id": task_id, "user_id": user_id}
+```
+
+#### **🔒 Защищенные endpoints с JWT:**
+
+**Все основные endpoints parsing-service защищены JWT авторизацией:**
+
+1. **POST /tasks** - создание задач парсинга
+   - ✅ JWT validation
+   - ✅ Automatic user_id extraction 
+   - ✅ User isolation в БД
+
+2. **GET /tasks** - список задач пользователя
+   - ✅ JWT validation
+   - ✅ Фильтрация по user_id
+   - ✅ Полная изоляция данных
+
+3. **GET /tasks/{task_id}** - детали задачи
+   - ✅ JWT validation  
+   - ✅ Ownership verification
+   - ✅ 404 для чужих задач
+
+4. **DELETE /tasks/{task_id}** - удаление задач
+   - ✅ JWT validation
+   - ✅ Ownership verification
+   - ✅ Audit logging
+
+5. **POST /tasks/{task_id}/pause** - управление задачами
+   - ✅ JWT validation
+   - ✅ Ownership verification
+
+6. **POST /tasks/{task_id}/resume** - управление задачами
+   - ✅ JWT validation  
+   - ✅ Ownership verification
+
+7. **GET /results/{task_id}** - результаты парсинга
+   - ✅ JWT validation
+   - ✅ Ownership verification
+   - ✅ Database-level isolation
+
+8. **GET /results/{task_id}/export** - экспорт результатов
+   - ✅ JWT validation
+   - ✅ Ownership verification  
+   - ✅ Secure file download
+
+9. **GET /search** - поиск сообществ
+   - ✅ JWT validation
+   - ✅ User-specific search results
+
+#### **🔐 JWT Secret Management через Vault:**
+
+```python
+# app/core/config.py - Правильная интеграция JWT с Vault
+class Settings(BaseSettings):
+    """ВАЖНО: Правильное решение circular import проблемы"""
+    
+    def __init__(self, **values):
+        super().__init__(**values)
+        try:
+            from .vault import get_vault_client  # Import ВНУТРИ метода!
+            vault_client = get_vault_client()
+            secret_data = vault_client.get_secret("jwt")
+            
+            if secret_data and 'secret_key' in secret_data:
+                self.JWT_SECRET_KEY = secret_data['secret_key']
+                logger.info("✅ JWT secret loaded from Vault")
+            else:
+                raise Exception("JWT secret not found in Vault")
+        except (ImportError, Exception) as e:
+            self.JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')  # Fallback
+            logger.warning(f"⚠️ Using JWT secret from ENV: {e}")
+```
+
+#### **🔄 JWT Token Lifecycle:**
+
+1. **Login** (User Service):
+   ```
+   POST /api/auth/login
+   → Returns: JWT token with {"sub": "user@example.com", "exp": timestamp}
+   ```
+
+2. **API Request** (Parsing Service):
+   ```
+   GET /api/parsing/tasks
+   Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+   → Parsing Service extracts email from JWT
+   → Converts email to user_id via API Gateway
+   → Returns only user's tasks
+   ```
+
+3. **Database Storage**:
+   ```sql
+   -- Задачи сохраняются с реальным user_id
+   INSERT INTO parse_tasks (task_id, user_id, platform, link, status)
+   VALUES ('task_123', 42, 'telegram', 't.me/channel', 'pending');
+   
+   -- Результаты связаны через user_id
+   SELECT * FROM parse_results pr
+   JOIN parse_tasks pt ON pr.task_id = pt.id  
+   WHERE pt.user_id = 42;  -- Только задачи пользователя
+   ```
+
+#### **📊 Security Audit Logging:**
+
+```python
+# Все авторизационные события логируются:
+logger.info(f"🔐 JWT Authorization successful: user_id={user_id}")
+logger.info(f"🗑️ Deleted task: {task_id} (user_id: {user_id})")
+logger.info(f"⏸️ Paused task: {task_id} (user_id: {user_id})")
+logger.info(f"✅ Parsing completed: {task_id} (user_id: {user_id})")
+```
+
+#### **🛡️ Security Principles:**
+
+- **Principle of Least Privilege**: Пользователи видят только свои данные
+- **Defense in Depth**: JWT + Database + Application level security
+- **Zero Trust**: Каждый request проверяется независимо
+- **Fail Secure**: При ошибках авторизации - запрет доступа
+- **Audit Trail**: Все действия логируются с user_id
+
 ### **🔑 HASHICORP VAULT INTEGRATION:**
 
 ```python
