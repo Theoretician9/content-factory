@@ -63,8 +63,16 @@ async def search_communities(
                     all_accounts = response.json()
                     logger.info(f"✅ Retrieved {len(all_accounts)} accounts from internal endpoint")
                     
+                    # DEBUG: Логируем для диагностики
+                    logger.info(f"🔍 DEBUG: Current JWT user_id: {user_id} (type: {type(user_id)})")
+                    for i, acc in enumerate(all_accounts[:3]):  # Только первые 3 для краткости
+                        acc_user_id = acc.get('user_id')
+                        logger.info(f"🔍 DEBUG: Account {i}: user_id={acc_user_id} (type: {type(acc_user_id)})")
+                    
                     # Filter accounts for this user
                     user_accounts = [acc for acc in all_accounts if acc.get('user_id') == user_id]
+                    
+                    logger.info(f"🔍 DEBUG: After filtering: found {len(user_accounts)} accounts for user_id {user_id}")
                     
                     if not user_accounts:
                         raise HTTPException(503, f"No active Telegram accounts available for user {user_id}")
