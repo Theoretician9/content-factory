@@ -1,4 +1,9 @@
-export async function apiFetch(url: string, options: RequestInit = {}) {
+// Расширенный тип для RequestInit с timeout
+interface ExtendedRequestInit extends RequestInit {
+  timeout?: number;
+}
+
+export async function apiFetch(url: string, options: ExtendedRequestInit = {}) {
   let accessToken = localStorage.getItem('access_token');
   let refreshToken = localStorage.getItem('refresh_token');
   const headers = {
@@ -6,12 +11,22 @@ export async function apiFetch(url: string, options: RequestInit = {}) {
     'Content-Type': 'application/json',
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
   };
-  let res = await fetch(url, { 
-    ...options, 
-    headers,
-    credentials: 'include' // Важно для передачи cookies (refresh_token)
-  });
-  if (res.status === 401 && refreshToken) {
+  
+  // Создаем AbortController для управления таймаутом
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), options.timeout || 30000); // Default 30s, можно переопределить
+  
+  try {
+    let res = await fetch(url, { 
+      ...options, 
+      headers,
+      credentials: 'include', // Важно для передачи cookies (refresh_token)
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId); // Очищаем таймаут если запрос успешен
+    
+    if (res.status === 401 && refreshToken) {
     // Попробовать refresh
     const refreshRes = await fetch('/api/auth/refresh', {
       method: 'POST',
