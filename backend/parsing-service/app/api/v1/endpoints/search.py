@@ -18,6 +18,7 @@ settings = get_settings()
 
 
 @router.get("/")
+@router.get("")
 async def search_communities(
     request: Request,
     platform: str = Query(..., description="Platform to search (telegram, instagram, whatsapp)"),
