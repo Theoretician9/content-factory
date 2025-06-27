@@ -464,10 +464,10 @@
 > **Специальный этап для реализации поиска сообществ по ключевым словам согласно требованиям пользователя**
 
 ### 12.1. Backend Infrastructure - Поиск сообществ
-- [ ] ❌ **Добавить абстрактный метод `search_communities` в BasePlatformAdapter**
-- [ ] ❌ **Реализовать `search_communities` в TelegramAdapter с Telethon поиском**
-- [ ] ❌ **Создать API endpoint `GET /api/v1/search` в parsing-service**
-- [ ] ❌ **Обновить Celery задачу `telegram_search_communities` для реальной работы**
+- [x] ✅ **Добавить абстрактный метод `search_communities` в BasePlatformAdapter**
+- [x] ✅ **Реализовать `search_communities` в TelegramAdapter с Telethon поиском**
+- [x] ✅ **Создать API endpoint `GET /api/v1/search` в parsing-service**
+- [x] ✅ **Обновить Celery задачу `telegram_search_communities` для реальной работы**
 
 ### 12.2. Telegram Search Implementation - Реальный поиск
 - [ ] ❌ **Реализовать поиск через `SearchRequest` и `GetDialogsRequest` Telethon**
