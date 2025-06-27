@@ -113,11 +113,18 @@ const Parsing = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   
   // Поиск сообществ
-  const [searchForm, setSearchForm] = useState({
-    platform: 'telegram' as const,
+  const [searchForm, setSearchForm] = useState<{
+    platform: 'telegram' | 'instagram' | 'whatsapp';
+    query: string;
+    offset: number;
+    limit: number;
+    speed: 'fast' | 'medium' | 'safe';
+  }>({
+    platform: 'telegram',
     query: '',
     offset: 0,
-    limit: 10
+    limit: 10,
+    speed: 'medium'
   });
   const [searchResults, setSearchResults] = useState<CommunitySearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -399,7 +406,8 @@ const Parsing = () => {
         platform: searchForm.platform,
         query: searchForm.query.trim(),
         offset: searchForm.offset,
-        limit: searchForm.limit
+        limit: searchForm.limit,
+        speed: searchForm.speed
       });
 
       if (res.ok) {
@@ -409,8 +417,13 @@ const Parsing = () => {
         const error = await res.json();
         setSearchError(error.detail || 'Ошибка поиска');
       }
-    } catch (err) {
-      setSearchError('Ошибка сети');
+    } catch (err: any) {
+      // Обработка timeout ошибки
+      if (err.message && err.message.includes('timeout')) {
+        setSearchError('Поиск занял слишком много времени. Попробуйте режим "Быстрый" или сократите запрос.');
+      } else {
+        setSearchError('Ошибка сети');
+      }
     } finally {
       setSearching(false);
     }
@@ -950,7 +963,7 @@ const Parsing = () => {
               <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
                 <h3 className="text-lg font-semibold mb-4">Поиск сообществ</h3>
                 
-                <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-4 gap-4 mb-4">
                   <div>
                     <label className="block text-sm font-medium mb-2">Платформа</label>
                     <select
@@ -973,12 +986,47 @@ const Parsing = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Скорость поиска</label>
+                    <select
+                      value={searchForm.speed}
+                      onChange={(e) => setSearchForm(prev => ({ ...prev, speed: e.target.value as any }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="fast">🔴 Быстрый (15-30 сек)</option>
+                      <option value="medium">🟡 Средний (30-60 сек)</option>
+                      <option value="safe">🟢 Безопасный (60-120 сек)</option>
+                    </select>
+                    <div className="mt-1 text-xs text-gray-500">
+                      {searchForm.speed === 'fast' && 'Высокий риск rate limits'}
+                      {searchForm.speed === 'medium' && 'Оптимальный баланс (рекомендуемый)'}
+                      {searchForm.speed === 'safe' && 'Минимальный риск блокировок'}
+                    </div>
+                  </div>
                   <div className="flex items-end">
                     <Button onClick={handleSearchCommunities} loading={searching}>
                       Поиск
                     </Button>
                   </div>
                 </div>
+
+                {/* Индикатор времени поиска */}
+                {searching && (
+                  <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                    <div className="flex items-center text-blue-700 dark:text-blue-300">
+                      <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2"></div>
+                      <span className="text-sm">
+                        Поиск сообществ в режиме "{searchForm.speed === 'fast' ? 'Быстрый' : searchForm.speed === 'medium' ? 'Средний' : 'Безопасный'}"...
+                        {searchForm.speed === 'fast' && ' (~15-30 сек)'}
+                        {searchForm.speed === 'medium' && ' (~30-60 сек)'}
+                        {searchForm.speed === 'safe' && ' (~60-120 сек)'}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">
+                      Поиск может включать ожидание из-за ограничений Telegram API
+                    </div>
+                  </div>
+                )}
 
                 {searchError && <ErrorMessage message={searchError} />}
               </div>
