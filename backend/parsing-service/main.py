@@ -1084,8 +1084,17 @@ async def get_task_results(
         raise HTTPException(status_code=500, detail=error_detail)
 
 @app.get("/results/{task_id}/export", tags=["Results API"])
-async def export_task_results(task_id: str, format: str = "json"):
+async def export_task_results(task_id: str, request: Request, format: str = "json"):
     """Export parsing results in specified format (frontend compatible endpoint)."""
+    
+    # ✅ JWT АВТОРИЗАЦИЯ: Получаем user_id из JWT токена
+    try:
+        user_id = await get_user_id_from_request(request)
+        logger.info(f"🔐 JWT Authorization successful for export_task_results: user_id={user_id}")
+    except Exception as auth_error:
+        logger.error(f"❌ JWT Authorization failed for export_task_results: {auth_error}")
+        raise HTTPException(status_code=401, detail=f"Authorization failed: {str(auth_error)}")
+    
     try:
         from app.database import AsyncSessionLocal
         from app.models.parse_result import ParseResult
