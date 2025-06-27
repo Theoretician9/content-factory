@@ -733,11 +733,13 @@ class TelegramService:
     ) -> TelegramConnectResponse:
         """Проверка авторизации по QR коду с полной поддержкой 2FA"""
         try:
+            # ✅ ИСПРАВЛЕНИЕ: global declaration в начале функции
+            global _GLOBAL_QR_SESSIONS
+            
             # ✅ ОБРАБОТКА ПАРОЛЯ 2FA ДЛЯ QR ПОДКЛЮЧЕНИЯ
             if password:
                 # Если передан пароль, обрабатываем 2FA для QR
                 qr_key = f"qr_{user_id}"
-                global _GLOBAL_QR_SESSIONS
                 
                 if qr_key not in _GLOBAL_QR_SESSIONS:
                     return TelegramConnectResponse(
@@ -820,7 +822,6 @@ class TelegramService:
             
             # ✅ ОБЫЧНАЯ ПРОВЕРКА QR АВТОРИЗАЦИИ (без пароля)
             qr_key = f"qr_{user_id}"
-            global _GLOBAL_QR_SESSIONS
             
             if qr_key not in _GLOBAL_QR_SESSIONS:
                 return TelegramConnectResponse(
@@ -938,6 +939,9 @@ class TelegramService:
     async def _save_auth_session(self, auth_key: str, client: TelegramClient, phone_code_hash: str) -> None:
         """Сохранение состояния авторизации в Redis И в глобальной памяти"""
         try:
+            # ✅ ИСПРАВЛЕНИЕ: global declaration в начале функции
+            global _GLOBAL_AUTH_SESSIONS
+            
             session_string = client.session.save()
             auth_data = {
                 'session_string': session_string,
@@ -950,7 +954,6 @@ class TelegramService:
             self.redis_client.setex(redis_key, 300, json.dumps(auth_data))
             
             # ТАКЖЕ сохраняем активный клиент в ГЛОБАЛЬНОЙ памяти для доставки кода
-            global _GLOBAL_AUTH_SESSIONS
             _GLOBAL_AUTH_SESSIONS[auth_key] = {
                 'client': client,
                 'phone_code_hash': phone_code_hash,
