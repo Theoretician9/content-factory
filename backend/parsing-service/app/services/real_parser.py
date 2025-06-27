@@ -156,10 +156,10 @@ async def perform_real_parsing_with_progress(
             raise Exception(f"Failed to authenticate with session {session_id}")
         
         # Step 5: Parse target with progress tracking and speed configuration
-        if speed_config:
-            logger.info(f"🔧 TelegramAdapter config: message_limit={message_limit}, speed={speed_config.name}")
-        else:
-            logger.info(f"🔧 TelegramAdapter config: message_limit={message_limit}")
+                    if speed_config:
+                logger.info(f"🔧 TelegramAdapter config: message_limit={message_limit}, speed={speed_config.name}")
+            else:
+                logger.info(f"🔧 TelegramAdapter config: message_limit={message_limit}, speed=default")
         
         # Create mock task object for adapter compatibility
         from app.models.parse_task import ParseTask
@@ -295,7 +295,10 @@ async def parse_telegram_channel_real_with_progress(link: str, account: Dict, pr
                 'speed_config': speed_config  # Pass speed configuration
             }
             
-            logger.info(f"🔧 TelegramAdapter config: message_limit={message_limit}, progress_callback={progress_callback is not None}")
+            if speed_config:
+                logger.info(f"🔧 TelegramAdapter config: message_limit={message_limit}, speed={speed_config.name}, progress_callback={progress_callback is not None}")
+            else:
+                logger.info(f"🔧 TelegramAdapter config: message_limit={message_limit}, speed=default, progress_callback={progress_callback is not None}")
             
             logger.info(f"🔥 Starting REAL Telethon parsing for {channel_username}")
             
