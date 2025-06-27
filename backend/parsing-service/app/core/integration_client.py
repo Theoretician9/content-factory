@@ -50,9 +50,20 @@ class IntegrationServiceClient:
                 )
                 
                 if response.status_code == 200:
-                    accounts = response.json().get("accounts", [])
-                    logger.info(f"✅ Found {len(accounts)} {platform.value} accounts for user {user_id}")
-                    return accounts
+                    accounts = response.json()
+                    # Преобразуем формат данных из Integration Service
+                    formatted_accounts = []
+                    for acc in accounts:
+                        formatted_accounts.append({
+                            "account_id": str(acc.get("id")),
+                            "user_id": acc.get("user_id"),
+                            "phone": acc.get("phone"),
+                            "is_active": acc.get("is_active"),
+                            "session_metadata": acc.get("session_metadata", {}),
+                            "status": "active" if acc.get("is_active") else "inactive"
+                        })
+                    logger.info(f"✅ Found {len(formatted_accounts)} {platform.value} accounts for user {user_id}")
+                    return formatted_accounts
                 else:
                     logger.error(f"❌ Failed to get accounts: {response.status_code} - {response.text}")
                     return []
