@@ -761,12 +761,13 @@ class TelegramService:
                     logger.info(f"🔐 QR 2FA: Используем сохраненный клиент для ввода пароля user_id={user_id}")
                     
                     # Проверяем подключение клиента
-                    if not client.is_connected():
-                        logger.info(f"🔌 QR 2FA client disconnected, reconnecting...")
-                        await client.connect()
-                    
-                    # Вводим пароль 2FA
-                    await client.sign_in(password=password)
+                    if not client.is_user_authorized():
+                        logger.info(f"⏳ QR authorization pending for user {user_id}")
+                        logger.info(f"�� DEBUG: Returning qr_waiting status because client.is_user_authorized() = False")
+                        return TelegramConnectResponse(
+                            status="qr_waiting",
+                            message="Ожидание авторизации по QR коду. Отсканируйте QR код в Telegram"
+                        )
                     
                     # Получаем информацию о пользователе
                     me = await client.get_me()
@@ -916,36 +917,36 @@ class TelegramService:
             except SessionPasswordNeededError:
                 # ✅ КРИТИЧЕСКИ ВАЖНО: НЕ отключаем клиент! Он нужен для ввода пароля 2FA
                 logger.info(f"🔐 QR SessionPasswordNeededError: 2FA required for user {user_id}")
+                logger.info(f"🔐 DEBUG: Caught SessionPasswordNeededError, about to return 2fa_required")
                 
                 # Сохраняем информацию о необходимости 2FA в QR сессии
                 _GLOBAL_QR_SESSIONS[qr_key]['requires_2fa'] = True
                 
-                return TelegramConnectResponse(
+                response = TelegramConnectResponse(
                     status="2fa_required",
                     message="Требуется пароль двухфакторной аутентификации. Введите его в поле 'Пароль 2FA'."
                 )
+                logger.info(f"🔐 DEBUG: SessionPasswordNeededError response: {response.status} - {response.message}")
+                return response
             except Exception as e:
                 error_msg = str(e)
                 logger.error(f"❌ Error checking QR authorization: {e}")
+                logger.info(f"🔍 DEBUG: Exception in client.is_user_authorized() check: {error_msg}")
                 
                 # ✅ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: RpcError на SESSION_PASSWORD_NEEDED для QR
                 if "SESSION_PASSWORD_NEEDED" in error_msg or "session password needed" in error_msg.lower():
                     logger.info(f"🔐 QR RpcError SESSION_PASSWORD_NEEDED: 2FA required for user {user_id}")
+                    logger.info(f"🔐 DEBUG: Detected SESSION_PASSWORD_NEEDED in exception, returning 2fa_required")
                     
                     # Сохраняем информацию о необходимости 2FA в QR сессии
                     _GLOBAL_QR_SESSIONS[qr_key]['requires_2fa'] = True
                     
-                    return TelegramConnectResponse(
+                    response = TelegramConnectResponse(
                         status="2fa_required",
                         message="Требуется пароль двухфакторной аутентификации. Введите его в поле 'Пароль 2FA'."
                     )
-                
-                # Для других ошибок - очищаем QR сессию
-                await self._cleanup_qr_session(user_id)
-                return TelegramConnectResponse(
-                    status="error",
-                    message=f"Ошибка проверки QR авторизации: {str(e)}"
-                )
+                    logger.info(f"🔐 DEBUG: RpcError response: {response.status} - {response.message}")
+                    return response
                 
         except Exception as e:
             logger.error(f"❌ Error checking QR authorization: {e}")
