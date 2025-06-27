@@ -40,6 +40,22 @@ class BasePlatformAdapter(ABC):
         """Parse data from a target."""
         pass
     
+    @abstractmethod
+    async def search_communities(self, query: str, offset: int = 0, limit: int = 10, **kwargs) -> Dict[str, Any]:
+        """
+        Search for communities/channels/groups by keywords.
+        
+        Args:
+            query: Search query string
+            offset: Number of results to skip (for pagination)
+            limit: Maximum number of results to return
+            **kwargs: Platform-specific search parameters
+        
+        Returns:
+            Dict with 'results' (list of communities) and 'has_more' (bool)
+        """
+        pass
+    
     async def cleanup(self):
         """Clean up adapter resources."""
         self.logger.info(f"Cleaning up {self.platform_name} adapter")
