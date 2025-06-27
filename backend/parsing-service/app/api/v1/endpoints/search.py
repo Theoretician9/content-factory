@@ -28,12 +28,19 @@ async def search_communities(
     speed: str = Query("medium", description="Search speed: fast, medium, safe")
 ):
     """
-    Search for communities by keywords across different platforms.
+    Search for communities by keywords across different platforms with progress tracking.
     
     Returns filtered and sorted communities:
     - Telegram: Only open channels with comments OR open groups
     - Sorting: By member count descending (largest first)
     - Pagination: offset/limit based
+    
+    Speed options:
+    - fast: 0.5s API delay, 1s method delay (higher rate limit risk)
+    - medium: 1s API delay, 2s method delay (recommended)
+    - safe: 2s API delay, 3s method delay (lowest rate limit risk)
+    
+    Progress is logged in real-time for monitoring.
     """
     
     # Get user_id from JWT token
@@ -111,34 +118,11 @@ async def search_communities(
         
         try:
             # Configure search speed (using same logic as parsing)
-            speed_config = None
-            if speed.lower() == "fast":
-                from ....core.parsing_speed import SpeedConfiguration
-                speed_config = SpeedConfiguration(
-                    name="Fast",
-                    message_delay=0.5,      # 0.5s between API requests
-                    user_request_delay=1.0, # 1s between search methods
-                    batch_size=20,
-                    user_requests_per_minute=60
-                )
-            elif speed.lower() == "safe":
-                from ....core.parsing_speed import SpeedConfiguration
-                speed_config = SpeedConfiguration(
-                    name="Safe", 
-                    message_delay=2.0,      # 2s between API requests
-                    user_request_delay=3.0, # 3s between search methods
-                    batch_size=5,
-                    user_requests_per_minute=20
-                )
-            else:  # medium (default)
-                from ....core.parsing_speed import SpeedConfiguration
-                speed_config = SpeedConfiguration(
-                    name="Medium",
-                    message_delay=1.0,      # 1s between API requests
-                    user_request_delay=2.0, # 2s between search methods
-                    batch_size=10,
-                    user_requests_per_minute=30
-                )
+            from ....core.parsing_speed import SpeedConfig, parse_speed_from_string, get_speed_config
+            
+            # Parse speed and get predefined configuration
+            speed_enum = parse_speed_from_string(speed)
+            speed_config = get_speed_config(speed_enum)
             
             logger.info(f"🔧 Search configuration: speed={speed_config.name}, {speed_config.message_delay}s API delay")
             
