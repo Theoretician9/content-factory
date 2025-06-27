@@ -722,7 +722,10 @@ const Parsing = () => {
                                 {task.link}
                               </div>
                               <div className="text-sm text-gray-500 dark:text-gray-400">
-                                {task.task_type} • {task.priority}
+                                {task.task_type} • {task.speed_config?.name || 
+                                  (task.settings?.parsing_speed === 'fast' ? 'Быстрый (опасный)' : 
+                                   task.settings?.parsing_speed === 'safe' ? 'Безопасный' : 
+                                   'Средний (рекомендуемый)')}
                               </div>
                             </div>
                           </td>
