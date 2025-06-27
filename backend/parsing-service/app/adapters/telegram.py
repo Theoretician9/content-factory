@@ -1060,38 +1060,94 @@ class TelegramAdapter(BasePlatformAdapter):
         """Search through user's dialogs for matching communities (legacy method)."""
         return await self._search_dialogs_with_progress(query, None)
     
-    async def _search_global_new(self, query: str) -> List[Dict[str, Any]]:
-        """Search using SearchGlobalRequest for broader results."""
+    async def _search_global_new_with_progress(self, query: str, progress_callback=None) -> List[Dict[str, Any]]:
+        """Search using SearchGlobalRequest for broader results with progress tracking."""
         try:
             from telethon.tl.functions.messages import SearchGlobalRequest
             from telethon.tl.types import Channel, Chat, InputMessagesFilterEmpty
             
-            # Use global search
-            search_result = await self.client(SearchGlobalRequest(
-                q=query,
-                filter=InputMessagesFilterEmpty(),  # No filter, get all types
-                min_date=None,
-                max_date=None,
-                offset_rate=0,
-                offset_peer=None,
-                offset_id=0,
-                limit=100
-            ))
+            self.logger.info(f"📡 Global search starting for: '{query}'")
+            
+            # Use global search with FloodWait protection
+            try:
+                search_result = await self.client(SearchGlobalRequest(
+                    q=query,
+                    filter=InputMessagesFilterEmpty(),  # No filter, get all types
+                    min_date=None,
+                    max_date=None,
+                    offset_rate=0,
+                    offset_peer=None,
+                    offset_id=0,
+                    limit=100
+                ))
+            except FloodWaitError as e:
+                self.logger.warning(f"⏳ FloodWait {e.seconds}s in global search for '{query}'")
+                try:
+                    wait_time = e.seconds + 1
+                    for wait_step in range(0, wait_time, 5):
+                        remaining = wait_time - wait_step
+                        self.logger.info(f"⏳ Global search FloodWait: {remaining}s remaining...")
+                        await asyncio.sleep(min(5, remaining))
+                    
+                    # Retry after FloodWait
+                    search_result = await self.client(SearchGlobalRequest(
+                        q=query,
+                        filter=InputMessagesFilterEmpty(),
+                        min_date=None,
+                        max_date=None,
+                        offset_rate=0,
+                        offset_peer=None,
+                        offset_id=0,
+                        limit=100
+                    ))
+                except asyncio.CancelledError:
+                    self.logger.warning(f"⚠️ Global search FloodWait cancelled during {e.seconds}s wait")
+                    return []
             
             results = []
+            processed_chats = 0
+            total_chats = len(search_result.chats)
+            
+            self.logger.info(f"📊 Processing {total_chats} chats from global search")
             
             # Process found chats
             for chat in search_result.chats:
                 if isinstance(chat, (Channel, Chat)):
-                    community_data = await self._extract_community_data(chat)
-                    if community_data:
-                        results.append(community_data)
+                    try:
+                        community_data = await self._extract_community_data(chat)
+                        if community_data:
+                            results.append(community_data)
+                            processed_chats += 1
+                            
+                            if processed_chats % 5 == 0:  # Log every 5 processed
+                                self.logger.info(f"📈 Global search: processed {processed_chats}/{total_chats} communities")
+                    
+                    except FloodWaitError as e:
+                        self.logger.warning(f"⏳ FloodWait {e.seconds}s while extracting global community data")
+                        try:
+                            await asyncio.sleep(e.seconds + 1)
+                            # Retry after FloodWait
+                            community_data = await self._extract_community_data(chat)
+                            if community_data:
+                                results.append(community_data)
+                                processed_chats += 1
+                        except asyncio.CancelledError:
+                            self.logger.warning(f"⚠️ Global community extraction FloodWait cancelled")
+                            break
+                    except Exception as e:
+                        self.logger.debug(f"Failed to extract global community data: {e}")
+                        continue
             
+            self.logger.info(f"✅ Global search completed: {len(results)} valid communities found")
             return results
             
         except Exception as e:
             self.logger.debug(f"Global new search failed: {e}")
             return []
+
+    async def _search_global_new(self, query: str) -> List[Dict[str, Any]]:
+        """Search using SearchGlobalRequest for broader results (legacy method)."""
+        return await self._search_global_new_with_progress(query, None)
     
     def _generate_transliterations(self, query: str) -> List[str]:
         """Generate transliteration variations for Cyrillic text."""
