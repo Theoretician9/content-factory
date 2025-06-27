@@ -968,6 +968,7 @@ class TelegramService:
     async def _get_auth_session(self, auth_key: str) -> Optional[Dict]:
         """Получение состояния авторизации из глобальной памяти или Redis"""
         try:
+            # ✅ ИСПРАВЛЕНИЕ: global declaration в начале функции
             global _GLOBAL_AUTH_SESSIONS
             
             # Сначала проверяем глобальную память (активный клиент)
@@ -994,12 +995,14 @@ class TelegramService:
     async def _delete_auth_session(self, auth_key: str) -> None:
         """Удаление состояния авторизации из Redis и глобальной памяти"""
         try:
+            # ✅ ИСПРАВЛЕНИЕ: global declaration в начале функции
+            global _GLOBAL_AUTH_SESSIONS
+            
             # Удаляем из Redis
             redis_key = f"auth_session:{auth_key}"
             self.redis_client.delete(redis_key)
             
             # Удаляем из глобальной памяти и отключаем клиент если есть
-            global _GLOBAL_AUTH_SESSIONS
             if auth_key in _GLOBAL_AUTH_SESSIONS:
                 if 'client' in _GLOBAL_AUTH_SESSIONS[auth_key]:
                     try:
@@ -1023,6 +1026,7 @@ class TelegramService:
     def _cleanup_old_auth_sessions(self) -> None:
         """Очистка старых auth sessions для предотвращения утечек памяти"""
         try:
+            # ✅ ИСПРАВЛЕНИЕ: global declaration в начале функции
             global _GLOBAL_AUTH_SESSIONS
             current_time = int(time.time())
             expired_keys = []
