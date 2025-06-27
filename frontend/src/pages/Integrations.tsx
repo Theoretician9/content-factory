@@ -77,6 +77,10 @@ const Integrations = () => {
   const [qrPolling, setQrPolling] = useState(false);
   const [qrError, setQrError] = useState('');
   
+  // ✅ Ref для отслеживания текущего статуса polling
+  const qrPollingRef = useRef(false);
+  const qrStatusRef = useRef<'idle' | 'generating' | 'waiting' | 'success' | 'expired' | 'error'>('idle');
+  
   // Подключение бота
   const [botForm, setBotForm] = useState({
     token: '',
@@ -251,12 +255,16 @@ const Integrations = () => {
         console.log('🔍 QR check response:', data);
         
         if (data.status === 'success') {
+          qrStatusRef.current = 'success';
+          qrPollingRef.current = false;
           setQrStatus('success');
           setQrPolling(false);
           setConnectForm(prev => ({ ...prev, step: 'success' }));
           loadData(); // Перезагружаем список аккаунтов
           return true;
         } else if (data.status === 'qr_expired') {
+          qrStatusRef.current = 'expired';
+          qrPollingRef.current = false;
           setQrStatus('expired');
           setQrPolling(false);
           setQrError('QR код истек. Сгенерируйте новый');
@@ -265,6 +273,8 @@ const Integrations = () => {
           // Продолжаем ожидание, без изменений
           return false;
         } else if (data.status === 'error') {
+          qrStatusRef.current = 'error';
+          qrPollingRef.current = false;
           setQrStatus('error');
           setQrPolling(false);
           setQrError(data.message || 'Ошибка QR авторизации');
@@ -281,32 +291,39 @@ const Integrations = () => {
     return false;
   };
 
-  // ✅ ФУНКЦИЯ POLLING QR СТАТУСА
+  // ✅ ФУНКЦИЯ POLLING QR СТАТУСА С ИСПРАВЛЕННОЙ ЛОГИКОЙ
   const startQRPolling = () => {
-    if (qrPolling) return; // Предотвращаем множественный polling
+    if (qrPollingRef.current) return; // Предотвращаем множественный polling
     
+    qrPollingRef.current = true;
+    qrStatusRef.current = 'waiting';
     setQrPolling(true);
     setQrStatus('waiting');
     
     const pollInterval = setInterval(async () => {
+      if (!qrPollingRef.current) {
+        clearInterval(pollInterval);
+        return;
+      }
+      
       console.log('🔄 Polling QR status...');
       const success = await checkQRAuthorization();
       
-      if (success || qrStatus === 'expired' || qrStatus === 'error') {
+      if (success || qrStatusRef.current === 'expired' || qrStatusRef.current === 'error') {
         clearInterval(pollInterval);
+        qrPollingRef.current = false;
         setQrPolling(false);
       }
     }, 3000); // Проверяем каждые 3 секунды
     
     // Автоматическая остановка через 5 минут (QR код живет 5 минут)
     setTimeout(() => {
-      if (qrPolling) {
+      if (qrPollingRef.current && qrStatusRef.current === 'waiting') {
         clearInterval(pollInterval);
+        qrPollingRef.current = false;
         setQrPolling(false);
-        if (qrStatus === 'waiting') {
-          setQrStatus('expired');
-          setQrError('QR код истек. Сгенерируйте новый');
-        }
+        setQrStatus('expired');
+        setQrError('QR код истек. Сгенерируйте новый');
       }
     }, 300000); // 5 минут
   };
@@ -359,7 +376,9 @@ const Integrations = () => {
     });
     setConnectError('');
     setQrCode('');
-    // ✅ Сброс QR состояний
+    // ✅ Сброс QR состояний и ref
+    qrStatusRef.current = 'idle';
+    qrPollingRef.current = false;
     setQrStatus('idle');
     setQrPolling(false);
     setQrError('');
