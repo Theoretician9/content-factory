@@ -360,9 +360,34 @@ async def process_pending_tasks():
             logger.debug("📝 Нет pending задач для обработки")
             return
         
+        # ✅ PRIORITY MAPPING для правильной сортировки
+        PRIORITY_WEIGHTS = {
+            "high": 3,    # Высокий приоритет
+            "normal": 2,  # Обычный приоритет  
+            "low": 1      # Низкий приоритет
+        }
+        
+        # ✅ СОРТИРОВКА ПО ПРИОРИТЕТУ: сначала high, потом normal, потом low
+        # Среди одинаковых приоритетов - по времени создания (FIFO)
+        pending_tasks.sort(key=lambda t: (
+            -PRIORITY_WEIGHTS.get(t.get("priority", "normal"), 2),  # По убыванию приоритета
+            t.get("created_at", "")  # По возрастанию времени создания
+        ))
+        
         logger.info(f"🎯 AccountManager: {len(available_accounts)} аккаунтов доступно, {len(pending_tasks)} задач в очереди")
         
+        # Log priority distribution for debugging
+        priority_counts = {}
+        for task in pending_tasks:
+            priority = task.get("priority", "normal")
+            priority_counts[priority] = priority_counts.get(priority, 0) + 1
+        
+        if priority_counts:
+            priority_info = ", ".join([f"{p}:{c}" for p, c in priority_counts.items()])
+            logger.info(f"📊 Приоритеты в очереди: {priority_info}")
+        
         # Assign tasks to available accounts (up to number of available accounts)
+        # Теперь задачи с высоким приоритетом будут обработаны первыми
         tasks_to_process = pending_tasks[:len(available_accounts)]
         
         for task in tasks_to_process:
@@ -676,6 +701,15 @@ async def create_task(task_data: dict):
         for link in task_data.get("links", []):
             task_id = f"task_{int(time.time())}_{str(uuid.uuid4())[:8]}"
             
+            # ✅ PRIORITY MAPPING для БД
+            priority_str = task_data.get("priority", "normal").lower()
+            if priority_str == "high":
+                db_priority = TaskPriority.HIGH
+            elif priority_str == "low":
+                db_priority = TaskPriority.LOW
+            else:
+                db_priority = TaskPriority.NORMAL
+            
             # Создаем объект задачи в БД
             db_task = ParseTask(
                 task_id=task_id,
@@ -692,7 +726,7 @@ async def create_task(task_data: dict):
                     "settings": task_data.get("settings", {})
                 },
                 status=TaskStatus.PENDING,
-                priority=TaskPriority.NORMAL,
+                priority=db_priority,  # ✅ Используем правильный приоритет
                 progress=0
             )
             
