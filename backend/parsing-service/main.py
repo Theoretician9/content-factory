@@ -651,7 +651,7 @@ async def list_tasks(
     }
 
 @app.post("/tasks", tags=["Tasks API"])
-async def create_task(task_data: dict):
+async def create_task(task_data: dict, request: Request):
     """Create new parsing task with Account Manager and Parsing Speed support."""
     import uuid
     from datetime import datetime
