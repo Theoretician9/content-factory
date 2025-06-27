@@ -24,7 +24,8 @@ async def search_communities(
     platform: str = Query(..., description="Platform to search (telegram, instagram, whatsapp)"),
     query: str = Query(..., min_length=1, description="Search query keywords"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
-    limit: int = Query(10, ge=1, le=50, description="Maximum number of results")
+    limit: int = Query(10, ge=1, le=50, description="Maximum number of results"),
+    speed: str = Query("medium", description="Search speed: fast, medium, safe")
 ):
     """
     Search for communities by keywords across different platforms.
@@ -109,11 +110,51 @@ async def search_communities(
             raise HTTPException(503, f"Failed to authenticate with Telegram account {session_id}")
         
         try:
-            # Perform search
+            # Configure search speed (using same logic as parsing)
+            speed_config = None
+            if speed.lower() == "fast":
+                from ....core.parsing_speed import SpeedConfiguration
+                speed_config = SpeedConfiguration(
+                    name="Fast",
+                    message_delay=0.5,      # 0.5s between API requests
+                    user_request_delay=1.0, # 1s between search methods
+                    batch_size=20,
+                    user_requests_per_minute=60
+                )
+            elif speed.lower() == "safe":
+                from ....core.parsing_speed import SpeedConfiguration
+                speed_config = SpeedConfiguration(
+                    name="Safe", 
+                    message_delay=2.0,      # 2s between API requests
+                    user_request_delay=3.0, # 3s between search methods
+                    batch_size=5,
+                    user_requests_per_minute=20
+                )
+            else:  # medium (default)
+                from ....core.parsing_speed import SpeedConfiguration
+                speed_config = SpeedConfiguration(
+                    name="Medium",
+                    message_delay=1.0,      # 1s between API requests
+                    user_request_delay=2.0, # 2s between search methods
+                    batch_size=10,
+                    user_requests_per_minute=30
+                )
+            
+            logger.info(f"🔧 Search configuration: speed={speed_config.name}, {speed_config.message_delay}s API delay")
+            
+            # Progress callback for logging
+            async def search_progress_callback(current: int, total: int):
+                """Log search progress for monitoring."""
+                progress_pct = int((current / total) * 100) if total > 0 else 0
+                logger.info(f"📈 Search progress: {current}/{total} ({progress_pct}%) - User {user_id}, Query: '{query}'")
+            
+            # Perform search with progress tracking and speed config
             search_results = await adapter.search_communities(
                 query=query,
                 offset=offset,
-                limit=limit
+                limit=limit,
+                progress_callback=search_progress_callback,
+                speed_config=speed_config
             )
             
             # Ensure cleanup
