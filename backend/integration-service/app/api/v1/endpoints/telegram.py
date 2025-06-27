@@ -11,6 +11,7 @@ from ....services.integration_log_service import IntegrationLogService
 from ....schemas.telegram import (
     TelegramAuthRequest,
     TelegramConnectResponse,
+    TelegramQRCheckRequest,
     TelegramSessionResponse,
     TelegramBotCreate,
     TelegramBotResponse,
@@ -84,7 +85,7 @@ async def get_qr_code(
 @router.post("/qr-check", response_model=TelegramConnectResponse)
 async def check_qr_authorization(
     request: Request,
-    qr_request: Optional[dict] = None,  # Принимаем опциональный request body
+    qr_request: TelegramQRCheckRequest = TelegramQRCheckRequest(),  # Default пустой объект
     session: AsyncSession = Depends(get_async_session),
     telegram_service: TelegramService = Depends(get_telegram_service)
 ):
@@ -92,19 +93,17 @@ async def check_qr_authorization(
     Проверка авторизации по QR коду с полной поддержкой 2FA.
     
     Поддерживает:
-    - Обычная проверка QR: POST /qr-check (без body)
+    - Обычная проверка QR: POST /qr-check {}
     - QR + 2FA пароль: POST /qr-check {"password": "your_2fa_password"}
     """
     try:
         # Изоляция пользователей
         user_id = await get_user_id_from_request(request)
         
-        # Извлекаем пароль из request body если передан
-        password = None
-        if qr_request and isinstance(qr_request, dict):
-            password = qr_request.get('password')
-            if password:
-                logger.info(f"🔐 QR check with 2FA password for user {user_id}")
+        # Извлекаем пароль из validated request
+        password = qr_request.password
+        if password:
+            logger.info(f"🔐 QR check with 2FA password for user {user_id}")
         
         # Передаем пароль в сервис
         result = await telegram_service.check_qr_authorization(session, user_id, password)
