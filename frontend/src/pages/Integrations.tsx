@@ -73,9 +73,10 @@ const Integrations = () => {
   const [qrCode, setQrCode] = useState('');
   
   // ✅ QR код состояния и polling
-  const [qrStatus, setQrStatus] = useState<'idle' | 'generating' | 'waiting' | 'success' | 'expired' | 'error'>('idle');
+  const [qrStatus, setQrStatus] = useState<'idle' | 'generating' | 'waiting' | '2fa_required' | 'success' | 'expired' | 'error'>('idle');
   const [qrPolling, setQrPolling] = useState(false);
   const [qrError, setQrError] = useState('');
+  const [qrPassword, setQrPassword] = useState('');
   
   // ✅ Ref для отслеживания текущего статуса polling
   const qrPollingRef = useRef(false);
