@@ -623,6 +623,7 @@ async def estimate_channel_size(channel_link: str) -> int:
 # Direct tasks endpoints (without v1 prefix) for frontend compatibility
 @app.get("/tasks", tags=["Tasks API"])
 async def list_tasks(
+    request: Request,
     platform: Optional[str] = None,
     status: Optional[str] = None,
     page: int = 1,
@@ -657,6 +658,14 @@ async def create_task(task_data: dict, request: Request):
     import uuid
     from datetime import datetime
     from app.core.parsing_speed import parse_speed_from_string, get_speed_config, calculate_estimated_time
+    
+    # ✅ JWT АВТОРИЗАЦИЯ: Получаем user_id из JWT токена
+    try:
+        user_id = await get_user_id_from_request(request)
+        logger.info(f"🔐 JWT Authorization successful: user_id={user_id}")
+    except Exception as auth_error:
+        logger.error(f"❌ JWT Authorization failed: {auth_error}")
+        raise HTTPException(status_code=401, detail=f"Authorization failed: {str(auth_error)}")
     
     # 🔍 DEBUG: Log incoming task_data to diagnose parsing_speed issue
     logger.info(f"🔍 DEBUG: Incoming task_data keys: {list(task_data.keys())}")
@@ -716,7 +725,7 @@ async def create_task(task_data: dict, request: Request):
             # Создаем объект задачи в БД
             db_task = ParseTask(
                 task_id=task_id,
-                user_id=1,  # Временное значение
+                user_id=user_id,  # ✅ JWT: Реальный user_id из токена
                 platform=PlatformEnum.TELEGRAM if task_data.get("platform", "telegram") == "telegram" else PlatformEnum.TELEGRAM,
                 task_type=task_data.get("task_type", "messages"),
                 title=f"Parse {link}",
@@ -740,7 +749,7 @@ async def create_task(task_data: dict, request: Request):
             new_task = {
                 "id": task_id,
                 "db_id": db_task.id,  # Связь с БД
-                "user_id": 1,
+                "user_id": user_id,  # ✅ JWT: Реальный user_id из токена
                 "platform": task_data.get("platform", "telegram"),
                 "link": link,
                 "task_type": task_data.get("task_type", "messages"),
