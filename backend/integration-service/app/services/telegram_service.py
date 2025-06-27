@@ -219,34 +219,35 @@ class TelegramService:
                     )
                     
                 except SessionPasswordNeededError:
-                    await client.disconnect()
+                    # ✅ КРИТИЧЕСКИ ВАЖНО: НЕ отключаем клиент! Он нужен для ввода пароля 2FA
+                    # await client.disconnect()  # Убираем отключение!
+                    
+                    # Обновляем auth session с информацией о 2FA
+                    _GLOBAL_AUTH_SESSIONS[auth_key]['requires_2fa'] = True
+                    logger.info(f"🔐 2FA required for {auth_request.phone}, client saved for password input")
+                    
                     return TelegramConnectResponse(
                         status="2fa_required",
-                        message="Требуется двухфакторная аутентификация"
+                        message="Требуется пароль двухфакторной аутентификации. Введите его в поле 'Пароль 2FA'."
                     )
                 except Exception as e:
                     error_msg = str(e)
                     logger.error(f"Error during sign_in: {e}")
                     
-                    # Очищаем сессию при ошибке
+                    # ✅ ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Проверяем RpcError на SESSION_PASSWORD_NEEDED
+                    if "SESSION_PASSWORD_NEEDED" in error_msg or "session password needed" in error_msg.lower():
+                        # Это тоже 2FA, но через RpcError
+                        _GLOBAL_AUTH_SESSIONS[auth_key]['requires_2fa'] = True
+                        logger.info(f"🔐 2FA required (RpcError) for {auth_request.phone}, client saved for password input")
+                        
+                        return TelegramConnectResponse(
+                            status="2fa_required",
+                            message="Требуется пароль двухфакторной аутентификации. Введите его в поле 'Пароль 2FA'."
+                        )
+                    
+                    # Для других ошибок - отключаем клиент и очищаем сессию
                     await client.disconnect()
                     await self._delete_auth_session(auth_key)
-                    
-                    if "confirmation code has expired" in error_msg.lower():
-                        return TelegramConnectResponse(
-                            status="code_expired",
-                            message="Код подтверждения истек. Запросите новый код"
-                        )
-                    elif "phone code invalid" in error_msg.lower():
-                        return TelegramConnectResponse(
-                            status="code_invalid",
-                            message="Неверный код. Проверьте и попробуйте еще раз"
-                        )
-                    else:
-                        return TelegramConnectResponse(
-                            status="error",
-                            message=f"Ошибка входа: {error_msg}"
-                        )
             
             # Если есть пароль для 2FA
             if auth_request.password:
