@@ -560,23 +560,44 @@ class TelegramService:
         session: AsyncSession,
         user_id: int
     ) -> TelegramConnectResponse:
-        """Проверка авторизации по QR коду"""
+        """Проверка авторизации по QR коду с правильным использованием сохраненного клиента"""
         try:
-            redis_key = f"telegram_qr_login:{user_id}"
-            token_hex = self.redis_client.get(redis_key)
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем сохраненный клиент с qr_login
+            qr_key = f"qr_{user_id}"
+            global _GLOBAL_QR_SESSIONS
             
-            if not token_hex:
+            if qr_key not in _GLOBAL_QR_SESSIONS:
                 return TelegramConnectResponse(
                     status="qr_expired",
-                    message="QR код истек. Сгенерируйте новый"
+                    message="QR код истек или не был сгенерирован. Сгенерируйте новый"
                 )
             
-            client = await self._create_client()
-            await client.connect()
+            qr_session = _GLOBAL_QR_SESSIONS[qr_key]
+            client = qr_session['client']
+            qr_login = qr_session['qr_login']
             
-            # Проверяем авторизацию
+            # Проверяем что QR сессия не устарела (максимум 5 минут)
+            current_time = int(time.time())
+            if current_time - qr_session['timestamp'] > 300:  # 5 минут
+                # Очищаем устаревшую сессию
+                await self._cleanup_qr_session(user_id)
+                return TelegramConnectResponse(
+                    status="qr_expired", 
+                    message="QR код истек (5 минут). Сгенерируйте новый"
+                )
+            
+            # ✅ ПРАВИЛЬНЫЙ QR WORKFLOW: Используем qr_login.recreate() для проверки
+            try:
+                qr_login = await qr_login.recreate()
+                logger.info(f"🔄 QR login recreated for user {user_id}")
+            except Exception as e:
+                logger.info(f"🔍 QR recreate not needed or failed: {e}")
+            
+            # Проверяем авторизацию через правильный клиент
             if await client.is_user_authorized():
-                # Пользователь авторизован
+                logger.info(f"✅ QR authorization successful for user {user_id}")
+                
+                # Пользователь авторизован через QR
                 session_string = client.session.save()
                 encrypted_session = await self._encrypt_session_data(session_string)
                 
@@ -598,10 +619,8 @@ class TelegramService:
                     details={"session_id": str(telegram_session.id), "telegram_id": me.id}
                 )
                 
-                # Удаляем токен из Redis
-                self.redis_client.delete(redis_key)
-                
-                await client.disconnect()
+                # Очищаем QR сессию и токен из Redis
+                await self._cleanup_qr_session(user_id)
                 
                 return TelegramConnectResponse(
                     status="success",
@@ -609,14 +628,16 @@ class TelegramService:
                     message="Аккаунт успешно подключен через QR код"
                 )
             else:
-                await client.disconnect()
+                logger.info(f"⏳ QR authorization pending for user {user_id}")
                 return TelegramConnectResponse(
                     status="qr_waiting",
-                    message="Ожидание авторизации по QR коду"
+                    message="Ожидание авторизации по QR коду. Отсканируйте QR код в Telegram"
                 )
                 
         except Exception as e:
-            logger.error(f"Error checking QR authorization: {e}")
+            logger.error(f"❌ Error checking QR authorization: {e}")
+            # Очищаем QR сессию при ошибке
+            await self._cleanup_qr_session(user_id)
             return TelegramConnectResponse(
                 status="error",
                 message=f"Ошибка проверки QR авторизации: {str(e)}"
@@ -728,4 +749,55 @@ class TelegramService:
                 logger.info(f"Cleaned up expired auth session: {key}")
                 
         except Exception as e:
-            logger.error(f"Error cleaning up auth sessions: {e}") 
+            logger.error(f"Error cleaning up auth sessions: {e}")
+    
+    def _cleanup_old_qr_sessions(self) -> None:
+        """Очистка старых QR sessions для предотвращения утечек памяти"""
+        try:
+            global _GLOBAL_QR_SESSIONS
+            current_time = int(time.time())
+            expired_keys = []
+            
+            for qr_key, qr_data in _GLOBAL_QR_SESSIONS.items():
+                # Удаляем QR сессии старше 6 минут (QR код живет 5 минут + буфер)
+                if current_time - qr_data.get('timestamp', 0) > 360:
+                    expired_keys.append(qr_key)
+            
+            for key in expired_keys:
+                if 'client' in _GLOBAL_QR_SESSIONS[key]:
+                    try:
+                        # НЕ используем await здесь так как это sync метод
+                        # Клиент отключится автоматически через timeout
+                        pass
+                    except:
+                        pass
+                del _GLOBAL_QR_SESSIONS[key]
+                logger.info(f"🧹 Cleaned up expired QR session: {key}")
+                
+        except Exception as e:
+            logger.error(f"❌ Error cleaning up QR sessions: {e}")
+    
+    async def _cleanup_qr_session(self, user_id: int) -> None:
+        """Очистка конкретной QR сессии пользователя"""
+        try:
+            qr_key = f"qr_{user_id}"
+            global _GLOBAL_QR_SESSIONS
+            
+            # Отключаем клиент если есть
+            if qr_key in _GLOBAL_QR_SESSIONS:
+                if 'client' in _GLOBAL_QR_SESSIONS[qr_key]:
+                    try:
+                        await _GLOBAL_QR_SESSIONS[qr_key]['client'].disconnect()
+                        logger.info(f"🔌 Disconnected QR client for user {user_id}")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error disconnecting QR client: {e}")
+                del _GLOBAL_QR_SESSIONS[qr_key]
+            
+            # Удаляем из Redis
+            redis_key = f"telegram_qr_login:{user_id}"
+            self.redis_client.delete(redis_key)
+            
+            logger.info(f"🧹 Cleaned up QR session for user {user_id}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error cleaning up QR session for user {user_id}: {e}") 
