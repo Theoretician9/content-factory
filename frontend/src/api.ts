@@ -273,9 +273,9 @@ export const parsingApi = {
           searchParams.append(key, value.toString());
         }
       });
-      // Увеличенный таймаут для поиска сообществ (60 секунд)
+      // Увеличенный таймаут для поиска сообществ (120 секунд для FloodWait)
       return apiFetch(`/api/parsing/search?${searchParams}`, {
-        timeout: 60000 // 60 секунд
+        timeout: 120000 // 120 секунд (2 минуты)
       });
     }
   },
