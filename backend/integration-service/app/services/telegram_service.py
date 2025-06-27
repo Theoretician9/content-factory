@@ -947,6 +947,13 @@ class TelegramService:
                     logger.info(f"🔐 DEBUG: RpcError response: {response.status} - {response.message}")
                     return response
                 
+                # Для других ошибок - очищаем QR сессию
+                await self._cleanup_qr_session(user_id)
+                return TelegramConnectResponse(
+                    status="error",
+                    message=f"Ошибка проверки QR авторизации: {str(e)}"
+                )
+            
         except Exception as e:
             logger.error(f"❌ Error checking QR authorization: {e}")
             # Очищаем QR сессию при ошибке
