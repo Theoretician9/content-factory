@@ -503,19 +503,37 @@ class TelegramService:
             return False
     
     async def generate_qr_code(self, user_id: int) -> str:
-        """Генерация QR кода для входа"""
+        """Генерация QR кода для входа с правильным сохранением клиента"""
         try:
+            # Очищаем старые QR сессии
+            self._cleanup_old_qr_sessions()
+            
             client = await self._create_client()
             await client.connect()
             
-            # Получаем QR код для входа (добавляем await)
+            # Получаем QR код для входа
             qr_login = await client.qr_login()
             
-            # Сохраняем qr_login в Redis для последующей проверки авторизации
-            redis_key = f"telegram_qr_login:{user_id}"
-            self.redis_client.setex(redis_key, 300, str(qr_login.token.hex()))  # 5 минут
+            # ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сохраняем весь клиент с qr_login объектом
+            qr_key = f"qr_{user_id}"
+            global _GLOBAL_QR_SESSIONS
+            _GLOBAL_QR_SESSIONS[qr_key] = {
+                'client': client,
+                'qr_login': qr_login,
+                'user_id': user_id,
+                'timestamp': int(time.time())
+            }
             
-            logger.info(f"Generated QR code for user {user_id}, token saved to Redis")
+            # Также сохраняем токен в Redis для проверки timeout
+            redis_key = f"telegram_qr_login:{user_id}"
+            qr_data = {
+                'token': qr_login.token.hex(),
+                'timestamp': int(time.time()),
+                'user_id': user_id
+            }
+            self.redis_client.setex(redis_key, 300, json.dumps(qr_data))  # 5 минут
+            
+            logger.info(f"🔑 Generated QR code for user {user_id}, client и qr_login сохранены в памяти")
             
             # Создаем QR код
             qr = qrcode.QRCode(version=1, box_size=10, border=5)
@@ -528,12 +546,13 @@ class TelegramService:
             img.save(buffer, format='PNG')
             qr_code_base64 = base64.b64encode(buffer.getvalue()).decode()
             
-            await client.disconnect()
+            # ✅ НЕ ОТКЛЮЧАЕМ КЛИЕНТ! Он нужен для проверки авторизации
+            # await client.disconnect()  # Убираем эту строку!
             
             return qr_code_base64
             
         except Exception as e:
-            logger.error(f"Error generating QR code: {e}")
+            logger.error(f"❌ Error generating QR code: {e}")
             raise
     
     async def check_qr_authorization(
