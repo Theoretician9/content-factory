@@ -401,6 +401,15 @@ async def execute_real_parsing_with_account_manager(task, assigned_account_id: s
         
         logger.info(f"⚡ Using parsing speed: {speed_config.name} ({parsing_speed.value})")
         logger.info(f"⚡ Speed settings: {speed_config.user_request_delay}s user delay, {speed_config.user_requests_per_minute} req/min")
+
+        # 🔍 DEBUG: Log extracted speed configuration details
+        logger.info(f"🔍 DEBUG: task.get('settings'): {repr(task.get('settings'))}")
+        logger.info(f"🔍 DEBUG: extracted speed_str: {repr(speed_str)}")
+        logger.info(f"🔍 DEBUG: parsed parsing_speed: {parsing_speed.value}")
+        logger.info(f"🔍 DEBUG: speed_config object: name={speed_config.name}, user_delay={speed_config.user_request_delay}")
+        
+        logger.info(f"⚡ Using parsing speed: {speed_config.name} ({parsing_speed.value})")
+        logger.info(f"⚡ Speed settings: {speed_config.user_request_delay}s user delay, {speed_config.user_requests_per_minute} req/min")
         
         # Update task status
         task["status"] = "running"
