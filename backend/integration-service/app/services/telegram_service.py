@@ -761,13 +761,12 @@ class TelegramService:
                     logger.info(f"🔐 QR 2FA: Используем сохраненный клиент для ввода пароля user_id={user_id}")
                     
                     # Проверяем подключение клиента
-                    if not client.is_user_authorized():
-                        logger.info(f"⏳ QR authorization pending for user {user_id}")
-                        logger.info(f"�� DEBUG: Returning qr_waiting status because client.is_user_authorized() = False")
-                        return TelegramConnectResponse(
-                            status="qr_waiting",
-                            message="Ожидание авторизации по QR коду. Отсканируйте QR код в Telegram"
-                        )
+                    if not client.is_connected():
+                        logger.info(f"🔌 QR 2FA client disconnected, reconnecting...")
+                        await client.connect()
+                    
+                    # Вводим пароль 2FA
+                    await client.sign_in(password=password)
                     
                     # Получаем информацию о пользователе
                     me = await client.get_me()
