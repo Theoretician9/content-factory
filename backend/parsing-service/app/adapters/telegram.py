@@ -669,11 +669,19 @@ class TelegramAdapter(BasePlatformAdapter):
             }
 
     def _sanitize_datetime_objects(self, obj):
-        """Recursively convert datetime objects to ISO strings for JSON serialization."""
+        """Recursively convert datetime and bytes objects for JSON serialization."""
         from datetime import datetime
+        import base64
         
         if isinstance(obj, datetime):
             return obj.isoformat()
+        elif isinstance(obj, bytes):
+            # Convert bytes to base64 string for JSON serialization
+            try:
+                return base64.b64encode(obj).decode('utf-8')
+            except Exception:
+                # If base64 encoding fails, convert to hex string
+                return obj.hex()
         elif isinstance(obj, dict):
             return {key: self._sanitize_datetime_objects(value) for key, value in obj.items()}
         elif isinstance(obj, list):
