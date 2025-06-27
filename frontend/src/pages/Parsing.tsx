@@ -117,7 +117,7 @@ const Parsing = () => {
     platform: 'telegram' as const,
     query: '',
     offset: 0,
-    limit: 100
+    limit: 10
   });
   const [searchResults, setSearchResults] = useState<CommunitySearchResult[]>([]);
   const [searching, setSearching] = useState(false);
