@@ -80,7 +80,7 @@ const Integrations = () => {
   
   // ✅ Ref для отслеживания текущего статуса polling
   const qrPollingRef = useRef(false);
-  const qrStatusRef = useRef<'idle' | 'generating' | 'waiting' | 'success' | 'expired' | 'error'>('idle');
+  const qrStatusRef = useRef<'idle' | 'generating' | 'waiting' | '2fa_required' | 'success' | 'expired' | 'error'>('idle');
   
   // Подключение бота
   const [botForm, setBotForm] = useState({
@@ -363,6 +363,30 @@ const Integrations = () => {
     }
   };
 
+  // ✅ ФУНКЦИЯ ОТПРАВКИ QR ПАРОЛЯ  
+  const handleQRPassword = async () => {
+    if (!qrPassword.trim()) {
+      setQrError('Введите пароль 2FA');
+      return;
+    }
+
+    setQrError('');
+    console.log('🔐 Submitting QR 2FA password...');
+    
+    try {
+      const success = await checkQRAuthorization(qrPassword);
+      if (!success) {
+        // Если не удалось, проверяем текущий статус
+        if (qrStatusRef.current === 'error') {
+          setQrError('Неверный пароль 2FA');
+        }
+      }
+    } catch (err) {
+      console.error('Error submitting QR password:', err);
+      setQrError('Ошибка при отправке пароля');
+    }
+  };
+
   const handleDisconnectAccount = async (sessionId: string) => {
     if (!confirm('Вы уверены, что хотите отключить этот аккаунт?')) return;
 
@@ -385,6 +409,7 @@ const Integrations = () => {
     });
     setConnectError('');
     setQrCode('');
+    setQrPassword(''); // ✅ Сбрасываем QR пароль
     // ✅ Сброс QR состояний и ref
     qrStatusRef.current = 'idle';
     qrPollingRef.current = false;
@@ -740,6 +765,61 @@ const Integrations = () => {
                               🔄 Автоматическая проверка каждые 3 секунды...
                             </div>
                           )}
+                        </div>
+                      )}
+
+                      {qrStatus === '2fa_required' && (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                              </svg>
+                            </div>
+                            <span className="text-blue-700 dark:text-blue-300 font-medium">
+                              🔐 QR код отсканирован! Теперь введите пароль двухфакторной аутентификации
+                            </span>
+                          </div>
+                          
+                          <div className="max-w-sm mx-auto space-y-3">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Пароль 2FA
+                              </label>
+                              <input
+                                type="password"
+                                placeholder="Введите пароль двухфакторной аутентификации"
+                                value={qrPassword}
+                                onChange={(e) => setQrPassword(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && handleQRPassword()}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                                autoComplete="current-password"
+                              />
+                            </div>
+                            
+                            {qrError && (
+                              <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded">
+                                {qrError}
+                              </div>
+                            )}
+                            
+                            <div className="flex gap-2 justify-center">
+                              <Button 
+                                onClick={handleQRPassword} 
+                                size="sm"
+                                disabled={!qrPassword.trim()}
+                              >
+                                Подтвердить
+                              </Button>
+                              <Button 
+                                onClick={resetConnectForm} 
+                                variant="secondary" 
+                                size="sm"
+                              >
+                                Отмена
+                              </Button>
+                            </div>
+                          </div>
                         </div>
                       )}
 
