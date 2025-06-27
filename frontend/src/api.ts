@@ -27,36 +27,47 @@ export async function apiFetch(url: string, options: ExtendedRequestInit = {}) {
     clearTimeout(timeoutId); // Очищаем таймаут если запрос успешен
     
     if (res.status === 401 && refreshToken) {
-    // Попробовать refresh
-    const refreshRes = await fetch('/api/auth/refresh', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-      credentials: 'include'
-    });
-    if (refreshRes.ok) {
-      const data = await refreshRes.json();
-      localStorage.setItem('access_token', data.access_token);
-      localStorage.setItem('refresh_token', data.refresh_token);
-      // Повторить исходный запрос с новым access_token
-      const retryHeaders = {
-        ...headers,
-        Authorization: `Bearer ${data.access_token}`
-      };
-      res = await fetch(url, { 
-        ...options, 
-        headers: retryHeaders,
+      // Попробовать refresh
+      const refreshRes = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
         credentials: 'include'
       });
-    } else {
-      // refresh не удался — logout
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      window.location.href = '/login?expired=1';
-      throw new Error('Session expired');
+      if (refreshRes.ok) {
+        const data = await refreshRes.json();
+        localStorage.setItem('access_token', data.access_token);
+        localStorage.setItem('refresh_token', data.refresh_token);
+        // Повторить исходный запрос с новым access_token
+        const retryHeaders = {
+          ...headers,
+          Authorization: `Bearer ${data.access_token}`
+        };
+        res = await fetch(url, { 
+          ...options, 
+          headers: retryHeaders,
+          credentials: 'include'
+        });
+      } else {
+        // refresh не удался — logout
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        window.location.href = '/login?expired=1';
+        throw new Error('Session expired');
+      }
     }
+    return res;
+  } catch (error: any) {
+    clearTimeout(timeoutId); // Очищаем таймаут при ошибке
+    
+    // Обработка ошибки таймаута
+    if (error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${options.timeout || 30000}ms`);
+    }
+    
+    // Прочие ошибки
+    throw error;
   }
-  return res;
 }
 
 // Централизованные функции для микросервисов
