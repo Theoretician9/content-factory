@@ -757,9 +757,9 @@ class TelegramAdapter(BasePlatformAdapter):
         
         return target
     
-    async def search_communities(self, query: str, offset: int = 0, limit: int = 10, **kwargs) -> Dict[str, Any]:
+    async def search_communities(self, query: str, offset: int = 0, limit: int = 10, progress_callback=None, speed_config=None, **kwargs) -> Dict[str, Any]:
         """
-        Search for Telegram communities (channels/groups) by keywords.
+        Search for Telegram communities (channels/groups) by keywords with progress tracking.
         
         Filters: Only open channels with comments enabled OR open groups
         Sorting: By member count descending (largest first)
@@ -768,6 +768,19 @@ class TelegramAdapter(BasePlatformAdapter):
         
         if not self.client:
             raise Exception("Telegram client not authenticated")
+        
+        # Apply speed configuration defaults if not provided
+        if speed_config:
+            search_delay = speed_config.message_delay  # Use message_delay for API requests
+            method_delay = speed_config.user_request_delay  # Delay between methods
+            batch_size = speed_config.batch_size
+            self.logger.info(f"⚡ Search speed: {search_delay}s API delay, {method_delay}s method delay, batch {batch_size}")
+        else:
+            # Default search speed settings (medium)
+            search_delay = 1.0  # 1 second between API requests
+            method_delay = 2.0  # 2 seconds between search methods
+            batch_size = 10
+            self.logger.info("⚡ Using default search speed settings")
         
         try:
             from telethon.tl.functions.contacts import SearchRequest
@@ -793,32 +806,81 @@ class TelegramAdapter(BasePlatformAdapter):
             
             self.logger.info(f"🔍 Searching with {len(search_queries)} query variations: {search_queries[:3]}...")
             
+            # Progress tracking setup
+            total_steps = min(len(search_queries), 5) * 3  # Max 5 queries * 3 search methods
+            current_step = 0
+            
+            # Update initial progress
+            if progress_callback:
+                try:
+                    await progress_callback(current_step, total_steps)
+                except Exception as e:
+                    self.logger.debug(f"Progress callback error: {e}")
+            
             # Try different search approaches to get more results
-            for search_query in search_queries[:5]:  # Limit to avoid too many API calls
+            for search_index, search_query in enumerate(search_queries[:5]):  # Limit to avoid too many API calls
+                if search_index > 0:
+                    # Rate limiting between different queries
+                    self.logger.info(f"⏳ Pausing {search_delay}s before next query variation...")
+                    await asyncio.sleep(search_delay)
+                
                 search_methods = [
                     # Method 1: Global search for channels
-                    self._search_global_channels(search_query),
+                    ("contacts_search", self._search_global_channels_with_progress(search_query, progress_callback)),
                     # Method 2: Search in dialogs  
-                    self._search_dialogs(search_query),
+                    ("dialogs_search", self._search_dialogs_with_progress(search_query, progress_callback)),
                     # Method 3: Global search (newer API)
-                    self._search_global_new(search_query),
+                    ("global_search", self._search_global_new_with_progress(search_query, progress_callback)),
                 ]
                 
-                for search_method in search_methods:
+                for method_index, (method_name, search_method) in enumerate(search_methods):
                     try:
+                        current_step += 1
+                        self.logger.info(f"📡 Step {current_step}/{total_steps}: {method_name} for '{search_query}'")
+                        
+                        # Progress update before each method
+                        if progress_callback:
+                            try:
+                                await progress_callback(current_step - 1, total_steps)
+                            except Exception as e:
+                                self.logger.debug(f"Progress callback error: {e}")
+                        
                         method_results = await search_method
                         search_results.extend(method_results)
                         
+                        self.logger.info(f"✅ {method_name} found {len(method_results)} results (total: {len(search_results)})")
+                        
+                        # Rate limiting between search methods
+                        if method_index < len(search_methods) - 1:
+                            await asyncio.sleep(method_delay)
+                        
                         # Break if we have enough results to avoid rate limiting
                         if len(search_results) > 100:
+                            self.logger.info(f"🛑 Found enough results ({len(search_results)}), stopping search")
                             break
+                            
+                    except FloodWaitError as e:
+                        self.logger.warning(f"⏳ FloodWait {e.seconds}s for {method_name} on '{search_query}'")
+                        try:
+                            # Protected FloodWait with progress updates
+                            wait_time = e.seconds + 1
+                            for wait_step in range(0, wait_time, 5):  # Update progress every 5 seconds
+                                remaining = wait_time - wait_step
+                                self.logger.info(f"⏳ FloodWait: {remaining}s remaining...")
+                                await asyncio.sleep(min(5, remaining))
+                        except asyncio.CancelledError:
+                            self.logger.warning(f"⚠️ FloodWait cancelled during {e.seconds}s wait")
+                            raise
                     except Exception as e:
-                        self.logger.debug(f"Search method failed for '{search_query}': {e}")
+                        self.logger.debug(f"Search method {method_name} failed for '{search_query}': {e}")
                         continue
                 
                 # Break if we have enough results
                 if len(search_results) > 100:
                     break
+            
+            # Processing results with progress
+            self.logger.info(f"🔄 Processing {len(search_results)} raw results...")
             
             # Remove duplicates by username/id
             unique_results = {}
@@ -835,6 +897,13 @@ class TelegramAdapter(BasePlatformAdapter):
             # Apply pagination
             paginated_results = all_results[offset:offset + limit]
             has_more = len(all_results) > offset + limit
+            
+            # Final progress update
+            if progress_callback:
+                try:
+                    await progress_callback(total_steps, total_steps)  # 100% complete
+                except Exception as e:
+                    self.logger.debug(f"Progress callback error: {e}")
             
             self.logger.info(f"✅ Found {len(all_results)} total communities, returning {len(paginated_results)} (has_more: {has_more})")
             
