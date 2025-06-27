@@ -917,65 +917,148 @@ class TelegramAdapter(BasePlatformAdapter):
             self.logger.error(f"❌ Failed to search Telegram communities: {e}")
             raise
     
-    async def _search_global_channels(self, query: str) -> List[Dict[str, Any]]:
-        """Search for global channels using SearchRequest."""
+    async def _search_global_channels_with_progress(self, query: str, progress_callback=None) -> List[Dict[str, Any]]:
+        """Search for global channels using SearchRequest with progress tracking."""
         try:
             from telethon.tl.functions.contacts import SearchRequest
             from telethon.tl.types import Channel, Chat
             
-            # Use contacts search for public entities
-            search_result = await self.client(SearchRequest(
-                q=query,
-                limit=200  # Increased from 50 to get more results
-            ))
+            self.logger.info(f"📡 Contacts search starting for: '{query}'")
+            
+            # Use contacts search for public entities with FloodWait protection
+            try:
+                search_result = await self.client(SearchRequest(
+                    q=query,
+                    limit=200  # Increased from 50 to get more results
+                ))
+            except FloodWaitError as e:
+                self.logger.warning(f"⏳ FloodWait {e.seconds}s in contacts search for '{query}'")
+                try:
+                    wait_time = e.seconds + 1
+                    for wait_step in range(0, wait_time, 5):
+                        remaining = wait_time - wait_step
+                        self.logger.info(f"⏳ Contacts search FloodWait: {remaining}s remaining...")
+                        await asyncio.sleep(min(5, remaining))
+                    
+                    # Retry after FloodWait
+                    search_result = await self.client(SearchRequest(
+                        q=query,
+                        limit=200
+                    ))
+                except asyncio.CancelledError:
+                    self.logger.warning(f"⚠️ Contacts search FloodWait cancelled during {e.seconds}s wait")
+                    return []
             
             results = []
-            for user in search_result.users:
-                # Skip regular users, only process channels/groups
-                continue
-                
+            processed_chats = 0
+            total_chats = len(search_result.chats)
+            
+            self.logger.info(f"📊 Processing {total_chats} chats from contacts search")
+            
             for chat in search_result.chats:
                 if isinstance(chat, (Channel, Chat)):
-                    community_data = await self._extract_community_data(chat)
-                    if community_data:
-                        results.append(community_data)
+                    try:
+                        community_data = await self._extract_community_data(chat)
+                        if community_data:
+                            results.append(community_data)
+                            processed_chats += 1
+                            
+                            if processed_chats % 5 == 0:  # Log every 5 processed
+                                self.logger.info(f"📈 Contacts search: processed {processed_chats}/{total_chats} communities")
+                    
+                    except FloodWaitError as e:
+                        self.logger.warning(f"⏳ FloodWait {e.seconds}s while extracting community data")
+                        try:
+                            await asyncio.sleep(e.seconds + 1)
+                        except asyncio.CancelledError:
+                            self.logger.warning(f"⚠️ Community extraction FloodWait cancelled")
+                            break
+                    except Exception as e:
+                        self.logger.debug(f"Failed to extract community data: {e}")
+                        continue
             
+            self.logger.info(f"✅ Contacts search completed: {len(results)} valid communities found")
             return results
             
         except Exception as e:
-            self.logger.debug(f"Global search failed: {e}")
+            self.logger.debug(f"Contacts search failed: {e}")
             return []
+
+    async def _search_global_channels(self, query: str) -> List[Dict[str, Any]]:
+        """Search for global channels using SearchRequest (legacy method)."""
+        return await self._search_global_channels_with_progress(query, None)
     
-    async def _search_dialogs(self, query: str) -> List[Dict[str, Any]]:
-        """Search through user's dialogs for matching communities."""
+    async def _search_dialogs_with_progress(self, query: str, progress_callback=None) -> List[Dict[str, Any]]:
+        """Search through user's dialogs for matching communities with progress tracking."""
         try:
             from telethon.tl.types import Channel, Chat
             
             results = []
             query_lower = query.lower()
+            processed_dialogs = 0
+            
+            self.logger.info(f"📡 Dialog search starting for: '{query}'")
             
             # Get user's dialogs and filter by query - increased limit
-            async for dialog in self.client.iter_dialogs(limit=500):
-                entity = dialog.entity
-                
-                if isinstance(entity, (Channel, Chat)):
-                    # Check if title or username matches query
-                    title = getattr(entity, 'title', '').lower()
-                    username = getattr(entity, 'username', '').lower()
+            try:
+                async for dialog in self.client.iter_dialogs(limit=500):
+                    entity = dialog.entity
+                    processed_dialogs += 1
                     
-                    if (query_lower in title or 
-                        query_lower in username or
-                        (hasattr(entity, 'title') and any(word in title for word in query_lower.split()))):
+                    if isinstance(entity, (Channel, Chat)):
+                        # Check if title or username matches query
+                        title = getattr(entity, 'title', '').lower()
+                        username = getattr(entity, 'username', '').lower()
                         
-                        community_data = await self._extract_community_data(entity)
-                        if community_data:
-                            results.append(community_data)
+                        if (query_lower in title or 
+                            query_lower in username or
+                            (hasattr(entity, 'title') and any(word in title for word in query_lower.split()))):
+                            
+                            try:
+                                community_data = await self._extract_community_data(entity)
+                                if community_data:
+                                    results.append(community_data)
+                                    self.logger.info(f"🎯 Dialog match found: {title}")
+                            
+                            except FloodWaitError as e:
+                                self.logger.warning(f"⏳ FloodWait {e.seconds}s while processing dialog: {title}")
+                                try:
+                                    await asyncio.sleep(e.seconds + 1)
+                                    # Retry after FloodWait
+                                    community_data = await self._extract_community_data(entity)
+                                    if community_data:
+                                        results.append(community_data)
+                                except asyncio.CancelledError:
+                                    self.logger.warning(f"⚠️ Dialog processing FloodWait cancelled")
+                                    break
+                            except Exception as e:
+                                self.logger.debug(f"Failed to process dialog {title}: {e}")
+                                continue
+                    
+                    # Log progress every 50 dialogs
+                    if processed_dialogs % 50 == 0:
+                        self.logger.info(f"📈 Dialog search: processed {processed_dialogs} dialogs, found {len(results)} matches")
+                        
+                        # Small delay to avoid overwhelming API
+                        await asyncio.sleep(0.1)
             
+            except FloodWaitError as e:
+                self.logger.warning(f"⏳ FloodWait {e.seconds}s during dialog iteration")
+                try:
+                    await asyncio.sleep(e.seconds + 1)
+                except asyncio.CancelledError:
+                    self.logger.warning(f"⚠️ Dialog iteration FloodWait cancelled")
+            
+            self.logger.info(f"✅ Dialog search completed: {len(results)} matches found from {processed_dialogs} dialogs")
             return results
             
         except Exception as e:
             self.logger.debug(f"Dialog search failed: {e}")
             return []
+
+    async def _search_dialogs(self, query: str) -> List[Dict[str, Any]]:
+        """Search through user's dialogs for matching communities (legacy method)."""
+        return await self._search_dialogs_with_progress(query, None)
     
     async def _search_global_new(self, query: str) -> List[Dict[str, Any]]:
         """Search using SearchGlobalRequest for broader results."""
