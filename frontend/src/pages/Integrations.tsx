@@ -248,9 +248,9 @@ const Integrations = () => {
   };
 
   // ✅ ФУНКЦИЯ ПРОВЕРКИ QR АВТОРИЗАЦИИ
-  const checkQRAuthorization = async () => {
+  const checkQRAuthorization = async (password?: string) => {
     try {
-      const res = await integrationApi.telegram.checkQRAuthorization();
+      const res = await integrationApi.telegram.checkQRAuthorization(password);
       if (res.ok) {
         const data = await res.json();
         console.log('🔍 QR check response:', data);
@@ -263,6 +263,14 @@ const Integrations = () => {
           setConnectForm(prev => ({ ...prev, step: 'success' }));
           loadData(); // Перезагружаем список аккаунтов
           return true;
+        } else if (data.status === '2fa_required') {
+          qrStatusRef.current = '2fa_required';
+          qrPollingRef.current = false;
+          setQrStatus('2fa_required');
+          setQrPolling(false);
+          setQrError(''); // Очищаем ошибки
+          console.log('🔐 QR 2FA required, showing password field');
+          return false;
         } else if (data.status === 'qr_expired') {
           qrStatusRef.current = 'expired';
           qrPollingRef.current = false;
