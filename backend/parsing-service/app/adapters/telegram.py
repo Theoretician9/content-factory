@@ -738,17 +738,242 @@ class TelegramAdapter(BasePlatformAdapter):
             self.client = None
     
     def normalize_target(self, target: str) -> str:
-        """Normalize Telegram target identifier."""
+        """Normalize Telegram target format."""
         target = target.strip()
         
-        # Remove t.me/ prefix if present
+        # Remove various prefixes
         if target.startswith('https://t.me/'):
-            target = target.replace('https://t.me/', '')
+            target = target[13:]
+        elif target.startswith('http://t.me/'):
+            target = target[12:]
         elif target.startswith('t.me/'):
-            target = target.replace('t.me/', '')
+            target = target[5:]
+        elif target.startswith('@'):
+            target = target[1:]
         
-        # Keep @ prefix for Telegram
-        if not target.startswith('@') and not target.isdigit():
-            target = '@' + target
+        # Remove any additional parameters
+        if '?' in target:
+            target = target.split('?')[0]
         
-        return target 
+        return target
+    
+    async def search_communities(self, query: str, offset: int = 0, limit: int = 10, **kwargs) -> Dict[str, Any]:
+        """
+        Search for Telegram communities (channels/groups) by keywords.
+        
+        Filters: Only open channels with comments enabled OR open groups
+        Sorting: By member count descending (largest first)
+        """
+        self.logger.info(f"🔍 Searching Telegram communities for query: '{query}' (offset={offset}, limit={limit})")
+        
+        if not self.client:
+            raise Exception("Telegram client not authenticated")
+        
+        try:
+            from telethon.tl.functions.contacts import SearchRequest
+            from telethon.tl.types import Channel, Chat
+            
+            results = []
+            search_results = []
+            
+            # Try different search approaches to get more results
+            search_methods = [
+                # Method 1: Global search for channels
+                self._search_global_channels(query),
+                # Method 2: Search in dialogs
+                self._search_dialogs(query),
+            ]
+            
+            for search_method in search_methods:
+                try:
+                    method_results = await search_method
+                    search_results.extend(method_results)
+                except Exception as e:
+                    self.logger.warning(f"Search method failed: {e}")
+                    continue
+            
+            # Remove duplicates by username/id
+            unique_results = {}
+            for result in search_results:
+                key = result.get('username') or result.get('platform_id')
+                if key and key not in unique_results:
+                    unique_results[key] = result
+            
+            all_results = list(unique_results.values())
+            
+            # Sort by member count descending (largest first)
+            all_results.sort(key=lambda x: x.get('members_count', 0), reverse=True)
+            
+            # Apply pagination
+            paginated_results = all_results[offset:offset + limit]
+            has_more = len(all_results) > offset + limit
+            
+            self.logger.info(f"✅ Found {len(all_results)} total communities, returning {len(paginated_results)} (has_more: {has_more})")
+            
+            return {
+                'results': paginated_results,
+                'has_more': has_more,
+                'total_found': len(all_results)
+            }
+            
+        except Exception as e:
+            self.logger.error(f"❌ Failed to search Telegram communities: {e}")
+            raise
+    
+    async def _search_global_channels(self, query: str) -> List[Dict[str, Any]]:
+        """Search for global channels using SearchGlobalRequest."""
+        try:
+            from telethon.tl.functions.contacts import SearchRequest
+            from telethon.tl.types import Channel, Chat
+            
+            # Use contacts search for public entities
+            search_result = await self.client(SearchRequest(
+                q=query,
+                limit=50  # Search more to filter later
+            ))
+            
+            results = []
+            for user in search_result.users:
+                # Skip regular users, only process channels/groups
+                continue
+                
+            for chat in search_result.chats:
+                if isinstance(chat, (Channel, Chat)):
+                    community_data = await self._extract_community_data(chat)
+                    if community_data:
+                        results.append(community_data)
+            
+            return results
+            
+        except Exception as e:
+            self.logger.debug(f"Global search failed: {e}")
+            return []
+    
+    async def _search_dialogs(self, query: str) -> List[Dict[str, Any]]:
+        """Search through user's dialogs for matching communities."""
+        try:
+            from telethon.tl.types import Channel, Chat
+            
+            results = []
+            query_lower = query.lower()
+            
+            # Get user's dialogs and filter by query
+            async for dialog in self.client.iter_dialogs(limit=200):
+                entity = dialog.entity
+                
+                if isinstance(entity, (Channel, Chat)):
+                    # Check if title or username matches query
+                    title = getattr(entity, 'title', '').lower()
+                    username = getattr(entity, 'username', '').lower()
+                    
+                    if (query_lower in title or 
+                        query_lower in username or
+                        (hasattr(entity, 'title') and any(word in title for word in query_lower.split()))):
+                        
+                        community_data = await self._extract_community_data(entity)
+                        if community_data:
+                            results.append(community_data)
+            
+            return results
+            
+        except Exception as e:
+            self.logger.debug(f"Dialog search failed: {e}")
+            return []
+    
+    async def _extract_community_data(self, entity) -> Optional[Dict[str, Any]]:
+        """Extract community data from Telegram entity with filtering."""
+        try:
+            from telethon.tl.types import Channel, Chat
+            from telethon.tl.functions.channels import GetFullChannelRequest
+            from telethon.tl.functions.messages import GetFullChatRequest
+            
+            if not isinstance(entity, (Channel, Chat)):
+                return None
+            
+            # Basic entity info
+            title = getattr(entity, 'title', 'Unnamed')
+            username = getattr(entity, 'username', None)
+            entity_id = getattr(entity, 'id', None)
+            
+            if not entity_id:
+                return None
+            
+            # Apply filters - only open communities
+            if isinstance(entity, Channel):
+                # Channel filtering
+                if hasattr(entity, 'broadcast') and entity.broadcast:
+                    # This is a broadcast channel - check if comments are enabled
+                    if not hasattr(entity, 'megagroup') or not entity.megagroup:
+                        # Regular channel - skip if no comments (we need open comments)
+                        try:
+                            full_channel = await self.client(GetFullChannelRequest(entity))
+                            # Check if channel has discussion group (comments enabled)
+                            if not hasattr(full_channel.full_chat, 'linked_chat_id') or not full_channel.full_chat.linked_chat_id:
+                                self.logger.debug(f"Skipping channel {title} - no comments enabled")
+                                return None
+                        except:
+                            # If we can't check, skip to be safe
+                            return None
+                
+                # Skip private channels
+                if hasattr(entity, 'access_hash') and not entity.access_hash:
+                    return None
+                
+                # Get detailed channel info
+                try:
+                    full_channel = await self.client(GetFullChannelRequest(entity))
+                    participants_count = getattr(full_channel.full_chat, 'participants_count', 0)
+                    about = getattr(full_channel.full_chat, 'about', '')
+                except:
+                    participants_count = 0
+                    about = ''
+                
+            elif isinstance(entity, Chat):
+                # Group filtering - skip private groups
+                if hasattr(entity, 'access_hash') and not entity.access_hash:
+                    return None
+                
+                # Get detailed chat info
+                try:
+                    full_chat = await self.client(GetFullChatRequest(entity.id))
+                    participants_count = getattr(full_chat.full_chat, 'participants_count', 0)
+                    about = getattr(full_chat.full_chat, 'about', '')
+                except:
+                    participants_count = getattr(entity, 'participants_count', 0)
+                    about = ''
+            
+            # Generate community link
+            if username:
+                link = f"https://t.me/{username}"
+            else:
+                # For private groups/channels without username, use invite link format
+                link = f"https://t.me/c/{entity_id}"
+            
+            community_data = {
+                'platform': 'telegram',
+                'platform_id': str(entity_id),
+                'title': title,
+                'username': username,
+                'description': about[:200] if about else None,  # Limit description length
+                'members_count': participants_count,
+                'link': link,
+                'platform_specific_data': {
+                    'entity_type': 'channel' if isinstance(entity, Channel) else 'group',
+                    'is_megagroup': getattr(entity, 'megagroup', False),
+                    'is_broadcast': getattr(entity, 'broadcast', False),
+                    'verified': getattr(entity, 'verified', False),
+                    'restricted': getattr(entity, 'restricted', False)
+                }
+            }
+            
+            # Additional filtering - only include communities with decent member count
+            if participants_count < 10:  # Skip very small communities
+                self.logger.debug(f"Skipping {title} - too few members ({participants_count})")
+                return None
+            
+            self.logger.debug(f"✅ Found community: {title} (@{username}) - {participants_count} members")
+            return community_data
+            
+        except Exception as e:
+            self.logger.debug(f"Failed to extract community data: {e}")
+            return None 
