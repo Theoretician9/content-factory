@@ -849,7 +849,7 @@ class TelegramAdapter(BasePlatformAdapter):
             raise
     
     async def _search_global_channels(self, query: str) -> List[Dict[str, Any]]:
-        """Search for global channels using SearchGlobalRequest."""
+        """Search for global channels using SearchRequest."""
         try:
             from telethon.tl.functions.contacts import SearchRequest
             from telethon.tl.types import Channel, Chat
@@ -857,7 +857,7 @@ class TelegramAdapter(BasePlatformAdapter):
             # Use contacts search for public entities
             search_result = await self.client(SearchRequest(
                 q=query,
-                limit=50  # Search more to filter later
+                limit=200  # Increased from 50 to get more results
             ))
             
             results = []
