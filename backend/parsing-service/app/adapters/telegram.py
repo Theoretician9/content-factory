@@ -885,8 +885,8 @@ class TelegramAdapter(BasePlatformAdapter):
             results = []
             query_lower = query.lower()
             
-            # Get user's dialogs and filter by query
-            async for dialog in self.client.iter_dialogs(limit=200):
+            # Get user's dialogs and filter by query - increased limit
+            async for dialog in self.client.iter_dialogs(limit=500):
                 entity = dialog.entity
                 
                 if isinstance(entity, (Channel, Chat)):
@@ -908,6 +908,81 @@ class TelegramAdapter(BasePlatformAdapter):
             self.logger.debug(f"Dialog search failed: {e}")
             return []
     
+    async def _search_global_new(self, query: str) -> List[Dict[str, Any]]:
+        """Search using SearchGlobalRequest for broader results."""
+        try:
+            from telethon.tl.functions.messages import SearchGlobalRequest
+            from telethon.tl.types import Channel, Chat, InputMessagesFilterEmpty
+            
+            # Use global search
+            search_result = await self.client(SearchGlobalRequest(
+                q=query,
+                filter=InputMessagesFilterEmpty(),  # No filter, get all types
+                min_date=None,
+                max_date=None,
+                offset_rate=0,
+                offset_peer=None,
+                offset_id=0,
+                limit=100
+            ))
+            
+            results = []
+            
+            # Process found chats
+            for chat in search_result.chats:
+                if isinstance(chat, (Channel, Chat)):
+                    community_data = await self._extract_community_data(chat)
+                    if community_data:
+                        results.append(community_data)
+            
+            return results
+            
+        except Exception as e:
+            self.logger.debug(f"Global new search failed: {e}")
+            return []
+    
+    def _generate_transliterations(self, query: str) -> List[str]:
+        """Generate transliteration variations for Cyrillic text."""
+        try:
+            # Basic cyrillic to latin mapping for common letters
+            cyrillic_to_latin = {
+                'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
+                'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+                'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+                'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
+                'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya'
+            }
+            
+            transliterations = []
+            query_lower = query.lower()
+            
+            # Full transliteration
+            transliterated = ''
+            for char in query_lower:
+                transliterated += cyrillic_to_latin.get(char, char)
+            
+            if transliterated != query_lower:
+                transliterations.append(transliterated)
+            
+            # Common specific mappings for football/sports
+            sport_mappings = {
+                'футбол': ['football', 'soccer', 'futbol'],
+                'хоккей': ['hockey'],
+                'баскетбол': ['basketball'],
+                'теннис': ['tennis'],
+                'волейбол': ['volleyball']
+            }
+            
+            for cyrillic, latin_variants in sport_mappings.items():
+                if cyrillic in query_lower:
+                    transliterations.extend(latin_variants)
+            
+            return transliterations
+            
+        except Exception as e:
+            self.logger.debug(f"Transliteration failed: {e}")
+            return []
+    
     async def _extract_community_data(self, entity) -> Optional[Dict[str, Any]]:
         """Extract community data from Telegram entity with filtering."""
         try:
@@ -926,25 +1001,46 @@ class TelegramAdapter(BasePlatformAdapter):
             if not entity_id:
                 return None
             
-            # Apply filters - only open communities
+            # Apply filters - only open communities per requirements
             if isinstance(entity, Channel):
-                # Channel filtering
-                if hasattr(entity, 'broadcast') and entity.broadcast:
-                    # This is a broadcast channel - check if comments are enabled
-                    if not hasattr(entity, 'megagroup') or not entity.megagroup:
-                        # Regular channel - skip if no comments (we need open comments)
-                        try:
-                            full_channel = await self.client(GetFullChannelRequest(entity))
-                            # Check if channel has discussion group (comments enabled)
-                            if not hasattr(full_channel.full_chat, 'linked_chat_id') or not full_channel.full_chat.linked_chat_id:
-                                self.logger.debug(f"Skipping channel {title} - no comments enabled")
-                                return None
-                        except:
-                            # If we can't check, skip to be safe
-                            return None
+                # Skip private/restricted channels - must be open
+                if getattr(entity, 'restricted', False):
+                    self.logger.debug(f"Skipping restricted channel: {title}")
+                    return None
                 
-                # Skip private channels
-                if hasattr(entity, 'access_hash') and not entity.access_hash:
+                # Check if it's a megagroup (open group) or broadcast channel
+                is_megagroup = getattr(entity, 'megagroup', False)
+                is_broadcast = getattr(entity, 'broadcast', False)
+                
+                if is_broadcast and not is_megagroup:
+                    # This is a broadcast channel - MUST have comments enabled
+                    try:
+                        full_channel = await self.client(GetFullChannelRequest(entity))
+                        
+                        # Check multiple ways for comments:
+                        # 1. Has linked discussion group
+                        has_discussion = (hasattr(full_channel.full_chat, 'linked_chat_id') and 
+                                        full_channel.full_chat.linked_chat_id)
+                        
+                        # 2. Check if comments are not disabled in settings
+                        comments_disabled = getattr(full_channel.full_chat, 'can_view_participants', True) == False
+                        
+                        if not has_discussion and comments_disabled:
+                            self.logger.debug(f"Skipping broadcast channel {title} - no comments enabled")
+                            return None
+                        
+                        self.logger.debug(f"✅ Broadcast channel {title} has comments enabled")
+                        
+                    except Exception as e:
+                        # If we can't check comments, skip to be safe
+                        self.logger.debug(f"Skipping channel {title} - can't verify comments: {e}")
+                        return None
+                elif is_megagroup:
+                    # Megagroup (supergroup) - these are fine, they're essentially large groups
+                    self.logger.debug(f"✅ Found megagroup: {title}")
+                else:
+                    # Unknown channel type
+                    self.logger.debug(f"Skipping unknown channel type: {title}")
                     return None
                 
                 # Get detailed channel info
