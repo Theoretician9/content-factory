@@ -80,11 +80,11 @@ class IntegrationServiceClient:
         jwt_token: str
     ) -> Optional[Dict[str, Any]]:
         """
-        Get credentials for specific account.
+        Get credentials for specific account from Telegram session data.
         
         Args:
             user_id: User ID
-            account_id: Account identifier
+            account_id: Account identifier (UUID)
             platform: Platform
             jwt_token: JWT token for authentication
             
@@ -93,8 +93,9 @@ class IntegrationServiceClient:
         """
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
+                # Get specific account details
                 response = await client.get(
-                    f"{self.base_url}/v1/accounts/{account_id}/credentials",
+                    f"{self.base_url}/api/v1/telegram/accounts/{account_id}",
                     headers={
                         "Authorization": f"Bearer {jwt_token}",
                         "Content-Type": "application/json"
@@ -102,11 +103,25 @@ class IntegrationServiceClient:
                 )
                 
                 if response.status_code == 200:
-                    credentials = response.json()
-                    logger.info(f"✅ Retrieved credentials for account {account_id}")
-                    return credentials
+                    account_data = response.json()
+                    
+                    # Extract session_data from session_metadata
+                    session_metadata = account_data.get("session_metadata", {})
+                    session_data = session_metadata.get("session_data")
+                    
+                    if session_data:
+                        credentials = {
+                            "session_data": session_data,
+                            "phone": account_data.get("phone"),
+                            "account_id": account_id
+                        }
+                        logger.info(f"✅ Retrieved credentials for account {account_id}")
+                        return credentials
+                    else:
+                        logger.warning(f"⚠️ No session_data found for account {account_id}")
+                        return None
                 else:
-                    logger.error(f"❌ Failed to get credentials: {response.status_code}")
+                    logger.error(f"❌ Failed to get account details: {response.status_code}")
                     return None
                     
         except Exception as e:
