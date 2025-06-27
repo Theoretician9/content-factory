@@ -248,6 +248,22 @@ class TelegramService:
                     # Для других ошибок - отключаем клиент и очищаем сессию
                     await client.disconnect()
                     await self._delete_auth_session(auth_key)
+                    
+                    if "confirmation code has expired" in error_msg.lower():
+                        return TelegramConnectResponse(
+                            status="code_expired",
+                            message="Код подтверждения истек. Запросите новый код"
+                        )
+                    elif "phone code invalid" in error_msg.lower():
+                        return TelegramConnectResponse(
+                            status="code_invalid",
+                            message="Неверный код. Проверьте и попробуйте еще раз"
+                        )
+                    else:
+                        return TelegramConnectResponse(
+                            status="error",
+                            message=f"Ошибка входа: {error_msg}"
+                        )
             
             # Если есть пароль для 2FA
             if auth_request.password:
