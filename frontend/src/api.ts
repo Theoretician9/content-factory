@@ -259,12 +259,13 @@ export const parsingApi = {
   
   // Поиск сообществ
   search: {
-    // Поиск сообществ по ключевым словам
+    // Поиск сообществ по ключевым словам с увеличенным таймаутом
     communities: (params: {
       platform: 'telegram' | 'instagram' | 'whatsapp';
       query: string;
       offset?: number;
       limit?: number;
+      speed?: 'fast' | 'medium' | 'safe';
     }) => {
       const searchParams = new URLSearchParams();
       Object.entries(params).forEach(([key, value]) => {
@@ -272,7 +273,10 @@ export const parsingApi = {
           searchParams.append(key, value.toString());
         }
       });
-      return apiFetch(`/api/parsing/search?${searchParams}`);
+      // Увеличенный таймаут для поиска сообществ (60 секунд)
+      return apiFetch(`/api/parsing/search?${searchParams}`, {
+        timeout: 60000 // 60 секунд
+      });
     }
   },
   
