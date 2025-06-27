@@ -993,14 +993,14 @@ const Parsing = () => {
                       onChange={(e) => setSearchForm(prev => ({ ...prev, speed: e.target.value as any }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="fast">🔴 Быстрый (15-30 сек)</option>
-                      <option value="medium">🟡 Средний (30-60 сек)</option>
-                      <option value="safe">🟢 Безопасный (60-120 сек)</option>
+                      <option value="fast">🔴 Быстрый (30-60 сек)</option>
+                      <option value="medium">🟡 Средний (60-90 сек)</option>
+                      <option value="safe">🟢 Безопасный (90-120 сек)</option>
                     </select>
                     <div className="mt-1 text-xs text-gray-500">
-                      {searchForm.speed === 'fast' && 'Высокий риск rate limits'}
+                      {searchForm.speed === 'fast' && 'Высокий риск rate limits, быстрее поиск'}
                       {searchForm.speed === 'medium' && 'Оптимальный баланс (рекомендуемый)'}
-                      {searchForm.speed === 'safe' && 'Минимальный риск блокировок'}
+                      {searchForm.speed === 'safe' && 'Минимальный риск, учитывает FloodWait'}
                     </div>
                   </div>
                   <div className="flex items-end">
@@ -1017,13 +1017,13 @@ const Parsing = () => {
                       <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2"></div>
                       <span className="text-sm">
                         Поиск сообществ в режиме "{searchForm.speed === 'fast' ? 'Быстрый' : searchForm.speed === 'medium' ? 'Средний' : 'Безопасный'}"...
-                        {searchForm.speed === 'fast' && ' (~15-30 сек)'}
-                        {searchForm.speed === 'medium' && ' (~30-60 сек)'}
-                        {searchForm.speed === 'safe' && ' (~60-120 сек)'}
+                        {searchForm.speed === 'fast' && ' (~30-60 сек)'}
+                        {searchForm.speed === 'medium' && ' (~60-90 сек)'}
+                        {searchForm.speed === 'safe' && ' (~90-120 сек)'}
                       </span>
                     </div>
                     <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">
-                      Поиск может включать ожидание из-за ограничений Telegram API
+                      ⏳ Поиск включает ожидание FloodWait (до 30 сек) + поиск по 5 вариациям запроса
                     </div>
                   </div>
                 )}
