@@ -630,8 +630,20 @@ async def list_tasks(
     limit: int = 20
 ):
     """List all parsing tasks (frontend compatible endpoint)."""
+    
+    # ✅ JWT АВТОРИЗАЦИЯ: Получаем user_id из JWT токена
+    try:
+        user_id = await get_user_id_from_request(request)
+        logger.info(f"🔐 JWT Authorization successful for list_tasks: user_id={user_id}")
+    except Exception as auth_error:
+        logger.error(f"❌ JWT Authorization failed for list_tasks: {auth_error}")
+        raise HTTPException(status_code=401, detail=f"Authorization failed: {str(auth_error)}")
+    
+    # ✅ USER ISOLATION: Фильтрация задач по user_id
+    user_tasks = [task for task in created_tasks if task.get("user_id") == user_id]
+    
     # Фильтрация задач по платформе и статусу
-    filtered_tasks = created_tasks
+    filtered_tasks = user_tasks
     
     if platform:
         filtered_tasks = [task for task in filtered_tasks if task.get("platform") == platform]
@@ -834,11 +846,25 @@ async def v1_get_parsing_status():
 
 # Task management endpoints
 @app.get("/tasks/{task_id}", tags=["Tasks API"])
-async def get_task(task_id: str):
+async def get_task(task_id: str, request: Request):
     """Get specific parsing task."""
+    
+    # ✅ JWT АВТОРИЗАЦИЯ: Получаем user_id из JWT токена
+    try:
+        user_id = await get_user_id_from_request(request)
+        logger.info(f"🔐 JWT Authorization successful for get_task: user_id={user_id}")
+    except Exception as auth_error:
+        logger.error(f"❌ JWT Authorization failed for get_task: {auth_error}")
+        raise HTTPException(status_code=401, detail=f"Authorization failed: {str(auth_error)}")
+    
     task = next((t for t in created_tasks if t["id"] == task_id), None)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    
+    # ✅ USER ISOLATION: Проверяем что задача принадлежит пользователю
+    if task.get("user_id") != user_id:
+        raise HTTPException(status_code=404, detail="Task not found")  # 404 вместо 403 для безопасности
+    
     return task
 
 @app.delete("/tasks/{task_id}", tags=["Tasks API"])
