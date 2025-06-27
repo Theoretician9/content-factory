@@ -36,9 +36,9 @@ async def search_communities(
     - Pagination: offset/limit based
     
     Speed options:
-    - fast: 0.5s API delay, 1s method delay (higher rate limit risk)
-    - medium: 1s API delay, 2s method delay (recommended)
-    - safe: 2s API delay, 3s method delay (lowest rate limit risk)
+    - fast: 0.1s API delay, 0.5s method delay (высокий риск rate limits)
+    - medium: 0.5s API delay, 1.5s method delay (рекомендуемый)
+    - safe: 1s API delay, 3s method delay (минимальный риск)
     
     Progress is logged in real-time for monitoring.
     """
