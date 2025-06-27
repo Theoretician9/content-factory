@@ -325,14 +325,14 @@ const Parsing = () => {
     
     try {
       const res = await parsingApi.results.get(taskId, {
-        limit: 100,
+        limit: 10,
         offset: 0
       });
       if (res.ok) {
         const data = await res.json();
         setTaskResults(data.results || []);
         setResultsHasMore(data.pagination?.has_more || false);
-        setResultsOffset(100);
+        setResultsOffset(10);
       }
     } catch (err) {
       console.error('Error loading results:', err);
@@ -348,14 +348,14 @@ const Parsing = () => {
     
     try {
       const res = await parsingApi.results.get(selectedTaskId, {
-        limit: 100,
+        limit: 10,
         offset: resultsOffset
       });
       if (res.ok) {
         const data = await res.json();
         setTaskResults(prev => [...prev, ...(data.results || [])]);
         setResultsHasMore(data.pagination?.has_more || false);
-        setResultsOffset(prev => prev + 100);
+        setResultsOffset(prev => prev + 10);
       }
     } catch (err) {
       console.error('Error loading more results:', err);
