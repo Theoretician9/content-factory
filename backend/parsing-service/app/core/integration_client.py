@@ -39,14 +39,13 @@ class IntegrationServiceClient:
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(
-                    f"{self.base_url}/v1/accounts",
+                    f"{self.base_url}/api/v1/telegram/accounts",
                     headers={
                         "Authorization": f"Bearer {jwt_token}",
                         "Content-Type": "application/json"
                     },
                     params={
-                        "platform": platform.value,
-                        "status": "active"
+                        "active_only": True
                     }
                 )
                 
