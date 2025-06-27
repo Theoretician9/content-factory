@@ -897,9 +897,22 @@ async def delete_task(task_id: str, request: Request):
 @app.post("/tasks/{task_id}/pause", tags=["Tasks API"])
 async def pause_task(task_id: str, request: Request):
     """Pause parsing task."""
+    
+    # ✅ JWT АВТОРИЗАЦИЯ: Получаем user_id из JWT токена
+    try:
+        user_id = await get_user_id_from_request(request)
+        logger.info(f"🔐 JWT Authorization successful for pause_task: user_id={user_id}")
+    except Exception as auth_error:
+        logger.error(f"❌ JWT Authorization failed for pause_task: {auth_error}")
+        raise HTTPException(status_code=401, detail=f"Authorization failed: {str(auth_error)}")
+    
     task = next((t for t in created_tasks if t["id"] == task_id), None)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    
+    # ✅ USER ISOLATION: Проверяем что задача принадлежит пользователю
+    if task.get("user_id") != user_id:
+        raise HTTPException(status_code=404, detail="Task not found")  # 404 вместо 403 для безопасности
     
     if task["status"] not in ["running", "pending"]:
         raise HTTPException(status_code=400, detail="Cannot pause task in current status")
@@ -907,15 +920,28 @@ async def pause_task(task_id: str, request: Request):
     task["status"] = "paused"
     task["updated_at"] = datetime.utcnow().isoformat()
     
-    logger.info(f"⏸️ Приостановлена задача парсинга: {task_id}")
+    logger.info(f"⏸️ Приостановлена задача парсинга: {task_id} (user_id: {user_id})")
     return {"message": "Task paused successfully", "task_id": task_id, "status": "paused"}
 
 @app.post("/tasks/{task_id}/resume", tags=["Tasks API"])
-async def resume_task(task_id: str):
+async def resume_task(task_id: str, request: Request):
     """Resume parsing task."""
+    
+    # ✅ JWT АВТОРИЗАЦИЯ: Получаем user_id из JWT токена
+    try:
+        user_id = await get_user_id_from_request(request)
+        logger.info(f"🔐 JWT Authorization successful for resume_task: user_id={user_id}")
+    except Exception as auth_error:
+        logger.error(f"❌ JWT Authorization failed for resume_task: {auth_error}")
+        raise HTTPException(status_code=401, detail=f"Authorization failed: {str(auth_error)}")
+    
     task = next((t for t in created_tasks if t["id"] == task_id), None)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    
+    # ✅ USER ISOLATION: Проверяем что задача принадлежит пользователю
+    if task.get("user_id") != user_id:
+        raise HTTPException(status_code=404, detail="Task not found")  # 404 вместо 403 для безопасности
     
     if task["status"] != "paused":
         raise HTTPException(status_code=400, detail="Cannot resume task that is not paused")
@@ -923,7 +949,7 @@ async def resume_task(task_id: str):
     task["status"] = "pending"
     task["updated_at"] = datetime.utcnow().isoformat()
     
-    logger.info(f"▶️ Возобновлена задача парсинга: {task_id}")
+    logger.info(f"▶️ Возобновлена задача парсинга: {task_id} (user_id: {user_id})")
     return {"message": "Task resumed successfully", "task_id": task_id, "status": "pending"}
 
 # Direct results endpoints (without v1 prefix) for frontend compatibility
