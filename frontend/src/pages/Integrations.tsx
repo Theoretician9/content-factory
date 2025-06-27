@@ -72,6 +72,11 @@ const Integrations = () => {
   const [connectError, setConnectError] = useState('');
   const [qrCode, setQrCode] = useState('');
   
+  // ✅ QR код состояния и polling
+  const [qrStatus, setQrStatus] = useState<'idle' | 'generating' | 'waiting' | 'success' | 'expired' | 'error'>('idle');
+  const [qrPolling, setQrPolling] = useState(false);
+  const [qrError, setQrError] = useState('');
+  
   // Подключение бота
   const [botForm, setBotForm] = useState({
     token: '',
@@ -271,6 +276,10 @@ const Integrations = () => {
     });
     setConnectError('');
     setQrCode('');
+    // ✅ Сброс QR состояний
+    setQrStatus('idle');
+    setQrPolling(false);
+    setQrError('');
   };
 
   const formatDate = (dateString: string) => {
