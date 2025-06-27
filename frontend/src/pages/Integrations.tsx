@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Sidebar from '../components/Sidebar';
@@ -588,8 +588,14 @@ const Integrations = () => {
                       <Button onClick={handleConnectPhone} loading={connecting}>
                         Отправить код
                       </Button>
-                      <Button variant="secondary" onClick={handleGenerateQR}>
-                        QR-код
+                      <Button 
+                        variant="secondary" 
+                        onClick={handleGenerateQR}
+                        loading={qrStatus === 'generating'}
+                        disabled={qrStatus === 'waiting' || qrStatus === 'generating'}
+                      >
+                        {qrStatus === 'generating' ? 'Генерация...' : 
+                         qrStatus === 'waiting' ? 'QR активен' : 'QR-код'}
                       </Button>
                     </div>
                   </div>
@@ -652,10 +658,132 @@ const Integrations = () => {
                   </div>
                 )}
 
-                {qrCode && (
-                  <div className="mt-4 text-center">
-                    <p className="mb-2">Отсканируйте QR-код в Telegram:</p>
-                    <img src={`data:image/png;base64,${qrCode}`} alt="QR Code" className="mx-auto" />
+                {/* ✅ УЛУЧШЕННАЯ СЕКЦИЯ QR КОДА С СОСТОЯНИЯМИ */}
+                {(qrCode || qrStatus !== 'idle') && (
+                  <div className="mt-6 p-6 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-2xl border border-blue-200 dark:border-blue-800">
+                    <div className="text-center space-y-4">
+                      {/* Заголовок с иконкой */}
+                      <div className="flex items-center justify-center gap-3">
+                        <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
+                          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 16h4.01M20 12h.01m-5.03-.71l1.06 1.06m-1.06-1.06l1.06-1.06m-1.06 1.06L16 12.01M12 8h.01M12 16h.01m.01-4h-.01m0 0h.01"/>
+                          </svg>
+                        </div>
+                        <h4 className="text-lg font-semibold text-blue-900 dark:text-blue-100">
+                          QR-код авторизация
+                        </h4>
+                      </div>
+
+                      {/* Статус и QR код */}
+                      {qrStatus === 'generating' && (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                            <span className="text-blue-700 dark:text-blue-300">Генерация QR кода...</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {qrStatus === 'waiting' && qrCode && (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="animate-pulse w-3 h-3 bg-orange-500 rounded-full"></div>
+                            <span className="text-orange-700 dark:text-orange-300 font-medium">
+                              Ожидание сканирования...
+                            </span>
+                          </div>
+                          
+                          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-lg inline-block">
+                            <img 
+                              src={`data:image/png;base64,${qrCode}`} 
+                              alt="QR Code" 
+                              className="mx-auto w-48 h-48"
+                            />
+                          </div>
+                          
+                          <div className="text-sm text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+                            <p className="mb-2">📱 <strong>Откройте Telegram</strong> на телефоне</p>
+                            <p className="mb-2">⚙️ Перейдите в <strong>Настройки → Устройства</strong></p>
+                            <p>📷 Нажмите <strong>"Подключить устройство"</strong> и отсканируйте QR код</p>
+                          </div>
+                          
+                          {qrPolling && (
+                            <div className="text-xs text-blue-600 dark:text-blue-400">
+                              🔄 Автоматическая проверка каждые 3 секунды...
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {qrStatus === 'success' && (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
+                              </svg>
+                            </div>
+                            <span className="text-green-700 dark:text-green-300 font-semibold">
+                              ✅ Аккаунт успешно подключен!
+                            </span>
+                          </div>
+                          <Button onClick={resetConnectForm} variant="secondary" size="sm">
+                            Подключить еще один
+                          </Button>
+                        </div>
+                      )}
+
+                      {qrStatus === 'expired' && (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center">
+                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                              </svg>
+                            </div>
+                            <span className="text-yellow-700 dark:text-yellow-300 font-medium">
+                              ⏰ QR код истек
+                            </span>
+                          </div>
+                          {qrError && (
+                            <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded">
+                              {qrError}
+                            </div>
+                          )}
+                          <Button onClick={handleGenerateQR} variant="secondary" size="sm">
+                            Создать новый QR код
+                          </Button>
+                        </div>
+                      )}
+
+                      {qrStatus === 'error' && (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
+                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                              </svg>
+                            </div>
+                            <span className="text-red-700 dark:text-red-300 font-medium">
+                              ❌ Ошибка QR авторизации
+                            </span>
+                          </div>
+                          {qrError && (
+                            <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">
+                              {qrError}
+                            </div>
+                          )}
+                          <div className="flex gap-2 justify-center">
+                            <Button onClick={handleGenerateQR} variant="secondary" size="sm">
+                              Попробовать снова
+                            </Button>
+                            <Button onClick={resetConnectForm} variant="secondary" size="sm">
+                              Отмена
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
                     </div>

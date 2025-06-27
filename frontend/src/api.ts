@@ -141,7 +141,9 @@ export const integrationApi = {
     generateQR: () => apiFetch('/api/integrations/telegram/qr-code'),
     
     // ✅ Проверка авторизации по QR коду
-    checkQRAuthorization: () => apiFetch('/api/integrations/telegram/qr-check'),
+    checkQRAuthorization: () => apiFetch('/api/integrations/telegram/qr-check', {
+      method: 'POST'
+    }),
     
     // Отключение аккаунта
     disconnectAccount: (sessionId: string) => 
