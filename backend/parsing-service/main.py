@@ -1114,6 +1114,10 @@ async def export_task_results(task_id: str, request: Request, format: str = "jso
             if not db_task:
                 raise HTTPException(status_code=404, detail=f"Task {task_id} not found in database")
             
+            # ✅ USER ISOLATION: Проверяем что задача принадлежит пользователю
+            if db_task.user_id != user_id:
+                raise HTTPException(status_code=404, detail=f"Task {task_id} not found")  # 404 вместо 403 для безопасности
+            
             # Use the database primary key for results lookup
             task_db_id = db_task.id
             
