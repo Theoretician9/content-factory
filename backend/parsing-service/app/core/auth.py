@@ -7,6 +7,8 @@ from typing import Optional
 from fastapi import HTTPException, Request, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
+import httpx
+import os
 
 from .config import settings
 
