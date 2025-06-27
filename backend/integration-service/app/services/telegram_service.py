@@ -268,9 +268,19 @@ class TelegramService:
             
             # Если есть пароль для 2FA
             if auth_request.password:
+                # ✅ ДИАГНОСТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ОТЛАДКИ 2FA
+                logger.info(f"🔍 2FA DEBUG: Обработка пароля для user_id={user_id}")
+                logger.info(f"🔍 2FA DEBUG: auth_key={auth_key}")
+                
                 auth_data = await self._get_auth_session(auth_key)
+                logger.info(f"🔍 2FA DEBUG: auth_data найдены: {auth_data is not None}")
+                
+                if auth_data:
+                    logger.info(f"🔍 2FA DEBUG: requires_2fa={auth_data.get('requires_2fa', False)}")
+                    logger.info(f"🔍 2FA DEBUG: auth_data keys: {list(auth_data.keys())}")
                 
                 if not auth_data:
+                    logger.warning(f"🔍 2FA DEBUG: auth_data не найдены, возвращаем code_required")
                     return TelegramConnectResponse(
                         status="code_required", 
                         message="Сначала запросите SMS код"
@@ -278,10 +288,13 @@ class TelegramService:
                 
                 # ✅ КРИТИЧЕСКИ ВАЖНО: Проверяем требуется ли 2FA
                 if not auth_data.get('requires_2fa', False):
+                    logger.warning(f"🔍 2FA DEBUG: requires_2fa=False, возвращаем error")
                     return TelegramConnectResponse(
                         status="error", 
                         message="2FA не требуется для этого аккаунта. Введите сначала SMS код."
                     )
+                
+                logger.info(f"🔍 2FA DEBUG: Продолжаем с обработкой пароля 2FA")
                 
                 try:
                     # ✅ ИСПОЛЬЗУЕМ СОХРАНЕННЫЙ КЛИЕНТ вместо создания нового!
