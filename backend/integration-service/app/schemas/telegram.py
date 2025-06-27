@@ -32,6 +32,10 @@ class TelegramConnectResponse(BaseModel):
     message: str = Field(..., description="Описание статуса")
     qr_code: Optional[str] = Field(None, description="QR код для входа (base64)")
 
+class TelegramQRCheckRequest(BaseModel):
+    """Схема запроса проверки QR авторизации с опциональным 2FA паролем"""
+    password: Optional[str] = Field(None, description="Пароль для 2FA (если требуется)")
+
 # Схемы для сессий
 class TelegramSessionCreate(BaseModel):
     """Схема создания Telegram сессии"""
