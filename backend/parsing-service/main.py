@@ -621,10 +621,38 @@ async def create_task(task_data: dict):
     from datetime import datetime
     from app.core.parsing_speed import parse_speed_from_string, get_speed_config, calculate_estimated_time
     
-    # Parse and validate parsing speed
-    speed_str = task_data.get("parsing_speed", "medium")
+    # 🔍 DEBUG: Log incoming task_data to diagnose parsing_speed issue
+    logger.info(f"🔍 DEBUG: Incoming task_data keys: {list(task_data.keys())}")
+    logger.info(f"🔍 DEBUG: task_data.get('parsing_speed'): {repr(task_data.get('parsing_speed'))}")
+    logger.info(f"🔍 DEBUG: task_data.get('settings'): {repr(task_data.get('settings'))}")
+    if 'settings' in task_data and isinstance(task_data['settings'], dict):
+        logger.info(f"🔍 DEBUG: settings.get('parsing_speed'): {repr(task_data['settings'].get('parsing_speed'))}")
+    
+    # Parse and validate parsing speed with better extraction logic
+    speed_str = (
+        task_data.get("parsing_speed") or 
+        (task_data.get("settings", {}).get("parsing_speed") if isinstance(task_data.get("settings"), dict) else None) or
+        "medium"
+    )
+    
+    logger.info(f"🔍 DEBUG: Extracted speed_str: {repr(speed_str)} (type: {type(speed_str)})")
+    
+    # Normalize speed_str to handle different formats from frontend
+    if isinstance(speed_str, dict):
+        # Frontend might send object: {"value": "safe", "label": "Безопасный"}
+        speed_str = speed_str.get("value", "medium")
+        logger.info(f"🔍 DEBUG: Extracted from object: {repr(speed_str)}")
+    elif isinstance(speed_str, str):
+        speed_str = speed_str.lower().strip()
+        logger.info(f"🔍 DEBUG: Normalized string: {repr(speed_str)}")
+    else:
+        logger.warning(f"🔍 DEBUG: Unexpected speed type {type(speed_str)}, using default")
+        speed_str = "medium"
+    
     parsing_speed = parse_speed_from_string(speed_str)
     speed_config = get_speed_config(parsing_speed)
+    
+    logger.info(f"🔍 DEBUG: Final parsing_speed: {parsing_speed.value}, speed_config.name: {speed_config.name}")
     
     # Calculate estimated time
     message_limit = task_data.get("message_limit") or task_data.get("settings", {}).get("message_limit") or task_data.get("settings", {}).get("max_depth", 100)
