@@ -137,21 +137,22 @@ class TelegramService:
         user_id: int,
         auth_request: TelegramAuthRequest
     ) -> TelegramConnectResponse:
-        """Подключение Telegram аккаунта с единой сессией"""
-        
-        # Очищаем старые auth sessions
-        self._cleanup_old_auth_sessions()
-        
-        auth_key = f"auth_{user_id}_{auth_request.phone}"
-        
+        """Подключение Telegram аккаунта"""
         try:
-            # Логируем попытку подключения
-            await self.log_service.log_action(
-                session, user_id, "telegram", "connect_start", "pending",
-                details={"phone": auth_request.phone}
-            )
+            # ✅ ДИАГНОСТИЧЕСКОЕ ЛОГИРОВАНИЕ ДЛЯ ОТЛАДКИ 2FA
+            logger.info(f"🔍 CONNECT DEBUG: user_id={user_id}")
+            logger.info(f"🔍 CONNECT DEBUG: phone={auth_request.phone}")
+            logger.info(f"🔍 CONNECT DEBUG: code={'***' if auth_request.code else 'None'}")
+            logger.info(f"🔍 CONNECT DEBUG: password={'***' if auth_request.password else 'None'}")
+            logger.info(f"🔍 CONNECT DEBUG: password length={len(auth_request.password) if auth_request.password else 0}")
             
-            # Если есть код, пытаемся войти с существующим клиентом
+            auth_key = f"auth_{user_id}_{auth_request.phone}"
+            logger.info(f"🔍 CONNECT DEBUG: auth_key={auth_key}")
+            
+            # Очищаем старые auth sessions
+            self._cleanup_old_auth_sessions()
+            
+            # Если есть код для подтверждения
             if auth_request.code:
                 auth_data = await self._get_auth_session(auth_key)
                 
