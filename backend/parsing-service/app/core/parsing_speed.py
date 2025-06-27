@@ -8,6 +8,9 @@ with appropriate delays and rate limits for Telegram API.
 from enum import Enum
 from typing import Dict, NamedTuple
 from dataclasses import dataclass
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ParsingSpeed(Enum):
@@ -168,9 +171,48 @@ def parse_speed_from_string(speed_str: str) -> ParsingSpeed:
         ParsingSpeed enum value, defaults to MEDIUM if invalid
     """
     try:
-        return ParsingSpeed(speed_str.lower())
-    except ValueError:
+        # Handle None or empty values
+        if not speed_str:
+            logger.info(f"🔍 DEBUG: Empty speed_str, using default MEDIUM")
+            return ParsingSpeed.MEDIUM
+        
+        # Handle dictionary objects from frontend
+        if isinstance(speed_str, dict):
+            logger.info(f"🔍 DEBUG: speed_str is dict: {speed_str}")
+            speed_str = speed_str.get("value", "medium")
+        
+        # Convert to string and normalize
+        speed_str = str(speed_str).lower().strip()
+        
+        # Handle common variations
+        speed_mapping = {
+            "safe": ParsingSpeed.SAFE,
+            "безопасный": ParsingSpeed.SAFE,
+            "slow": ParsingSpeed.SAFE,
+            "medium": ParsingSpeed.MEDIUM,
+            "средний": ParsingSpeed.MEDIUM,
+            "normal": ParsingSpeed.MEDIUM,
+            "fast": ParsingSpeed.FAST,
+            "быстрый": ParsingSpeed.FAST,
+            "quick": ParsingSpeed.FAST
+        }
+        
+        if speed_str in speed_mapping:
+            result = speed_mapping[speed_str]
+            logger.info(f"🔍 DEBUG: Mapped '{speed_str}' to {result.value}")
+            return result
+        
+        # Try original enum parsing
+        result = ParsingSpeed(speed_str)
+        logger.info(f"🔍 DEBUG: Direct enum parse '{speed_str}' to {result.value}")
+        return result
+        
+    except ValueError as e:
         # Default to medium if invalid speed provided
+        logger.warning(f"🔍 DEBUG: Invalid speed '{speed_str}', using default MEDIUM. Error: {e}")
+        return ParsingSpeed.MEDIUM
+    except Exception as e:
+        logger.warning(f"🔍 DEBUG: Unexpected error parsing speed '{speed_str}', using default MEDIUM. Error: {e}")
         return ParsingSpeed.MEDIUM
 
 
