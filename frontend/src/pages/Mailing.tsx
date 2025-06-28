@@ -92,9 +92,12 @@ const Mailing = () => {
   
   // Основное состояние
   const [activeTab, setActiveTab] = useState<'create' | 'tasks' | 'import' | 'stats'>('tasks');
+  const [tasks, setTasks] = useState<InviteTask[]>([]);
+  
+  // Добавляем состояние для автообновления
+  const [autoRefresh, setAutoRefresh] = useState(false);
   
   // Задачи приглашений
-  const [tasks, setTasks] = useState<InviteTask[]>([]);
   const [tasksFilter, setTasksFilter] = useState({
     platform: '',
     status: '',
@@ -149,24 +152,31 @@ const Mailing = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Загрузка данных только при первом рендере
   useEffect(() => {
     loadTasks();
     loadAccounts();
-  }, [tasksFilter]);
+  }, []); // Убираем tasksFilter из зависимостей
 
+  // Загрузка задач парсинга только при переходе на вкладку импорта
   useEffect(() => {
-    if (activeTab === 'import') {
+    if (activeTab === 'import' && parseTasks.length === 0) {
       loadParseTasks();
     }
   }, [activeTab]);
 
-  // Real-time обновление прогресса
+  // Деликатное Real-time обновление только прогресса активных задач
   useEffect(() => {
     const activeTasksSSE = new Map<string, EventSource>();
 
     const activeTasks = tasks.filter(task => 
       task.status === 'pending' || task.status === 'running'
     );
+
+    // Только если есть активные задачи
+    if (activeTasks.length === 0) {
+      return;
+    }
 
     activeTasks.forEach(task => {
       if (!activeTasksSSE.has(task.id)) {
@@ -178,10 +188,12 @@ const Mailing = () => {
           try {
             const progressData = JSON.parse(event.data);
             
+            // Обновляем только конкретную задачу, избегая полного ререндера
             setTasks(prevTasks => 
               prevTasks.map(t => 
                 t.id === task.id 
-                  ? { ...t, 
+                  ? { 
+                      ...t, 
                       progress: progressData.progress, 
                       status: progressData.status,
                       invited_count: progressData.invited_count,
@@ -211,45 +223,54 @@ const Mailing = () => {
       }
     });
 
-    activeTasksSSE.forEach((eventSource, taskId) => {
-      const isStillActive = activeTasks.some(task => task.id === taskId);
-      if (!isStillActive) {
-        eventSource.close();
-        activeTasksSSE.delete(taskId);
-      }
-    });
-
     return () => {
       activeTasksSSE.forEach(eventSource => eventSource.close());
       activeTasksSSE.clear();
     };
-  }, [tasks.map(t => `${t.id}:${t.status}`).join(',')]);
+  }, [tasks.filter(t => t.status === 'pending' || t.status === 'running').map(t => t.id).join(',')]);
 
-  // Fallback: обновление каждые 15 секунд
+  // Убираем агрессивное автообновление каждые 15 секунд
+  // Вместо этого обновление только по запросу пользователя
+
+  // Опциональное автообновление (только если включено пользователем)
   useEffect(() => {
+    if (!autoRefresh) return;
+
     const intervalId = setInterval(() => {
-      loadTasks();
-    }, 15000);
+      // Тихое обновление без спиннера
+      loadTasks(false);
+    }, 30000); // 30 секунд вместо 15
 
     return () => clearInterval(intervalId);
-  }, [tasksFilter]);
+  }, [autoRefresh]);
 
-  const loadTasks = async () => {
-    setLoading(true);
+  const loadTasks = async (showLoadingSpinner = true) => {
+    if (showLoadingSpinner) {
+      setLoading(true);
+    }
     setError('');
     
     try {
-      const apiFilter = {
-        platform: tasksFilter.platform || undefined,
-        status: tasksFilter.status || undefined,
-        page: tasksFilter.page,
-        limit: tasksFilter.limit
-      };
+      const apiFilter: any = {};
       
-      const res = await inviteApi.tasks.list(apiFilter as any);
+      // Добавляем фильтры только если они установлены
+      if (tasksFilter.platform) {
+        apiFilter.platform = [tasksFilter.platform];
+      }
+      if (tasksFilter.status) {
+        apiFilter.status = [tasksFilter.status];
+      }
+      if (tasksFilter.page) {
+        apiFilter.page = tasksFilter.page;
+      }
+      if (tasksFilter.limit) {
+        apiFilter.page_size = tasksFilter.limit;
+      }
+      
+      const res = await inviteApi.tasks.list(apiFilter);
       if (res.ok) {
         const data = await res.json();
-        setTasks(data.tasks || data);
+        setTasks(data.items || data.tasks || data);
       } else {
         setError('Ошибка загрузки задач приглашений');
       }
@@ -257,8 +278,17 @@ const Mailing = () => {
       setError('Ошибка сети при загрузке задач');
       console.error('Error loading tasks:', err);
     } finally {
-      setLoading(false);
+      if (showLoadingSpinner) {
+        setLoading(false);
+      }
     }
+  };
+
+  // Обработка изменения фильтров - деликатное обновление
+  const handleFilterChange = (newFilter: Partial<typeof tasksFilter>) => {
+    setTasksFilter(prev => ({ ...prev, ...newFilter }));
+    // Тихое обновление без спиннера загрузки
+    setTimeout(() => loadTasks(false), 300);
   };
 
   const loadAccounts = async () => {
@@ -322,7 +352,8 @@ const Mailing = () => {
       if (res.ok) {
         setCreateForm(prev => ({ ...prev, title: '', description: '', target_group_id: '', message_template: '' }));
         setCreateError('');
-        loadTasks();
+        // Обновляем задачи после успешного создания
+        loadTasks(false);
         setActiveTab('tasks');
       } else {
         const error = await res.json();
@@ -353,10 +384,13 @@ const Mailing = () => {
       }
 
       if (res?.ok) {
-        loadTasks();
+        // Тихое обновление после успешного действия
+        loadTasks(false);
+      } else {
+        console.error(`Error ${action} task:`, res?.statusText);
       }
     } catch (err) {
-      console.error(`Error ${action} task:`, err);
+      console.error('Error handling task action:', err);
     }
   };
 
@@ -403,10 +437,11 @@ const Mailing = () => {
       });
 
       if (res.ok) {
-        const result = await res.json();
+        const data = await res.json();
         setImportError('');
-        loadTasks();
-        setActiveTab('tasks');
+        alert(`Импорт завершен! Добавлено ${data.imported_count} записей.`);
+        // Тихое обновление после импорта
+        loadTasks(false);
       } else {
         const error = await res.json();
         setImportError(error.detail || 'Ошибка импорта данных');
@@ -433,11 +468,11 @@ const Mailing = () => {
       });
 
       if (res.ok) {
-        const result = await res.json();
+        const data = await res.json();
         setImportError('');
-        setImportFile(null);
-        loadTasks();
-        setActiveTab('tasks');
+        alert(`Импорт завершен! Добавлено ${data.imported_count} записей.`);
+        // Тихое обновление после импорта из файла
+        loadTasks(false);
       } else {
         const error = await res.json();
         setImportError(error.detail || 'Ошибка импорта файла');
@@ -542,7 +577,7 @@ const Mailing = () => {
                   <div className="flex flex-wrap gap-3">
                     <select
                       value={tasksFilter.platform}
-                      onChange={(e) => setTasksFilter(prev => ({ ...prev, platform: e.target.value }))}
+                      onChange={(e) => handleFilterChange({ platform: e.target.value })}
                       className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
                     >
                       <option value="">Все платформы</option>
@@ -553,7 +588,7 @@ const Mailing = () => {
                     
                     <select
                       value={tasksFilter.status}
-                      onChange={(e) => setTasksFilter(prev => ({ ...prev, status: e.target.value }))}
+                      onChange={(e) => handleFilterChange({ status: e.target.value })}
                       className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
                     >
                       <option value="">Все статусы</option>
@@ -566,14 +601,38 @@ const Mailing = () => {
                     </select>
                     
                     <Button
-                      onClick={loadTasks}
+                      onClick={() => loadTasks(true)}
                       disabled={loading}
                       className="px-4 py-2"
                     >
                       {loading ? 'Загрузка...' : 'Обновить'}
                     </Button>
+                    
+                    {/* Переключатель автообновления */}
+                    <label className="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={autoRefresh}
+                        onChange={(e) => setAutoRefresh(e.target.checked)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-2"
+                      />
+                      Автообновление (30с)
+                    </label>
                   </div>
                 </div>
+
+                {/* Информация о режиме обновления */}
+                {!autoRefresh && (
+                  <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900 border-l-4 border-blue-400 dark:border-blue-600">
+                    <div className="flex items-center">
+                      <div className="text-blue-700 dark:text-blue-200 text-sm">
+                        <span className="mr-2">ℹ️</span>
+                        Автообновление отключено. Данные обновляются только вручную для удобства работы. 
+                        Прогресс активных задач обновляется в реальном времени.
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Таблица задач */}
                 <div className="overflow-x-auto">
