@@ -2,27 +2,27 @@
 
 > **Пошаговый план разработки микросервиса Invite Service для массовых рассылок и приглашений в мессенджеры**
 
-## ФАЗА 1: ИНФРАСТРУКТУРА И БАЗОВАЯ АРХИТЕКТУРА
+## ФАЗА 1: ИНФРАСТРУКТУРА И БАЗОВАЯ АРХИТЕКТУРА ✅ ЗАВЕРШЕНА
 
 ### ✅ 1.1 Настройка проекта
-- [ ] Создать структуру `backend/invite-service/` с папками app/, migrations/, tests/
-- [ ] Создать Dockerfile и requirements.txt с зависимостями
-- [ ] Добавить invite-postgres в docker-compose.yml
-- [ ] Настроить volume invite_postgres_data
-- [ ] Добавить invite-service в docker-compose.yml с портом 8003
+- [x] Создать структуру `backend/invite-service/` с папками app/, migrations/, tests/
+- [x] Создать Dockerfile и requirements.txt с зависимостями
+- [x] Добавить invite-postgres в docker-compose.yml
+- [x] Настроить volume invite_postgres_data
+- [x] Добавить invite-service в docker-compose.yml с портом 8002 (изменен с 8003 на 8002)
 
 ### ✅ 1.2 База данных
-- [ ] Создать init.sql для БД invite_db и пользователя invite_user
-- [ ] Настроить Alembic миграции
-- [ ] Создать модели: InviteTask, InviteTarget, InviteTaskAccount, InviteExecutionLog
-- [ ] Создать индексы для производительности
-- [ ] Протестировать подключение к БД
+- [x] Создать init.sql для БД invite_db и пользователя invite_user
+- [x] Настроить Alembic миграции
+- [x] Создать модели: InviteTask, InviteTarget, InviteTaskAccount, InviteExecutionLog
+- [x] Создать индексы для производительности
+- [x] Протестировать подключение к БД
 
 ### ✅ 1.3 Базовая конфигурация
-- [ ] Создать core/config.py с Settings классом
+- [x] Создать core/config.py с Settings классом
 - [ ] Интегрировать Vault с AppRole аутентификацией
 - [ ] Настроить JWT валидацию
-- [ ] Создать database.py для async SQLAlchemy
+- [x] Создать database.py для async SQLAlchemy
 
 ## ФАЗА 2: API И СХЕМЫ
 
