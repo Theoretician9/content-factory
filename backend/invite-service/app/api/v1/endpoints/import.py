@@ -10,7 +10,7 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.models.invite_task import InviteTask
-from app.models.invite_target import InviteTarget, TargetSource
+from app.models.invite_target import InviteTarget
 from app.schemas.target import InviteTargetCreate
 from app.core.auth import get_current_user_id
 
@@ -76,8 +76,8 @@ async def import_targets_from_file(
                     user_id_platform=target_data.get('user_id_platform'),
                     email=target_data.get('email'),
                     full_name=target_data.get('full_name'),
-                    source=TargetSource.FILE_IMPORT,
-                    metadata={
+                    source="file_import",
+                    extra_data={
                         "source_file": file.filename,
                         "source_name": source_name,
                         "imported_at": datetime.utcnow().isoformat()
