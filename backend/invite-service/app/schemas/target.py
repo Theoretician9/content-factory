@@ -157,7 +157,7 @@ class TargetListResponse(BaseModel):
 
 class TargetImportSchema(BaseModel):
     """Схема для импорта целей из файла"""
-    file_type: str = Field(..., regex="^(csv|xlsx|json)$", description="Тип файла")
+    file_type: str = Field(..., pattern="^(csv|xlsx|json)$", description="Тип файла")
     column_mapping: Dict[str, str] = Field(..., description="Маппинг колонок файла на поля модели")
     skip_header: bool = Field(True, description="Пропустить первую строку (заголовок)")
     skip_duplicates: bool = Field(True, description="Пропускать дубликаты")

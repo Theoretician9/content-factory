@@ -271,7 +271,7 @@ async def get_targets(
     
     # Сортировка
     sort_by: TargetSortBy = Query(TargetSortBy.CREATED_AT, description="Поле для сортировки"),
-    sort_order: str = Query("desc", regex="^(asc|desc)$", description="Порядок сортировки"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Порядок сортировки"),
     
     db: Session = Depends(get_db)
 ):
