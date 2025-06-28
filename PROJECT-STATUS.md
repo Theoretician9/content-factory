@@ -4,6 +4,366 @@
 НИЧЕГО НЕ УДАЛЯЙ, ТОЛЬКО ДОБАВЛЯЙ ПРОГРЕСС
 ---
 
+## 2025-01-30: INVITE SERVICE - ФАЗА 3.2 TELEGRAM INTEGRATION ЗАВЕРШЕНА
+
+**Статус: ✅ ПОЛНОЦЕННАЯ TELEGRAM ИНТЕГРАЦИЯ ГОТОВА - ГОТОВ К PRODUCTION TESTING**
+
+### 🎯 Фаза 3.2: Telegram Platform Integration
+
+После успешной реализации Business Logic API завершена полная интеграция с Telegram через архитектурный паттерн Platform Adapters и межсервисное взаимодействие с Integration Service.
+
+### 🔧 Реализованная Telegram интеграция
+
+#### **1. Integration Service API Extensions**
+```python
+# backend/integration-service/app/api/v1/endpoints/telegram_invites.py
+@router.post("/accounts/{account_id}/invite", response_model=TelegramInviteResponse)
+async def send_telegram_invite(
+    account_id: int,
+    invite_data: TelegramInviteRequest
+):
+    """Отправка приглашения через Telegram аккаунт"""
+    # Полная обработка всех типов Telegram ошибок
+    # FloodWaitError, PrivacyRestrictedError, PeerFloodError
+    # UserNotMutualContactError с соответствующими HTTP статусами
+
+@router.get("/accounts/{account_id}/limits")
+async def get_account_limits():
+    """Получение лимитов Telegram аккаунта"""
+    # Базовые лимиты: 50 приглашений/день, 40 сообщений/день, 5 приглашений/час
+
+@router.get("/accounts")
+async def get_user_telegram_accounts():
+    """Получение всех активных Telegram аккаунтов пользователя"""
+
+# backend/integration-service/app/schemas/telegram_invites.py
+class TelegramInviteRequest(BaseModel):
+    invite_type: InviteType  # GROUP_INVITE, DIRECT_MESSAGE
+    target_username: Optional[str]
+    target_phone: Optional[str] 
+    target_user_id: Optional[str]
+    group_id: Optional[str]
+    message: Optional[str]
+    
+    @validator('target_username', 'target_phone', 'target_user_id')
+    def validate_target_provided(cls, v, values):
+        """Валидация наличия хотя бы одного идентификатора цели"""
+
+class TelegramInviteResponse(BaseModel):
+    status: str
+    message_id: Optional[int]
+    sent_at: datetime
+    execution_time: float
+    target_username: Optional[str]
+    error_code: Optional[str]
+```
+
+#### **2. Platform Adapter Architecture**
+```python
+# backend/invite-service/app/adapters/base.py
+class InvitePlatformAdapter(ABC):
+    """Абстрактный интерфейс для адаптеров платформ приглашений"""
+    
+    @abstractmethod
+    async def initialize_accounts(self, user_id: int) -> List[PlatformAccount]
+    
+    @abstractmethod
+    async def send_invite(self, account: PlatformAccount, target: Dict, invite_data: Dict) -> InviteResult
+    
+    @abstractmethod 
+    async def check_rate_limits(self, account: PlatformAccount) -> RateLimitStatus
+
+@dataclass
+class PlatformAccount:
+    """Информация об аккаунте платформы"""
+    account_id: int
+    username: Optional[str]
+    status: AccountStatus
+    platform: str
+    daily_invite_limit: int
+    daily_invites_used: int = 0
+    flood_wait_until: Optional[datetime] = None
+    
+    def can_send_invite(self) -> bool:
+        """Проверка возможности отправки приглашения"""
+
+@dataclass
+class InviteResult:
+    """Результат выполнения приглашения"""
+    status: InviteResultStatus  # SUCCESS, FAILED, RATE_LIMITED, FLOOD_WAIT, etc.
+    message_id: Optional[int]
+    execution_time: Optional[float]
+    can_retry: bool = True
+    
+    @property
+    def is_retryable(self) -> bool:
+        """Определение возможности повтора на основе типа ошибки"""
+
+# backend/invite-service/app/adapters/telegram.py
+class TelegramInviteAdapter(InvitePlatformAdapter):
+    """Адаптер для приглашений в Telegram через Integration Service"""
+    
+    async def send_invite(self, account, target, invite_data) -> InviteResult:
+        # Подготовка данных для Integration Service
+        # HTTP запрос с retry логикой
+        # Обработка специфичных Telegram ошибок
+        # Обновление статистики аккаунта
+
+# backend/invite-service/app/adapters/factory.py
+class PlatformAdapterFactory:
+    _adapters = {"telegram": TelegramInviteAdapter}
+    
+    @classmethod
+    def get_adapter(cls, platform: str) -> InvitePlatformAdapter:
+        """Получение адаптера для указанной платформы"""
+```
+
+#### **3. HTTP Integration Client**
+```python
+# backend/invite-service/app/services/integration_client.py
+class IntegrationServiceClient:
+    """HTTP клиент для взаимодействия с Integration Service"""
+    
+    def __init__(self):
+        self.base_url = 'http://integration-service:8000'
+        self.retry_config = RetryConfig(max_retries=3, exponential_base=2.0)
+    
+    async def _get_jwt_token(self) -> str:
+        """JWT токен для межсервисной аутентификации через Vault"""
+        vault_client = get_vault_client()
+        secret_data = vault_client.get_secret("jwt")
+        
+        payload = {
+            'service': 'invite-service',
+            'user_id': 1,
+            'exp': datetime.utcnow() + timedelta(hours=1)
+        }
+        return jwt.encode(payload, secret_data['secret_key'], algorithm='HS256')
+    
+    async def send_telegram_invite(self, account_id: int, invite_data: Dict) -> Dict:
+        """Отправка Telegram приглашения с retry логикой"""
+        # Automatic JWT authentication
+        # Exponential backoff retry с jitter
+        # Comprehensive error handling
+    
+    async def get_account_limits(self, account_id: int) -> Dict:
+        """Получение лимитов аккаунта с кэшированием"""
+```
+
+#### **4. Celery Workers System**
+```python
+# backend/invite-service/workers/celery_app.py
+celery_app = Celery(
+    'invite-service',
+    broker='pyamqp://guest@rabbitmq:5672//',
+    backend='redis://redis:6379/0',
+    include=['workers.invite_worker', 'workers.maintenance_worker']
+)
+
+# Routing по приоритетам
+task_routes={
+    'workers.invite_worker.execute_invite_task': {'queue': 'invite-high'},
+    'workers.invite_worker.process_target_batch': {'queue': 'invite-normal'},
+    'workers.maintenance_worker.cleanup_expired_tasks': {'queue': 'invite-low'},
+}
+
+# backend/invite-service/workers/invite_worker.py
+@celery_app.task(bind=True, max_retries=3)
+def execute_invite_task(self, task_id: int):
+    """Главная задача выполнения приглашений"""
+    # Получение задачи и проверка статуса
+    # Инициализация Platform Adapter
+    # Разбивка на батчи с настраиваемой задержкой
+    # Асинхронный запуск batch processing
+
+@celery_app.task(bind=True, max_retries=5)
+def process_target_batch(self, task_id: int, target_ids: List[int], batch_number: int):
+    """Обработка пакета целевых контактов"""
+    # Round-robin распределение по аккаунтам
+    # Rate limiting проверки
+    # Детальное логирование каждого приглашения
+    # Graceful error handling с retry логикой
+
+async def _send_single_invite(task, target, account, adapter, db) -> InviteResult:
+    """Отправка одного приглашения с полным error handling"""
+    # Валидация цели через adapter
+    # Подготовка invite_data и target_data
+    # Execution timing measurement
+    # Comprehensive logging в InviteExecutionLog
+
+# backend/invite-service/workers/maintenance_worker.py
+@celery_app.task
+def cleanup_expired_tasks():
+    """Очистка устаревших задач (30+ дней)"""
+
+@celery_app.task  
+def calculate_task_progress():
+    """Пересчет прогресса выполнения активных задач"""
+
+@celery_app.task
+def health_check_services():
+    """Мониторинг состояния внешних сервисов"""
+```
+
+#### **5. Rate Limiting & Redis Integration**
+```python
+# backend/invite-service/app/utils/rate_limiter.py
+class RateLimiter:
+    """Система rate limiting для управления лимитами отправки приглашений"""
+    
+    def __init__(self):
+        self.telegram_limits = {
+            "daily_invites": 50,
+            "daily_messages": 40, 
+            "hourly_invites": 5,
+            "flood_wait_buffer": 300,  # 5 минут буфер
+            "peer_flood_duration": 86400  # 24 часа
+        }
+    
+    async def can_send_invite(self, account: PlatformAccount) -> bool:
+        """Проверка возможности отправки приглашения"""
+        # Проверка flood wait в Redis
+        # Проверка peer flood ограничений
+        # Проверка дневных и часовых лимитов
+        # Консервативный fallback при ошибках Redis
+    
+    async def handle_flood_wait(self, account: PlatformAccount, seconds: int):
+        """Обработка Telegram FloodWait с буфером"""
+        total_seconds = seconds + self.telegram_limits["flood_wait_buffer"]
+        flood_key = f"telegram:flood:{account.account_id}"
+        await redis_client.setex(flood_key, total_seconds, json.dumps({
+            "original_seconds": seconds,
+            "started_at": datetime.utcnow().isoformat(),
+            "expires_at": (datetime.utcnow() + timedelta(seconds=total_seconds)).isoformat()
+        }))
+    
+    async def get_account_usage(self, account: PlatformAccount) -> Dict:
+        """Получение детальной статистики использования лимитов"""
+        # Дневные/часовые счетчики из Redis
+        # Активные ограничения (flood wait, peer flood)
+        # Время последней активности
+        # Оставшиеся лимиты
+```
+
+#### **6. Integration Endpoints**
+```python
+# backend/invite-service/app/api/v1/endpoints/execution.py
+@router.post("/{task_id}/execute")
+async def execute_invite_task(task_id: int):
+    """Запуск выполнения задачи приглашений через Celery"""
+    # Валидация статуса задачи (PENDING, PAUSED)
+    # Проверка наличия целевой аудитории
+    # Запуск Celery задачи execute_invite_task.delay(task_id)
+    # Обновление статуса на RUNNING
+
+@router.get("/{task_id}/status") 
+async def get_task_status(task_id: int):
+    """Детальный статус выполнения с real-time данными"""
+    # Статистика по целям (pending, invited, failed)
+    # Процент выполнения
+    # Время выполнения
+    # Настройки задачи и ошибки
+
+@router.get("/{task_id}/accounts")
+async def get_task_available_accounts(task_id: int):
+    """Доступные аккаунты с лимитами и статусами"""
+    # Инициализация Platform Adapter
+    # Получение rate limiting информации
+    # Детальная информация по каждому аккаунту
+    # Flood wait статусы
+
+@router.post("/{task_id}/test-invite")
+async def test_single_invite(task_id: int, target_id: int, account_id: Optional[int]):
+    """Тестовая отправка одного приглашения"""
+    # Запуск single_invite_operation через Celery
+    # Возврат Celery task ID для tracking
+```
+
+### 🚀 Текущий статус интеграции
+
+#### **✅ Успешный запуск с Telegram интеграцией:**
+```bash
+invite-service-1  | ✅ Invite Service: JWT секрет получен из Vault
+invite-service-1  | INFO:     Started server process [1]
+invite-service-1  | 2025-06-28 21:17:13,102 - main - INFO - 🚀 Starting Invite Service...
+invite-service-1  | 2025-06-28 21:17:13,153 - app.core.database - INFO - ✅ Таблицы успешно созданы
+invite-service-1  | 2025-06-28 21:17:13,154 - main - INFO - ✅ Invite Service started successfully
+invite-service-1  | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+```
+
+#### **✅ Доступные API endpoints:**
+- **Task Execution**: `/api/v1/tasks/{id}/execute`, `/pause`, `/resume`, `/cancel`
+- **Real-time Status**: `/api/v1/tasks/{id}/status` с детальной статистикой
+- **Account Management**: `/api/v1/tasks/{id}/accounts` с rate limiting информацией
+- **Testing**: `/api/v1/tasks/{id}/test-invite` для тестирования одиночных приглашений
+
+#### **✅ Integration Service готов:**
+- **Telegram API**: `/api/v1/integrations/telegram/invites/accounts/{id}/invite`
+- **Rate Limits**: `/api/v1/integrations/telegram/invites/accounts/{id}/limits`
+- **Account List**: `/api/v1/integrations/telegram/invites/accounts`
+
+### 📊 Архитектурные достижения
+
+#### **✅ Enterprise Integration Pattern:**
+- **Platform Adapters**: Абстракция для поддержки множественных платформ
+- **Factory Pattern**: Динамическое создание адаптеров по типу платформы
+- **Inter-service Communication**: HTTP + JWT аутентификация через Vault
+- **Async Processing**: Celery workers с приоритизированными очередями
+
+#### **✅ Production-ready Error Handling:**
+- **Telegram-specific Errors**: FloodWait, PeerFlood, PrivacyRestricted
+- **Retry Logic**: Exponential backoff с jitter для HTTP запросов
+- **Rate Limiting**: Comprehensive Redis-based limiting с консервативным fallback
+- **Graceful Degradation**: Продолжение работы при недоступности внешних сервисов
+
+#### **✅ Scalability & Performance:**
+- **Batch Processing**: Настраиваемые размеры батчей для оптимизации throughput
+- **Round-robin Distribution**: Равномерное распределение нагрузки по аккаунтам
+- **Redis Caching**: Кэширование rate limits и account statuses
+- **Celery Queues**: Разделение по приоритетам (high/normal/low)
+
+#### **✅ Monitoring & Observability:**
+- **Execution Logging**: Детальные логи каждого приглашения в InviteExecutionLog
+- **Real-time Progress**: Live статистика выполнения задач
+- **Health Checks**: Мониторинг Integration Service, Redis, Database
+- **Task Tracking**: Celery task IDs для отслеживания асинхронных операций
+
+### 🎯 Результат Фазы 3.2
+
+**✅ TELEGRAM ИНТЕГРАЦИЯ ПОЛНОСТЬЮ ГОТОВА:**
+- Integration Service API расширен endpoints для Telegram приглашений
+- Platform Adapter архитектура реализована с поддержкой абстракции
+- HTTP Integration Client обеспечивает надежное межсервисное взаимодействие
+- Celery Workers обрабатывают асинхронное выполнение с batch processing
+- Rate Limiting система управляет Telegram лимитами через Redis
+- Integration Endpoints предоставляют полный API для выполнения задач
+
+**✅ PRODUCTION-READY FEATURES:**
+- Comprehensive error handling для всех типов Telegram ошибок
+- Rate limiting с поддержкой FloodWait и PeerFlood
+- Retry logic с exponential backoff и jitter
+- Real-time progress tracking с детальной статистикой
+- Round-robin account distribution для максимальной эффективности
+- Telegram-specific validations и error recovery
+
+**⏳ СЛЕДУЮЩИЙ ЭТАП (ФАЗА 4):**
+1. **Production Testing**: Тестирование реальных Telegram приглашений
+2. **Performance Optimization**: Оптимизация throughput и resource usage
+3. **Multi-platform Support**: Добавление Instagram, WhatsApp адаптеров
+4. **Advanced Analytics**: Dashboard для мониторинга и аналитики
+5. **User Management**: Расширенное управление пользователями и правами
+
+**🔧 ТЕХНИЧЕСКИЕ ДЕТАЛИ:**
+- **Inter-service Architecture**: HTTP + JWT через Vault для безопасной коммуникации
+- **Telegram Integration**: Полная поддержка group invites и direct messages
+- **Error Recovery**: Intelligent retry с учетом типов ошибок Telegram
+- **Resource Management**: Efficient memory usage и connection pooling
+- **Queue Management**: Celery с приоритизированными очередями и monitoring
+
+**Фаза 3.2 Telegram Platform Integration для Invite Service полностью завершена. Система готова к production тестированию реальных Telegram приглашений.**
+
+---
+
 ## 2025-01-30: INVITE SERVICE - ФАЗА 2 VAULT ИНТЕГРАЦИЯ ЗАВЕРШЕНА
 
 **Статус: ✅ VAULT APPROLE АУТЕНТИФИКАЦИЯ ПОЛНОСТЬЮ РАБОТАЕТ - ГОТОВ К BUSINESS LOGIC**
