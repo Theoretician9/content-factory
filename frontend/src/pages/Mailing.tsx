@@ -566,7 +566,7 @@ const Mailing = () => {
                     </select>
                     
                     <Button
-                      onClick={() => {}}
+                      onClick={loadTasks}
                       disabled={loading}
                       className="px-4 py-2"
                     >
@@ -1014,9 +1014,189 @@ const Mailing = () => {
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6">
                   Импорт аудитории
                 </h2>
-                <div className="text-center py-8 text-gray-500">
-                  Импорт данных будет здесь
+                
+                {importError && (
+                  <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                    {importError}
+                  </div>
+                )}
+
+                {/* Выбор задачи для импорта */}
+                <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded-lg">
+                  <h3 className="text-lg font-medium text-yellow-900 dark:text-yellow-100 mb-4">
+                    Выберите задачу для импорта аудитории
+                  </h3>
+                  <select
+                    value={selectedTaskForImport}
+                    onChange={(e) => setSelectedTaskForImport(e.target.value)}
+                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                  >
+                    <option value="">Выберите задачу...</option>
+                    {tasks.filter(task => task.status === 'pending').map(task => (
+                      <option key={task.id} value={task.id}>
+                        {task.title} ({task.platform})
+                      </option>
+                    ))}
+                  </select>
+                  {tasks.filter(task => task.status === 'pending').length === 0 && (
+                    <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-2">
+                      Нет задач, готовых к импорту. Создайте новую задачу во вкладке "Создать".
+                    </p>
+                  )}
                 </div>
+
+                {selectedTaskForImport && (
+                  <div className="max-w-4xl">
+                    {/* Переключатель источника данных */}
+                    <div className="mb-6">
+                      <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+                        <button
+                          onClick={() => setImportTab('parsing')}
+                          className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
+                            importTab === 'parsing'
+                              ? 'bg-white text-blue-700 shadow-sm dark:bg-gray-700 dark:text-blue-200'
+                              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                          }`}
+                        >
+                          <span className="mr-2">🔍</span>
+                          Из парсинга
+                        </button>
+                        <button
+                          onClick={() => setImportTab('file')}
+                          className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
+                            importTab === 'file'
+                              ? 'bg-white text-blue-700 shadow-sm dark:bg-gray-700 dark:text-blue-200'
+                              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                          }`}
+                        >
+                          <span className="mr-2">📁</span>
+                          Из файла
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Импорт из парсинга */}
+                    {importTab === 'parsing' && (
+                      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                          Импорт из результатов парсинга
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                          Выберите ранее собранную базу аудитории из системы парсинга
+                        </p>
+
+                        <div className="mb-4">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Результат парсинга
+                          </label>
+                          <select
+                            value={selectedParseTask}
+                            onChange={(e) => setSelectedParseTask(e.target.value)}
+                            className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                          >
+                            <option value="">Выберите результат парсинга...</option>
+                            {parseTasks.map(parseTask => (
+                              <option key={parseTask.id} value={parseTask.id}>
+                                {parseTask.platform} - {parseTask.link} ({parseTask.result_count} контактов)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {parseTasks.length === 0 && (
+                          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                            <div className="text-4xl mb-4">🔍</div>
+                            <div className="text-lg font-medium mb-2">Нет результатов парсинга</div>
+                            <div className="text-sm">Сначала соберите аудиторию в разделе "Парсинг"</div>
+                          </div>
+                        )}
+
+                        <div className="mt-6">
+                          <Button
+                            onClick={handleImportFromParsing}
+                            disabled={importing || !selectedParseTask}
+                            className="w-full px-6 py-3"
+                          >
+                            {importing ? (
+                              <>
+                                <span className="animate-spin mr-2">⏳</span>
+                                Импортирование...
+                              </>
+                            ) : (
+                              <>
+                                <span className="mr-2">📥</span>
+                                Импортировать из парсинга
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Импорт из файла */}
+                    {importTab === 'file' && (
+                      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                          Импорт из файла
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                          Загрузите файл с контактами в формате CSV, TXT или JSON
+                        </p>
+
+                        <div className="mb-4">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Файл с контактами
+                          </label>
+                          <input
+                            type="file"
+                            accept=".csv,.txt,.json"
+                            onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                            className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                          />
+                        </div>
+
+                        {importFile && (
+                          <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-md">
+                            <div className="text-sm">
+                              <strong>Выбранный файл:</strong> {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg">
+                          <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
+                            💡 Формат файла
+                          </h4>
+                          <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+                            <li><strong>CSV:</strong> username,phone,first_name,last_name</li>
+                            <li><strong>TXT:</strong> один контакт на строку (@username или +phone)</li>
+                            <li><strong>JSON:</strong> [{"username": "user1", "phone": "+1234567890"}]</li>
+                          </ul>
+                        </div>
+
+                        <div className="mt-6">
+                          <Button
+                            onClick={handleImportFromFile}
+                            disabled={importing || !importFile}
+                            className="w-full px-6 py-3"
+                          >
+                            {importing ? (
+                              <>
+                                <span className="animate-spin mr-2">⏳</span>
+                                Импортирование...
+                              </>
+                            ) : (
+                              <>
+                                <span className="mr-2">📁</span>
+                                Импортировать из файла
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1026,9 +1206,265 @@ const Mailing = () => {
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6">
                   Статистика и аналитика
                 </h2>
-                <div className="text-center py-8 text-gray-500">
-                  Статистика будет здесь
-                </div>
+
+                {!selectedTaskForStats ? (
+                  <div className="max-w-2xl">
+                    <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg">
+                      <h3 className="text-lg font-medium text-blue-900 dark:text-blue-100 mb-4">
+                        Выберите задачу для просмотра статистики
+                      </h3>
+                      <select
+                        value={selectedTaskForStats}
+                        onChange={(e) => setSelectedTaskForStats(e.target.value)}
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                      >
+                        <option value="">Выберите задачу...</option>
+                        {tasks.map(task => (
+                          <option key={task.id} value={task.id}>
+                            {task.title} - {task.status} ({task.platform})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {tasks.length === 0 && (
+                      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                        <div className="text-4xl mb-4">📊</div>
+                        <div className="text-lg font-medium mb-2">Нет задач для анализа</div>
+                        <div className="text-sm">Создайте первую задачу приглашений!</div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="max-w-6xl">
+                    {statsLoading ? (
+                      <div className="flex justify-center py-12">
+                        <div className="animate-spin h-8 w-8 border-b-2 border-blue-600"></div>
+                      </div>
+                    ) : taskStats ? (
+                      <div className="space-y-6">
+                        {/* Заголовок задачи и кнопка назад */}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                              {taskStats.task_title}
+                            </h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              Статус: <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(taskStats.task_status)}`}>
+                                {taskStats.task_status}
+                              </span>
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setSelectedTaskForStats('')}
+                            className="px-4 py-2 text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 dark:text-gray-400 dark:hover:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-700"
+                          >
+                            ← Назад
+                          </button>
+                        </div>
+
+                        {/* Общая статистика */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                              {taskStats.targets_statistics.total_targets}
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">Всего целей</div>
+                          </div>
+                          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                              {taskStats.targets_statistics.invited_targets}
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">Приглашено</div>
+                          </div>
+                          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                              {taskStats.targets_statistics.failed_targets}
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">Неудачно</div>
+                          </div>
+                          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                              {taskStats.targets_statistics.success_rate.toFixed(1)}%
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">Успешность</div>
+                          </div>
+                        </div>
+
+                        {/* Детальная статистика */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                          {/* Статистика целей */}
+                          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+                            <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                              📋 Статистика по целям
+                            </h4>
+                            <div className="space-y-3">
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Ожидают:</span>
+                                <span className="font-medium">{taskStats.targets_statistics.pending_targets}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Приглашены:</span>
+                                <span className="font-medium text-green-600">{taskStats.targets_statistics.invited_targets}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Неудачно:</span>
+                                <span className="font-medium text-red-600">{taskStats.targets_statistics.failed_targets}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Пропущены:</span>
+                                <span className="font-medium text-gray-600">{taskStats.targets_statistics.skipped_targets}</span>
+                              </div>
+                              <div className="border-t pt-3 mt-3">
+                                <div className="flex justify-between font-semibold">
+                                  <span>Прогресс:</span>
+                                  <span>{taskStats.targets_statistics.progress_percentage.toFixed(1)}%</span>
+                                </div>
+                                <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2 mt-2">
+                                  <div
+                                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${taskStats.targets_statistics.progress_percentage}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Статистика выполнения */}
+                          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+                            <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                              ⚡ Статистика выполнения
+                            </h4>
+                            <div className="space-y-3">
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Всего попыток:</span>
+                                <span className="font-medium">{taskStats.execution_statistics.total_attempts}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Успешных:</span>
+                                <span className="font-medium text-green-600">{taskStats.execution_statistics.successful_invites}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Неудачных:</span>
+                                <span className="font-medium text-red-600">{taskStats.execution_statistics.failed_invites}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Rate Limited:</span>
+                                <span className="font-medium text-orange-600">{taskStats.execution_statistics.rate_limited}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Flood Wait:</span>
+                                <span className="font-medium text-yellow-600">{taskStats.execution_statistics.flood_wait}</span>
+                              </div>
+                              <div className="border-t pt-3 mt-3">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600 dark:text-gray-400">Среднее время:</span>
+                                  <span className="font-medium">{taskStats.execution_statistics.avg_execution_time.toFixed(2)}с</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Логи выполнения */}
+                        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+                          <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                            📝 Последние действия
+                          </h4>
+                          
+                          {executionLogs.length > 0 ? (
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                <thead className="bg-gray-50 dark:bg-gray-700">
+                                  <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Время</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Действие</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Статус</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Аккаунт</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Детали</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                  {executionLogs.slice(0, 10).map((log, index) => (
+                                    <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                        {formatDate(log.created_at)}
+                                      </td>
+                                      <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                                        {log.action}
+                                      </td>
+                                      <td className="px-4 py-3 text-sm">
+                                        <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(log.status)}`}>
+                                          {log.status}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                        {log.account_id}
+                                      </td>
+                                      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                        {typeof log.details === 'object' ? JSON.stringify(log.details).substring(0, 50) + '...' : log.details}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                              <div className="text-4xl mb-4">📋</div>
+                              <div className="text-lg font-medium mb-2">Нет логов выполнения</div>
+                              <div className="text-sm">Логи появятся после начала выполнения задачи</div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Статистика по аккаунтам */}
+                        {taskStats.accounts_statistics.length > 0 && (
+                          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+                            <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                              👥 Статистика по аккаунтам
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {taskStats.accounts_statistics.map((account, index) => (
+                                <div key={index} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                                  <div className="font-medium text-gray-900 dark:text-gray-100 mb-2">
+                                    {account.username || account.account_id}
+                                  </div>
+                                  <div className="space-y-1 text-sm">
+                                    <div className="flex justify-between">
+                                      <span className="text-gray-600 dark:text-gray-400">Отправлено:</span>
+                                      <span className="font-medium">{account.sent || 0}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-gray-600 dark:text-gray-400">Успешно:</span>
+                                      <span className="font-medium text-green-600">{account.success || 0}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-gray-600 dark:text-gray-400">Ошибки:</span>
+                                      <span className="font-medium text-red-600">{account.errors || 0}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-gray-600 dark:text-gray-400">Статус:</span>
+                                      <span className={`px-1 py-0.5 rounded text-xs ${getStatusColor(account.status || 'active')}`}>
+                                        {account.status || 'active'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                        <div className="text-4xl mb-4">❌</div>
+                        <div className="text-lg font-medium mb-2">Не удалось загрузить статистику</div>
+                        <div className="text-sm">Попробуйте обновить страницу</div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
