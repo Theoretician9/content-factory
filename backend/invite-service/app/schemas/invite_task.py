@@ -2,6 +2,7 @@
 Pydantic схемы для задач приглашений
 """
 
+from __future__ import annotations
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from enum import Enum
