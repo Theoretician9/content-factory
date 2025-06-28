@@ -4,7 +4,7 @@
 
 import importlib
 from fastapi import APIRouter
-from .endpoints import health, tasks, targets, execution, statistics
+from .endpoints import health, tasks, targets, execution, statistics, accounts, parsing
 
 # Импорт модуля import (зарезервированное слово) через importlib
 import_module = importlib.import_module('app.api.v1.endpoints.import')
@@ -16,4 +16,6 @@ api_router.include_router(tasks.router, prefix="/tasks", tags=["Invite Tasks"])
 api_router.include_router(execution.router, prefix="/tasks", tags=["Task Execution"])
 api_router.include_router(targets.router, prefix="/tasks", tags=["Target Management"])
 api_router.include_router(statistics.router, tags=["Statistics & Reports"])
-api_router.include_router(import_module.router, tags=["Data Import"]) 
+api_router.include_router(import_module.router, tags=["Data Import"])
+api_router.include_router(accounts.router, prefix="/accounts", tags=["Accounts"])
+api_router.include_router(parsing.router, tags=["Parsing Tasks"]) 
