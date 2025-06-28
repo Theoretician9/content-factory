@@ -322,23 +322,37 @@ export const inviteApi = {
       };
     }) => apiFetch('/api/invite/tasks', {
       method: 'POST',
-      body: JSON.stringify(data)
+      body: JSON.stringify({
+        name: data.title,
+        description: data.description,
+        platform: data.platform,
+        priority: data.priority || 'NORMAL',
+        delay_between_invites: data.settings?.delay_between_invites || 15,
+        max_invites_per_account: data.settings?.batch_size || 10,
+        invite_message: data.message_template,
+        settings: data.settings
+      })
     }),
 
     // Получение списка задач
     list: (params: {
-      platform?: 'telegram' | 'instagram' | 'whatsapp';
-      status?: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+      platform?: string[];
+      status?: string[];
       page?: number;
-      limit?: number;
+      page_size?: number;
     } = {}) => {
       const searchParams = new URLSearchParams();
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined) {
-          searchParams.append(key, value.toString());
+          if (Array.isArray(value)) {
+            value.forEach(v => searchParams.append(key, v.toString()));
+          } else {
+            searchParams.append(key, value.toString());
+          }
         }
       });
-      return apiFetch(`/api/invite/tasks?${searchParams}`);
+      const queryString = searchParams.toString();
+      return apiFetch(`/api/invite/tasks${queryString ? `?${queryString}` : ''}`);
     },
 
     // Получение конкретной задачи
@@ -346,9 +360,9 @@ export const inviteApi = {
 
     // Обновление задачи
     update: (taskId: string, data: Partial<{
-      title: string;
+      name: string;
       description: string;
-      message_template: string;
+      invite_message: string;
       settings: any;
     }>) => apiFetch(`/api/invite/tasks/${taskId}`, {
       method: 'PUT',
@@ -374,12 +388,12 @@ export const inviteApi = {
     }),
 
     // Возобновление задачи
-    resume: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/resume`, {
+    resume: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/execute`, {
       method: 'POST'
     }),
 
     // Отмена задачи
-    cancel: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/cancel`, {
+    cancel: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/pause`, {
       method: 'POST'
     }),
 
@@ -387,7 +401,7 @@ export const inviteApi = {
     status: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/status`),
 
     // Получение детальной статистики
-    stats: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/stats`),
+    stats: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/status`),
 
     // Получение логов выполнения
     logs: (taskId: string, params: {
@@ -418,63 +432,35 @@ export const inviteApi = {
     })
   },
 
-  // Импорт аудитории
+  // Аккаунты для приглашений
+  accounts: () => apiFetch('/api/invite/accounts'),
+
+  // Задачи парсинга
+  parsingTasks: () => apiFetch('/api/invite/parsing-tasks'),
+
+  // Импорт данных
   import: {
-    // Импорт из файла
-    file: (taskId: string, file: File, options: {
-      source_name?: string;
-      field_mapping?: Record<string, string>;
-    } = {}) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      if (options.source_name) {
-        formData.append('source_name', options.source_name);
-      }
-      if (options.field_mapping) {
-        formData.append('field_mapping', JSON.stringify(options.field_mapping));
-      }
-
-      const token = localStorage.getItem('access_token');
-      return fetch(`/api/invite/tasks/${taskId}/import/file`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
-    },
-
     // Импорт из parsing-service
     parsing: (taskId: string, data: {
       parsing_task_id: string;
-      source_name?: string;
-      filter_criteria?: any;
+      source_name: string;
     }) => apiFetch(`/api/invite/tasks/${taskId}/import/parsing`, {
       method: 'POST',
       body: JSON.stringify(data)
     }),
 
-    // Валидация импортированных данных
-    validate: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/import/validate`)
-  },
-
-  // Статистика и отчеты
-  stats: {
-    // Общая статистика по всем задачам
-    overview: () => apiFetch('/api/invite/stats'),
-
-    // Статистика по платформе
-    platform: (platform: 'telegram' | 'instagram' | 'whatsapp') => 
-      apiFetch(`/api/invite/stats/${platform}`),
-
-    // Экспорт отчета
-    export: (taskId: string, format: 'json' | 'csv' | 'excel') => 
-      apiFetch(`/api/invite/tasks/${taskId}/report?format=${format}`)
-  },
-
-  // Служебные функции
-  accounts: () => apiFetch('/api/invite/accounts'), // Доступные аккаунты пользователя
-  
-  // Получение списка задач parsing-service для импорта
-  parsingTasks: () => apiFetch('/api/invite/parsing-tasks')
+    // Импорт из файла
+    file: (taskId: string, file: File, data: {
+      source_name: string;
+    }) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('source_name', data.source_name);
+      
+      return apiFetch(`/api/invite/tasks/${taskId}/import/file`, {
+        method: 'POST',
+        body: formData
+      });
+    }
+  }
 };
