@@ -11,7 +11,6 @@ import math
 import io
 import csv
 import json
-import pandas as pd
 
 from app.core.database import get_db
 from app.models import InviteTarget, InviteTask, TargetStatus
