@@ -76,7 +76,7 @@ SaaS-платформа для автоматизации маркетинга, 
 - ✅ Integration Service запущен и полностью функционален (порт 8001, с AppRole Authentication)
 - ✅ User Service запущен и работает (с AppRole Authentication)
 - ✅ **Parsing Service запущен и полностью функционален** (только внутренняя сеть, с AppRole Authentication)
-- ✅ **Invite Service запущен и базовая инфраструктура готова** (порт 8002, PostgreSQL настроен)
+- ✅ **Invite Service полностью интегрирован с Vault** (порт 8002, PostgreSQL + AppRole Authentication готовы)
 - ❌ Остальные микросервисы (Billing, Scenario, Content) ещё не протестированы
 - ❌ Не настроено взаимодействие между сервисами
 - ❌ Не протестированы API эндпоинты остальных сервисов

@@ -3,10 +3,80 @@ Pydantic схемы для задач приглашений
 """
 
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
+from enum import Enum
 from pydantic import BaseModel, Field
 
 from app.models.invite_task import TaskStatus, TaskPriority
+
+
+class SortOrder(str, Enum):
+    """Порядок сортировки"""
+    ASC = "asc"
+    DESC = "desc"
+
+
+class TaskSortBy(str, Enum):
+    """Поля для сортировки задач"""
+    CREATED_AT = "created_at"
+    UPDATED_AT = "updated_at"
+    NAME = "name"
+    PRIORITY = "priority"
+    STATUS = "status"
+    PROGRESS = "progress_percentage"
+
+
+class TaskFilterSchema(BaseModel):
+    """Схема для фильтрации задач"""
+    status: Optional[List[TaskStatus]] = Field(None, description="Фильтр по статусам")
+    platform: Optional[List[str]] = Field(None, description="Фильтр по платформам")
+    priority: Optional[List[TaskPriority]] = Field(None, description="Фильтр по приоритетам")
+    created_after: Optional[datetime] = Field(None, description="Созданы после даты")
+    created_before: Optional[datetime] = Field(None, description="Созданы до даты")
+    name_contains: Optional[str] = Field(None, description="Содержит в названии")
+    
+    # Пагинация
+    page: int = Field(1, ge=1, description="Номер страницы")
+    page_size: int = Field(20, ge=1, le=100, description="Размер страницы")
+    
+    # Сортировка
+    sort_by: TaskSortBy = Field(TaskSortBy.CREATED_AT, description="Поле для сортировки")
+    sort_order: SortOrder = Field(SortOrder.DESC, description="Порядок сортировки")
+
+
+class TaskListResponse(BaseModel):
+    """Схема для списка задач с пагинацией"""
+    items: List[InviteTaskResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    has_next: bool
+    has_prev: bool
+
+
+class TaskDuplicateRequest(BaseModel):
+    """Схема для дублирования задачи"""
+    new_name: str = Field(..., min_length=1, max_length=255, description="Название новой задачи")
+    copy_targets: bool = Field(True, description="Копировать целевую аудиторию")
+    copy_settings: bool = Field(True, description="Копировать настройки")
+    reset_schedule: bool = Field(True, description="Сбросить запланированное время")
+
+
+class TaskBulkAction(str, Enum):
+    """Массовые действия с задачами"""
+    DELETE = "delete"
+    PAUSE = "pause"
+    RESUME = "resume" 
+    CANCEL = "cancel"
+    SET_PRIORITY = "set_priority"
+
+
+class TaskBulkRequest(BaseModel):
+    """Схема для массовых операций"""
+    task_ids: List[int] = Field(..., min_items=1, description="Список ID задач")
+    action: TaskBulkAction = Field(..., description="Действие")
+    parameters: Optional[Dict[str, Any]] = Field(None, description="Дополнительные параметры")
 
 
 class TaskSettingsSchema(BaseModel):
