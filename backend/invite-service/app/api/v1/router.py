@@ -2,12 +2,12 @@
 Основной роутер API v1 для Invite Service
 """
 
+import importlib
 from fastapi import APIRouter
 from .endpoints import health, tasks, targets, execution, statistics
-from . import endpoints
 
-# Импорт модуля import (зарезервированное слово) через getattr
-import_module = getattr(endpoints, 'import')
+# Импорт модуля import (зарезервированное слово) через importlib
+import_module = importlib.import_module('app.api.v1.endpoints.import')
 
 api_router = APIRouter()
 
