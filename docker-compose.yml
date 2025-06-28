@@ -132,21 +132,39 @@ services:
   # Invite Service
   invite-service:
     build: ./backend/invite-service
+    ports:
+      - "127.0.0.1:8002:8000"
     environment:
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_USER=user
-      - MYSQL_PASSWORD=password
-      - MYSQL_DATABASE=invite_service
+      - POSTGRES_SERVER=invite-postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=invite_user
+      - POSTGRES_PASSWORD=invite_password
+      - POSTGRES_DB=invite_db
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - VAULT_ADDR=http://vault:8201
+      - VAULT_TOKEN=${VAULT_TOKEN}
+      - VAULT_ROLE_ID=${INVITE_VAULT_ROLE_ID}
+      - VAULT_SECRET_ID=${INVITE_VAULT_SECRET_ID}
+      - INTEGRATION_SERVICE_URL=http://integration-service:8000
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-for-content-factory-2024}
+      - LOG_LEVEL=INFO
+      - DEBUG=false
+      - PYTHONPATH=/app
     depends_on:
-      mysql:
+      vault:
+        condition: service_healthy
+      vault-unsealer:
         condition: service_started
+      invite-postgres:
+        condition: service_healthy
       redis:
+        condition: service_started
+      integration-service:
         condition: service_started
     networks:
       - backend
+    restart: unless-stopped
 
   # Parsing Service
   parsing-service:
@@ -308,6 +326,26 @@ services:
       - backend
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U integration_user -d integration_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # PostgreSQL для Invite Service
+  invite-postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=invite_user
+      - POSTGRES_PASSWORD=invite_password
+      - POSTGRES_DB=invite_db
+    ports:
+      - "127.0.0.1:5435:5432"
+    volumes:
+      - invite_postgres_data:/var/lib/postgresql/data
+      - ./backend/invite-service/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U invite_user -d invite_db"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -631,6 +669,7 @@ volumes:
   frontend-static:
   integration_postgres_data:
   parsing_postgres_data:
+  invite_postgres_data:
 
 networks:
   app-network:
