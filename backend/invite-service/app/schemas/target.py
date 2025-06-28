@@ -138,7 +138,7 @@ class TargetFilterSchema(BaseModel):
     
     # Сортировка
     sort_by: TargetSortBy = Field(TargetSortBy.CREATED_AT, description="Поле для сортировки")
-    sort_order: str = Field("desc", regex="^(asc|desc)$", description="Порядок сортировки")
+    sort_order: str = Field("desc", pattern="^(asc|desc)$", description="Порядок сортировки")
 
 
 class TargetListResponse(BaseModel):
