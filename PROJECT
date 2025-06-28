@@ -317,8 +317,8 @@ docker-compose exec vault sh -c "VAULT_TOKEN=<root-token> vault write -f auth/ap
 **Конфигурация в .env:**
 ```bash
 # AppRole Authentication
-VAULT_ROLE_ID=326b6585-0495-343b-6694-4cb6dd87e6dc
-VAULT_SECRET_ID=1c5121a4-2853-0c02-31e6-323f5084df7a
+VAULT_ROLE_ID=
+VAULT_SECRET_ID=
 
 # Fallback (для безопасности)
 VAULT_TOKEN=hvs.long-term-token-here
@@ -396,7 +396,7 @@ docker exec -it html-vault-1 sh
 
 # Настройка переменных окружения
 export VAULT_ADDR=http://127.0.0.1:8201
-export VAULT_TOKEN=REMOVED
+export VAULT_TOKEN=
 ```
 
 #### **Шаг 2: Анализ существующих ролей**
