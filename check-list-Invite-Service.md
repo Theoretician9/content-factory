@@ -24,19 +24,19 @@
 - [ ] Настроить JWT валидацию
 - [x] Создать database.py для async SQLAlchemy
 
-## ФАЗА 2: API И СХЕМЫ
+## ФАЗА 2: API И СХЕМЫ ✅ БАЗОВАЯ РЕАЛИЗАЦИЯ ЗАВЕРШЕНА
 
 ### ✅ 2.1 Pydantic схемы
-- [ ] schemas/base.py - базовые классы и enum'ы
-- [ ] schemas/invite_task.py - схемы для задач
+- [x] schemas/base.py - базовые классы и enum'ы
+- [x] schemas/invite_task.py - схемы для задач (InviteTaskCreate/Update/Response)
 - [ ] schemas/target.py - схемы для целевых пользователей
 - [ ] schemas/statistics.py - схемы статистики и отчетов
 
 ### ✅ 2.2 FastAPI приложение
-- [ ] main.py с базовой конфигурацией
+- [x] main.py с базовой конфигурацией
 - [ ] core/auth.py для JWT авторизации
-- [ ] Health check endpoints
-- [ ] Exception handlers и CORS middleware
+- [x] Health check endpoints (/health, /api/v1/health/detailed)
+- [x] Exception handlers и CORS middleware
 
 ### ✅ 2.3 CRUD сервисы
 - [ ] services/base.py - базовые CRUD операции
