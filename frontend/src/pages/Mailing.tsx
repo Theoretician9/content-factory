@@ -1170,7 +1170,7 @@ const Mailing = () => {
                           <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
                             <li><strong>CSV:</strong> username,phone,first_name,last_name</li>
                             <li><strong>TXT:</strong> один контакт на строку (@username или +phone)</li>
-                            <li><strong>JSON:</strong> [{"username": "user1", "phone": "+1234567890"}]</li>
+                            <li><strong>JSON:</strong> {`[{"username": "user1", "phone": "+1234567890"}]`}</li>
                           </ul>
                         </div>
 
