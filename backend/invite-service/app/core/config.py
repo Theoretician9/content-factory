@@ -52,8 +52,8 @@ class Settings(BaseSettings):
     VAULT_ROLE_ID: Optional[str] = os.getenv("VAULT_ROLE_ID")
     VAULT_SECRET_ID: Optional[str] = os.getenv("VAULT_SECRET_ID")
     
-    # JWT настройки
-    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-secret-key")
+    # JWT настройки (будет загружена из Vault)
+    JWT_SECRET_KEY: Optional[str] = None
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 30
     
@@ -71,6 +71,43 @@ class Settings(BaseSettings):
     
     # Prometheus метрики
     PROMETHEUS_PORT: int = int(os.getenv("PROMETHEUS_PORT", "9090"))
+    
+    def __init__(self, **values):
+        """Инициализация настроек с загрузкой секретов из Vault"""
+        super().__init__(**values)
+        
+        # Получаем JWT секрет из Vault с правильной обработкой circular import
+        self.JWT_SECRET_KEY = None
+        
+        try:
+            # Lazy import для избежания циклических импортов
+            # Импорт внутри функции предотвращает circular import
+            from .vault import get_vault_client
+            
+            vault_client = get_vault_client()
+            secret_data = vault_client.get_secret("jwt")
+            
+            if secret_data and 'secret_key' in secret_data:
+                self.JWT_SECRET_KEY = secret_data['secret_key']
+                print(f"✅ {self.APP_NAME}: JWT секрет получен из Vault")
+            else:
+                raise Exception("JWT secret not found in Vault at path jwt")
+                
+        except ImportError as e:
+            # Проблема с импортом vault модуля
+            print(f"⚠️ {self.APP_NAME}: Ошибка импорта vault модуля: {e}")
+            self.JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'super-secret-jwt-key-for-invite-service')
+            
+        except Exception as e:
+            # Любые другие ошибки Vault (соединение, аутентификация, отсутствие данных)
+            print(f"⚠️ {self.APP_NAME}: Vault недоступен ({type(e).__name__}: {str(e)})")
+            print(f"⚠️ {self.APP_NAME}: Используется JWT секрет из переменных окружения")
+            self.JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'super-secret-jwt-key-for-invite-service')
+        
+        # Проверяем что JWT секрет установлен
+        if not self.JWT_SECRET_KEY:
+            self.JWT_SECRET_KEY = 'super-secret-jwt-key-for-invite-service'
+            print(f"⚠️ {self.APP_NAME}: Используется дефолтный JWT секрет")
     
     class Config:
         env_file = ".env"
