@@ -9,7 +9,7 @@ import logging
 from app.core.database import get_db
 from app.models.invite_task import InviteTask, TaskStatus
 from app.models.invite_target import InviteTarget, TargetStatus
-from app.models.invite_execution_log import InviteExecutionLog, ExecutionResult
+from app.models.invite_execution_log import InviteExecutionLog, ActionType
 from app.core.auth import get_current_user_id
 
 logger = logging.getLogger(__name__)
@@ -50,11 +50,11 @@ async def get_task_stats(
     # Статистика по результатам выполнения из логов
     execution_stats_query = select(
         func.count(InviteExecutionLog.id).label('total_attempts'),
-        func.count(InviteExecutionLog.id).filter(InviteExecutionLog.result == ExecutionResult.SUCCESS).label('successful_invites'),
-        func.count(InviteExecutionLog.id).filter(InviteExecutionLog.result == ExecutionResult.FAILED).label('failed_invites'),
-        func.count(InviteExecutionLog.id).filter(InviteExecutionLog.result == ExecutionResult.RATE_LIMITED).label('rate_limited'),
-        func.count(InviteExecutionLog.id).filter(InviteExecutionLog.result == ExecutionResult.FLOOD_WAIT).label('flood_wait'),
-        func.avg(InviteExecutionLog.execution_time).label('avg_execution_time')
+        func.count(InviteExecutionLog.id).filter(InviteExecutionLog.action_type == ActionType.INVITE_SUCCESSFUL).label('successful_invites'),
+        func.count(InviteExecutionLog.id).filter(InviteExecutionLog.action_type == ActionType.INVITE_FAILED).label('failed_invites'),
+        func.count(InviteExecutionLog.id).filter(InviteExecutionLog.action_type == ActionType.RATE_LIMIT_HIT).label('rate_limited'),
+        func.count(InviteExecutionLog.id).filter(InviteExecutionLog.action_type == ActionType.ERROR_OCCURRED).label('flood_wait'),
+        func.avg(InviteExecutionLog.execution_time_ms).label('avg_execution_time')
     ).where(InviteExecutionLog.task_id == task_id)
     
     execution_stats_result = await db.execute(execution_stats_query)
