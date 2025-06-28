@@ -42,6 +42,24 @@ async def detailed_health_check(db: Session = Depends(get_db)):
         }
         health_data["status"] = "unhealthy"
     
+    # Проверка Vault
+    try:
+        from app.core.vault import get_vault_client
+        vault_client = get_vault_client()
+        
+        if vault_client.health_check():
+            health_data["components"]["vault"] = {"status": "healthy"}
+        else:
+            health_data["components"]["vault"] = {"status": "unhealthy", "error": "Vault health check failed"}
+            health_data["status"] = "unhealthy"
+            
+    except Exception as e:
+        health_data["components"]["vault"] = {
+            "status": "unhealthy",
+            "error": f"Vault connection error: {str(e)}"
+        }
+        health_data["status"] = "unhealthy"
+    
     # TODO: Добавить проверки Redis, Integration Service и других компонентов
     
     return health_data 

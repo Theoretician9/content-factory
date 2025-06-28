@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/5")
     
     # HashiCorp Vault
-    VAULT_ADDR: str = os.getenv("VAULT_ADDR", "http://vault:8200")
+    VAULT_ADDR: str = os.getenv("VAULT_ADDR", "http://vault:8201")
     VAULT_TOKEN: Optional[str] = os.getenv("VAULT_TOKEN")
     VAULT_ROLE_ID: Optional[str] = os.getenv("VAULT_ROLE_ID")
     VAULT_SECRET_ID: Optional[str] = os.getenv("VAULT_SECRET_ID")
