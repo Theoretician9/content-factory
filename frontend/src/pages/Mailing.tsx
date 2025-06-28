@@ -22,19 +22,10 @@ interface InviteTask {
   progress: number;
   created_at: string;
   updated_at: string;
-  scheduled_at?: string;
-  started_at?: string;
-  completed_at?: string;
-  error_message?: string;
   target_count?: number;
   invited_count?: number;
   failed_count?: number;
-  settings?: {
-    delay_between_invites?: number;
-    batch_size?: number;
-    auto_add_contacts?: boolean;
-    fallback_to_messages?: boolean;
-  };
+  settings?: any;
 }
 
 interface TaskStats {
@@ -575,9 +566,8 @@ const Mailing = () => {
                     </select>
                     
                     <Button
-                      onClick={loadTasks}
+                      onClick={() => {}}
                       disabled={loading}
-                      variant="outline"
                       className="px-4 py-2"
                     >
                       {loading ? 'Загрузка...' : 'Обновить'}
@@ -733,6 +723,311 @@ const Mailing = () => {
                       <div className="text-sm">Создайте первую задачу приглашений!</div>
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* Вкладка: Создание задачи */}
+            {activeTab === 'create' && (
+              <div className="p-6">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6">
+                  Создать задачу приглашений
+                </h2>
+                
+                {createError && (
+                  <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                    {createError}
+                  </div>
+                )}
+
+                <div className="max-w-4xl">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    {/* Основная информация */}
+                    <div className="md:col-span-2">
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                        Основная информация
+                      </h3>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Название задачи *
+                      </label>
+                      <input
+                        type="text"
+                        value={createForm.title}
+                        onChange={(e) => setCreateForm(prev => ({ ...prev, title: e.target.value }))}
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                        placeholder="Например: Приглашения в IT группу"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Платформа
+                      </label>
+                      <select
+                        value={createForm.platform}
+                        onChange={(e) => setCreateForm(prev => ({ ...prev, platform: e.target.value as any }))}
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                      >
+                        <option value="telegram">📱 Telegram</option>
+                        <option value="instagram" disabled>📸 Instagram (скоро)</option>
+                        <option value="whatsapp" disabled>💬 WhatsApp (скоро)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Тип действия
+                      </label>
+                      <select
+                        value={createForm.task_type}
+                        onChange={(e) => setCreateForm(prev => ({ ...prev, task_type: e.target.value as any }))}
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                      >
+                        <option value="invite_to_group">Приглашения в группу/канал</option>
+                        <option value="send_messages">Личные сообщения</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Приоритет
+                      </label>
+                      <select
+                        value={createForm.priority}
+                        onChange={(e) => setCreateForm(prev => ({ ...prev, priority: e.target.value as any }))}
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                      >
+                        <option value="HIGH">🔴 Высокий</option>
+                        <option value="NORMAL">🔵 Обычный</option>
+                        <option value="LOW">⚪ Низкий</option>
+                      </select>
+                    </div>
+
+                    {/* Описание */}
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Описание
+                      </label>
+                      <textarea
+                        value={createForm.description}
+                        onChange={(e) => setCreateForm(prev => ({ ...prev, description: e.target.value }))}
+                        rows={3}
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                        placeholder="Описание задачи (необязательно)"
+                      />
+                    </div>
+
+                    {/* Настройки в зависимости от типа */}
+                    <div className="md:col-span-2">
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                        Настройки {createForm.task_type === 'invite_to_group' ? 'приглашений' : 'сообщений'}
+                      </h3>
+                    </div>
+
+                    {createForm.task_type === 'invite_to_group' && (
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          ID или ссылка группы/канала *
+                        </label>
+                        <input
+                          type="text"
+                          value={createForm.target_group_id}
+                          onChange={(e) => setCreateForm(prev => ({ ...prev, target_group_id: e.target.value }))}
+                          className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                          placeholder="@group_username, t.me/group_username или -100123456789"
+                        />
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                          Ваш аккаунт должен быть администратором группы/канала с правами приглашать участников
+                        </p>
+                      </div>
+                    )}
+
+                    {createForm.task_type === 'send_messages' && (
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Текст сообщения *
+                        </label>
+                        <textarea
+                          value={createForm.message_template}
+                          onChange={(e) => setCreateForm(prev => ({ ...prev, message_template: e.target.value }))}
+                          rows={4}
+                          className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                          placeholder="Привет! Хочу пригласить тебя в нашу группу..."
+                        />
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                          Можно использовать переменные: {'{username}'}, {'{first_name}'}, {'{last_name}'}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Дополнительные настройки */}
+                    <div className="md:col-span-2">
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                        Дополнительные настройки
+                      </h3>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Задержка между действиями (сек)
+                      </label>
+                      <input
+                        type="number"
+                        min="5"
+                        max="300"
+                        value={createForm.settings.delay_between_invites}
+                        onChange={(e) => setCreateForm(prev => ({ 
+                          ...prev, 
+                          settings: { ...prev.settings, delay_between_invites: parseInt(e.target.value) }
+                        }))}
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                      />
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        Рекомендуется 15-30 секунд для безопасности
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Размер батча
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="50"
+                        value={createForm.settings.batch_size}
+                        onChange={(e) => setCreateForm(prev => ({ 
+                          ...prev, 
+                          settings: { ...prev.settings, batch_size: parseInt(e.target.value) }
+                        }))}
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                      />
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        Количество пользователей обрабатываемых одновременно
+                      </p>
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <div className="flex flex-col space-y-3">
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={createForm.settings.auto_add_contacts}
+                            onChange={(e) => setCreateForm(prev => ({ 
+                              ...prev, 
+                              settings: { ...prev.settings, auto_add_contacts: e.target.checked }
+                            }))}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                            Автоматически добавлять в контакты (для приглашений по номеру телефона)
+                          </span>
+                        </label>
+
+                        {createForm.task_type === 'invite_to_group' && (
+                          <label className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={createForm.settings.fallback_to_messages}
+                              onChange={(e) => setCreateForm(prev => ({ 
+                                ...prev, 
+                                settings: { ...prev.settings, fallback_to_messages: e.target.checked }
+                              }))}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            />
+                            <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                              Отправлять личное сообщение, если приглашение невозможно
+                            </span>
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Кнопки действий */}
+                  <div className="mt-8 flex flex-col sm:flex-row gap-4">
+                    <Button
+                      onClick={handleCreateTask}
+                      disabled={creating}
+                      className="flex-1 sm:flex-none px-6 py-3"
+                    >
+                      {creating ? (
+                        <>
+                          <span className="animate-spin mr-2">⏳</span>
+                          Создание...
+                        </>
+                      ) : (
+                        <>
+                          <span className="mr-2">➕</span>
+                          Создать задачу
+                        </>
+                      )}
+                    </Button>
+                    
+                    <button
+                      type="button"
+                      onClick={() => setCreateForm({
+                        platform: 'telegram',
+                        task_type: 'invite_to_group',
+                        title: '',
+                        description: '',
+                        target_group_id: '',
+                        message_template: '',
+                        priority: 'NORMAL',
+                        settings: {
+                          delay_between_invites: 15,
+                          batch_size: 10,
+                          auto_add_contacts: true,
+                          fallback_to_messages: true
+                        }
+                      })}
+                      className="flex-1 sm:flex-none px-6 py-3 border border-gray-300 text-gray-700 dark:text-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    >
+                      <span className="mr-2">🔄</span>
+                      Сбросить
+                    </button>
+                  </div>
+
+                  {/* Информационный блок */}
+                  <div className="mt-8 p-4 bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg">
+                    <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
+                      💡 Важная информация
+                    </h4>
+                    <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+                      <li>• Для начала работы убедитесь, что подключили Telegram аккаунты в разделе "Интеграции"</li>
+                      <li>• После создания задачи нужно импортировать целевую аудиторию во вкладке "Импорт"</li>
+                      <li>• Система автоматически соблюдает лимиты платформ для безопасности</li>
+                      <li>• Прогресс выполнения можно отслеживать в реальном времени во вкладке "Задачи"</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Вкладка: Импорт */}
+            {activeTab === 'import' && (
+              <div className="p-6">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6">
+                  Импорт аудитории
+                </h2>
+                <div className="text-center py-8 text-gray-500">
+                  Импорт данных будет здесь
+                </div>
+              </div>
+            )}
+
+            {/* Вкладка: Статистика */}
+            {activeTab === 'stats' && (
+              <div className="p-6">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6">
+                  Статистика и аналитика
+                </h2>
+                <div className="text-center py-8 text-gray-500">
+                  Статистика будет здесь
                 </div>
               </div>
             )}
