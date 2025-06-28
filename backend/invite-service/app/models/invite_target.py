@@ -60,7 +60,7 @@ class InviteTarget(BaseModel):
     
     # Дополнительные метаданные
     source = Column(String(100), nullable=True, comment="Источник контакта (parsing, manual, import)")
-    metadata = Column(JSON, nullable=True, comment="Дополнительные метаданные")
+    extra_data = Column(JSON, nullable=True, comment="Дополнительные метаданные")
     
     # Связи
     task = relationship("InviteTask", back_populates="targets")
