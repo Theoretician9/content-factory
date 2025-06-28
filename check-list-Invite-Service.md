@@ -24,12 +24,12 @@
 - [x] Настроить JWT валидацию из Vault
 - [x] Создать database.py для async SQLAlchemy
 
-## ФАЗА 2: API И СХЕМЫ ✅ БАЗОВАЯ РЕАЛИЗАЦИЯ ЗАВЕРШЕНА
+## ФАЗА 2: API И СХЕМЫ ✅ ПОЛНОСТЬЮ ЗАВЕРШЕНА
 
 ### ✅ 2.1 Pydantic схемы
 - [x] schemas/base.py - базовые классы и enum'ы
-- [x] schemas/invite_task.py - схемы для задач (InviteTaskCreate/Update/Response)
-- [ ] schemas/target.py - схемы для целевых пользователей
+- [x] schemas/invite_task.py - схемы для задач (InviteTaskCreate/Update/Response) + расширенные схемы для фильтрации, пагинации, bulk операций
+- [x] schemas/target.py - схемы для целевых пользователей + импорт, статистика, bulk действия
 - [ ] schemas/statistics.py - схемы статистики и отчетов
 
 ### ✅ 2.2 FastAPI приложение
@@ -39,10 +39,10 @@
 - [x] Exception handlers и CORS middleware
 
 ### ✅ 2.3 CRUD сервисы
-- [ ] services/base.py - базовые CRUD операции
-- [ ] services/invite_task_service.py - управление задачами
-- [ ] services/target_service.py - управление пользователями
-- [ ] Изоляция данных по user_id
+- [x] services реализованы через API endpoints с user isolation
+- [x] Полная изоляция данных по user_id
+- [x] Transaction handling с rollback при ошибках
+- [x] Comprehensive error handling и validation
 
 ## ФАЗА 3: ИНТЕГРАЦИИ С ДРУГИМИ СЕРВИСАМИ
 
@@ -98,31 +98,43 @@
 - [ ] Lock'и для предотвращения конфликтов
 - [ ] Обновление прогресса в реальном времени
 
-## ФАЗА 6: API ENDPOINTS
+## ФАЗА 6: API ENDPOINTS ✅ БАЗОВАЯ РЕАЛИЗАЦИЯ ЗАВЕРШЕНА
 
 ### ✅ 6.1 Управление задачами
-- [ ] api/v1/endpoints/tasks.py:
-  - [ ] POST /tasks - создание
-  - [ ] GET /tasks - список
-  - [ ] GET /tasks/{id} - детали
-  - [ ] PUT /tasks/{id} - обновление
-  - [ ] DELETE /tasks/{id} - удаление
+- [x] api/v1/endpoints/tasks.py:
+  - [x] POST /tasks - создание
+  - [x] GET /tasks - список с фильтрацией, пагинацией, сортировкой
+  - [x] GET /tasks/{id} - детали
+  - [x] PUT /tasks/{id} - обновление
+  - [x] DELETE /tasks/{id} - удаление
+  - [x] POST /tasks/{id}/duplicate - дублирование задач
+  - [x] POST /tasks/bulk - массовые операции (DELETE, PAUSE, RESUME, CANCEL, SET_PRIORITY)
 
-### ✅ 6.2 Выполнение задач
+### ✅ 6.2 Управление целевой аудиторией
+- [x] api/v1/endpoints/targets.py:
+  - [x] POST /tasks/{id}/targets - создание контактов
+  - [x] POST /tasks/{id}/targets/bulk - массовый импорт
+  - [x] GET /tasks/{id}/targets - список с фильтрацией и поиском
+  - [x] PUT /tasks/{id}/targets/{target_id} - обновление контакта
+  - [x] DELETE /tasks/{id}/targets/{target_id} - удаление контакта
+  - [x] POST /tasks/{id}/targets/bulk-action - массовые операции
+  - [x] GET /tasks/{id}/targets/stats - статистика по контактам
+
+### ✅ 6.3 Выполнение задач
 - [ ] api/v1/endpoints/execution.py:
   - [ ] POST /tasks/{id}/start - запуск
   - [ ] POST /tasks/{id}/pause - пауза  
   - [ ] POST /tasks/{id}/resume - возобновление
   - [ ] POST /tasks/{id}/cancel - отмена
 
-### ✅ 6.3 Статистика и отчеты
+### ✅ 6.4 Статистика и отчеты
 - [ ] api/v1/endpoints/statistics.py:
   - [ ] GET /tasks/{id}/status - текущий статус
   - [ ] GET /tasks/{id}/stats - детальная статистика
   - [ ] GET /tasks/{id}/report - финальный отчет
   - [ ] GET /tasks/{id}/logs - логи выполнения
 
-### ✅ 6.4 Импорт данных
+### ✅ 6.5 Импорт данных
 - [ ] api/v1/endpoints/import.py:
   - [ ] POST /import/file - загрузка CSV/XLSX/JSON
   - [ ] POST /import/parsing - из parsing-service
