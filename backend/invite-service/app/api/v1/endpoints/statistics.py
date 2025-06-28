@@ -159,9 +159,9 @@ async def get_task_report(
                 "id": log.id,
                 "target_id": log.target_id,
                 "account_id": log.account_id,
-                "result": log.result,
-                "error_message": log.error_message,
-                "execution_time": log.execution_time,
+                "action_type": log.action_type,
+                "message": log.message,
+                "execution_time": log.execution_time_ms,
                 "created_at": log.created_at
             }
             for log in logs
@@ -197,16 +197,16 @@ async def get_task_logs(
         InviteExecutionLog.task_id == task_id
     )
     
-    # Фильтрация по результату если указан
-    if result_filter:
-        logs_query = logs_query.where(InviteExecutionLog.result == result_filter)
+    # Фильтрация по типу действия если указан
+    if action_filter:
+        logs_query = logs_query.where(InviteExecutionLog.action_type == action_filter)
     
     # Подсчет общего количества
     count_query = select(func.count(InviteExecutionLog.id)).where(
         InviteExecutionLog.task_id == task_id
     )
-    if result_filter:
-        count_query = count_query.where(InviteExecutionLog.result == result_filter)
+    if action_filter:
+        count_query = count_query.where(InviteExecutionLog.action_type == action_filter)
     
     total_result = await db.execute(count_query)
     total = total_result.scalar()
@@ -226,11 +226,11 @@ async def get_task_logs(
                 "id": log.id,
                 "target_id": log.target_id,
                 "account_id": log.account_id,
-                "result": log.result,
-                "error_message": log.error_message,
-                "execution_time": log.execution_time,
+                "action_type": log.action_type,
+                "message": log.message,
+                "execution_time": log.execution_time_ms,
                 "created_at": log.created_at,
-                "metadata": log.metadata
+                "details": log.details
             }
             for log in logs
         ],
@@ -243,7 +243,7 @@ async def get_task_logs(
             "has_prev": page > 1
         },
         "filter": {
-            "result_filter": result_filter
+            "action_filter": action_filter
         }
     }
 
@@ -272,8 +272,8 @@ async def get_dashboard_summary(
     
     invites_stats_query = select(
         func.count(InviteExecutionLog.id).label('total_invites'),
-        func.count(InviteExecutionLog.id).filter(InviteExecutionLog.result == ExecutionResult.SUCCESS).label('successful_invites'),
-        func.count(InviteExecutionLog.id).filter(InviteExecutionLog.result == ExecutionResult.FAILED).label('failed_invites'),
+        func.count(InviteExecutionLog.id).filter(InviteExecutionLog.action_type == ActionType.INVITE_SUCCESSFUL).label('successful_invites'),
+        func.count(InviteExecutionLog.id).filter(InviteExecutionLog.action_type == ActionType.INVITE_FAILED).label('failed_invites'),
     ).join(InviteTask, InviteExecutionLog.task_id == InviteTask.id).where(
         InviteTask.user_id == user_id,
         InviteExecutionLog.created_at >= thirty_days_ago
