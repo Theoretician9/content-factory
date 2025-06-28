@@ -1,3 +1,8 @@
+"""
+Invite Service - Микросервис для массовых рассылок и приглашений в мессенджеры
+"""
+
+import logging
 from fastapi import FastAPI, HTTPException, Depends, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, JSON, ForeignKey, Text, Enum
@@ -18,6 +23,10 @@ import json
 import secrets
 
 load_dotenv()
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Database configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "mysql://telegraminvi:szkTgBhWh6XU@db:3306/telegraminvi")
@@ -139,9 +148,10 @@ class InviteTemplate(InviteTemplateBase):
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+# Создание FastAPI приложения
 app = FastAPI(
-    title="Invite Service",
-    description="Invitation management service for Content Factory",
+    title="Invite Service API",
+    description="Микросервис для массовых рассылок и приглашений в мессенджеры",
     version="1.0.0"
 )
 
@@ -355,6 +365,7 @@ def get_invite_qr(token: str, db: Session = Depends(get_db)):
 
 @app.get("/health")
 async def health_check():
+    """Базовый health check"""
     return {"status": "healthy", "service": "invite-service"}
 
 if __name__ == "__main__":
