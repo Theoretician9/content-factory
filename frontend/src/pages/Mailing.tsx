@@ -470,6 +470,7 @@ const Mailing = () => {
       if (res.ok) {
         const data = await res.json();
         setImportError('');
+        setImportFile(null);
         alert(`Импорт завершен! Добавлено ${data.imported_count} записей.`);
         // Тихое обновление после импорта из файла
         loadTasks(false);
