@@ -122,7 +122,7 @@ SERVICE_URLS = {
     "admin": os.getenv("ADMIN_SERVICE_URL", "http://92.113.146.148:8003"),
     "scenario": os.getenv("SCENARIO_SERVICE_URL", "http://92.113.146.148:8004"),
     "content": os.getenv("CONTENT_SERVICE_URL", "http://92.113.146.148:8005"),
-    "invite": os.getenv("INVITE_SERVICE_URL", "http://92.113.146.148:8006"),
+    "invite": os.getenv("INVITE_SERVICE_URL", "http://invite-service:8000"),
     "parsing": os.getenv("PARSING_SERVICE_URL", "http://parsing-service:8000"),
     "integration": os.getenv("INTEGRATION_SERVICE_URL", "http://integration-service:8000"),
 }
