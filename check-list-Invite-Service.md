@@ -79,25 +79,25 @@
 - [x] Обработка FloodWait и PeerFlood с буферами
 - [x] Детальная статистика использования лимитов
 
-## ФАЗА 5: CELERY ВОРКЕРЫ
+## ФАЗА 5: CELERY ВОРКЕРЫ ✅ ЗАВЕРШЕНА
 
 ### ✅ 5.1 Настройка Celery
-- [ ] workers/celery_app.py - конфигурация
-- [ ] Очереди: invite-high, invite-normal, invite-low
-- [ ] Routing правила для приоритетов
-- [ ] Интеграция с RabbitMQ
+- [x] workers/celery_app.py - полная конфигурация с routing
+- [x] Очереди: invite-high, invite-normal, invite-low с приоритизацией
+- [x] Routing правила для приоритетов и типов задач
+- [x] Интеграция с RabbitMQ и Redis backend
 
 ### ✅ 5.2 Воркеры выполнения
-- [ ] workers/invite_worker.py - основные задачи
-- [ ] execute_invite_task() - главная задача
-- [ ] process_target_batch() - обработка батчей
-- [ ] reactivate_account() - возобновление после cooldown
+- [x] workers/invite_worker.py - основные задачи выполнения
+- [x] execute_invite_task() - главная задача с batch processing
+- [x] process_target_batch() - обработка батчей с round-robin
+- [x] single_invite_operation() - тестовые одиночные приглашения
 
-### ✅ 5.3 Управление статусами
-- [ ] services/task_execution_service.py - start/pause/resume/cancel
-- [ ] Redis для координации воркеров
-- [ ] Lock'и для предотвращения конфликтов
-- [ ] Обновление прогресса в реальном времени
+### ✅ 5.3 Maintenance воркеры
+- [x] workers/maintenance_worker.py - периодические задачи
+- [x] cleanup_expired_tasks() - очистка устаревших данных
+- [x] calculate_task_progress() - пересчет прогресса задач
+- [x] health_check_services() - мониторинг внешних сервисов
 
 ## ФАЗА 6: API ENDPOINTS ✅ БАЗОВАЯ РЕАЛИЗАЦИЯ ЗАВЕРШЕНА
 
@@ -122,11 +122,14 @@
   - [x] GET /tasks/{id}/targets/stats - статистика по контактам
 
 ### ✅ 6.3 Выполнение задач
-- [ ] api/v1/endpoints/execution.py:
-  - [ ] POST /tasks/{id}/start - запуск
-  - [ ] POST /tasks/{id}/pause - пауза  
-  - [ ] POST /tasks/{id}/resume - возобновление
-  - [ ] POST /tasks/{id}/cancel - отмена
+- [x] api/v1/endpoints/execution.py:
+  - [x] POST /tasks/{id}/execute - запуск через Celery
+  - [x] POST /tasks/{id}/pause - пауза выполнения
+  - [x] POST /tasks/{id}/resume - возобновление выполнения
+  - [x] POST /tasks/{id}/cancel - отмена выполнения
+  - [x] GET /tasks/{id}/status - детальный статус с real-time данными
+  - [x] GET /tasks/{id}/accounts - доступные аккаунты с лимитами
+  - [x] POST /tasks/{id}/test-invite - тестовое приглашение
 
 ### ✅ 6.4 Статистика и отчеты
 - [ ] api/v1/endpoints/statistics.py:
