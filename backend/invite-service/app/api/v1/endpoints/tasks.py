@@ -29,35 +29,28 @@ router = APIRouter()
 
 def get_current_user_id() -> int:
     """Получение ID текущего пользователя из JWT токена"""
-    # TODO: Реализовать извлечение user_id из JWT токена
-    return 1  # Заглушка
+    return 1
 
 
 def apply_task_filters(query, filters: TaskFilterSchema, user_id: int):
     """Применение фильтров к запросу задач"""
-    # Базовая фильтрация по пользователю
     query = query.filter(InviteTask.user_id == user_id)
     
-    # Фильтр по статусам
     if filters.status:
         query = query.filter(InviteTask.status.in_(filters.status))
     
-    # Фильтр по платформам
     if filters.platform:
         query = query.filter(InviteTask.platform.in_(filters.platform))
     
-    # Фильтр по приоритетам
     if filters.priority:
         query = query.filter(InviteTask.priority.in_(filters.priority))
     
-    # Фильтр по датам создания
     if filters.created_after:
         query = query.filter(InviteTask.created_at >= filters.created_after)
     
     if filters.created_before:
         query = query.filter(InviteTask.created_at <= filters.created_before)
     
-    # Поиск по названию
     if filters.name_contains:
         query = query.filter(InviteTask.name.ilike(f"%{filters.name_contains}%"))
     
@@ -78,13 +71,6 @@ def apply_task_sorting(query, sort_by: TaskSortBy, sort_order: SortOrder):
         return query.order_by(order_func(InviteTask.priority))
     elif sort_by == TaskSortBy.STATUS:
         return query.order_by(order_func(InviteTask.status))
-    elif sort_by == TaskSortBy.PROGRESS:
-        # Вычисленное поле прогресса
-        progress = func.coalesce(
-            (InviteTask.completed_count + InviteTask.failed_count) * 100.0 / 
-            func.nullif(InviteTask.target_count, 0), 0
-        )
-        return query.order_by(order_func(progress))
     else:
         return query.order_by(desc(InviteTask.created_at))
 
@@ -98,7 +84,6 @@ async def create_invite_task(
     user_id = get_current_user_id()
     
     try:
-        # Создание новой задачи
         task = InviteTask(
             user_id=user_id,
             name=task_data.name,
@@ -128,28 +113,21 @@ async def create_invite_task(
 
 @router.get("/", response_model=TaskListResponse)
 async def get_invite_tasks(
-    # Фильтры
     status: Optional[List[TaskStatus]] = Query(None, description="Фильтр по статусам"),
     platform: Optional[List[str]] = Query(None, description="Фильтр по платформам"),
     priority: Optional[List[TaskPriority]] = Query(None, description="Фильтр по приоритетам"),
     created_after: Optional[datetime] = Query(None, description="Созданы после даты"),
     created_before: Optional[datetime] = Query(None, description="Созданы до даты"),
     name_contains: Optional[str] = Query(None, description="Поиск по названию"),
-    
-    # Пагинация
     page: int = Query(1, ge=1, description="Номер страницы"),
     page_size: int = Query(20, ge=1, le=100, description="Размер страницы"),
-    
-    # Сортировка
     sort_by: TaskSortBy = Query(TaskSortBy.CREATED_AT, description="Поле для сортировки"),
     sort_order: SortOrder = Query(SortOrder.DESC, description="Порядок сортировки"),
-    
     db: Session = Depends(get_db)
 ):
     """Получение списка задач приглашений с фильтрацией и пагинацией"""
     user_id = get_current_user_id()
     
-    # Создание объекта фильтров
     filters = TaskFilterSchema(
         status=status,
         platform=platform,
@@ -163,23 +141,16 @@ async def get_invite_tasks(
         sort_order=sort_order
     )
     
-    # Основной запрос
     query = db.query(InviteTask)
-    
-    # Применение фильтров
     query = apply_task_filters(query, filters, user_id)
     
-    # Подсчет общего количества
     total = query.count()
     
-    # Применение сортировки
     query = apply_task_sorting(query, sort_by, sort_order)
     
-    # Применение пагинации
     offset = (page - 1) * page_size
     tasks = query.offset(offset).limit(page_size).all()
     
-    # Вычисление метаданных пагинации
     total_pages = math.ceil(total / page_size) if total > 0 else 1
     has_next = page < total_pages
     has_prev = page > 1
@@ -205,7 +176,7 @@ async def get_invite_task(
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
-        InviteTask.user_id == user_id  # Проверка владельца
+        InviteTask.user_id == user_id
     ).first()
     
     if not task:
@@ -237,16 +208,13 @@ async def update_invite_task(
             detail=f"Задача с ID {task_id} не найдена"
         )
     
-    # Обновление полей
     update_data = task_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         if field == "settings" and value is not None:
-            # Специальная обработка для JSON полей
             setattr(task, field, value.dict() if hasattr(value, 'dict') else value)
         else:
             setattr(task, field, value)
     
-    # Обновление времени изменения
     task.updated_at = datetime.utcnow()
     
     try:
@@ -258,143 +226,6 @@ async def update_invite_task(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка обновления задачи: {str(e)}"
-        )
-
-
-@router.post("/{task_id}/duplicate", response_model=InviteTaskResponse)
-async def duplicate_invite_task(
-    task_id: int,
-    duplicate_data: TaskDuplicateRequest,
-    db: Session = Depends(get_db)
-):
-    """Дублирование задачи приглашений"""
-    user_id = get_current_user_id()
-    
-    # Получение оригинальной задачи
-    original_task = db.query(InviteTask).filter(
-        InviteTask.id == task_id,
-        InviteTask.user_id == user_id
-    ).first()
-    
-    if not original_task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Задача с ID {task_id} не найдена"
-        )
-    
-    try:
-        # Создание копии задачи
-        new_task = InviteTask(
-            user_id=user_id,
-            name=duplicate_data.new_name,
-            description=f"Копия: {original_task.description}" if original_task.description else None,
-            platform=original_task.platform,
-            priority=original_task.priority,
-            delay_between_invites=original_task.delay_between_invites,
-            max_invites_per_account=original_task.max_invites_per_account,
-            invite_message=original_task.invite_message,
-            settings=original_task.settings if duplicate_data.copy_settings else None,
-            scheduled_start=None if duplicate_data.reset_schedule else original_task.scheduled_start,
-            status=TaskStatus.PENDING  # Новая задача всегда pending
-        )
-        
-        db.add(new_task)
-        db.commit()
-        db.refresh(new_task)
-        
-        # TODO: Копирование целевой аудитории если copy_targets=True
-        # Это будет реализовано при создании endpoints для targets
-        
-        return new_task
-        
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка дублирования задачи: {str(e)}"
-        )
-
-
-@router.post("/bulk", response_model=dict)
-async def bulk_task_operations(
-    bulk_request: TaskBulkRequest,
-    db: Session = Depends(get_db)
-):
-    """Массовые операции с задачами"""
-    user_id = get_current_user_id()
-    
-    # Проверка существования всех задач и прав доступа
-    tasks = db.query(InviteTask).filter(
-        InviteTask.id.in_(bulk_request.task_ids),
-        InviteTask.user_id == user_id
-    ).all()
-    
-    if len(tasks) != len(bulk_request.task_ids):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Некоторые задачи не найдены или нет доступа"
-        )
-    
-    try:
-        affected_count = 0
-        
-        if bulk_request.action == TaskBulkAction.DELETE:
-            # Удаление задач
-            for task in tasks:
-                db.delete(task)
-                affected_count += 1
-                
-        elif bulk_request.action == TaskBulkAction.PAUSE:
-            # Приостановка задач
-            for task in tasks:
-                if task.status in [TaskStatus.RUNNING, TaskStatus.PENDING]:
-                    task.status = TaskStatus.PAUSED
-                    affected_count += 1
-                    
-        elif bulk_request.action == TaskBulkAction.RESUME:
-            # Возобновление задач
-            for task in tasks:
-                if task.status == TaskStatus.PAUSED:
-                    task.status = TaskStatus.PENDING
-                    affected_count += 1
-                    
-        elif bulk_request.action == TaskBulkAction.CANCEL:
-            # Отмена задач
-            for task in tasks:
-                if task.status in [TaskStatus.RUNNING, TaskStatus.PENDING, TaskStatus.PAUSED]:
-                    task.status = TaskStatus.CANCELLED
-                    affected_count += 1
-                    
-        elif bulk_request.action == TaskBulkAction.SET_PRIORITY:
-            # Установка приоритета
-            new_priority = bulk_request.parameters.get("priority") if bulk_request.parameters else None
-            if not new_priority or new_priority not in [p.value for p in TaskPriority]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Необходимо указать корректный приоритет в параметрах"
-                )
-            
-            for task in tasks:
-                task.priority = TaskPriority(new_priority)
-                affected_count += 1
-        
-        # Обновление времени изменения для всех затронутых задач
-        for task in tasks:
-            task.updated_at = datetime.utcnow()
-        
-        db.commit()
-        
-        return {
-            "message": f"Операция '{bulk_request.action}' выполнена",
-            "affected_count": affected_count,
-            "total_requested": len(bulk_request.task_ids)
-        }
-        
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка выполнения массовой операции: {str(e)}"
         )
 
 
