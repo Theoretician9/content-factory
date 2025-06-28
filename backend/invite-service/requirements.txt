@@ -17,6 +17,7 @@ prometheus-client==0.19.0
 hvac==2.0.0
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+PyJWT==2.8.0
 
 # Новые зависимости для Telegram интеграции
 kombu==5.3.4
