@@ -6,6 +6,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Integrations from './pages/Integrations';
 import Parsing from './pages/Parsing';
+import Mailing from './pages/Mailing';
 import PrivateRoute from './PrivateRoute';
 import { UserProvider } from './UserContext';
 
@@ -28,6 +29,11 @@ const App = () => (
       <Route path="/parsing" element={
         <PrivateRoute>
           <Parsing />
+        </PrivateRoute>
+      } />
+      <Route path="/mailing" element={
+        <PrivateRoute>
+          <Mailing />
         </PrivateRoute>
       } />
     </Routes>
