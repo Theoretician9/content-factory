@@ -29,25 +29,21 @@ async def get_accounts(user_id: int = Depends(get_current_user_id)):
         return [
             {
                 "account_id": "telegram_001",
-                "platform": "telegram",
+                "platform": "telegram", 
                 "username": "@test_account",
                 "status": "active",
                 "daily_invite_limit": 50,
                 "daily_invites_used": 5,
-                "flood_wait_until": None,
-                "phone_number": "+1234567890",
-                "is_active": True
+                "flood_wait_until": None
             },
             {
                 "account_id": "telegram_002", 
                 "platform": "telegram",
-                "username": "@demo_bot",
+                "username": "@demo_bot", 
                 "status": "active",
                 "daily_invite_limit": 30,
                 "daily_invites_used": 0,
-                "flood_wait_until": None,
-                "phone_number": "+0987654321",
-                "is_active": True
+                "flood_wait_until": None
             }
         ]
         
