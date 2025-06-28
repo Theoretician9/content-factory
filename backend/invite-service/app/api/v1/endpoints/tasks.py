@@ -2,13 +2,27 @@
 API endpoints для управления задачами приглашений
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import and_, or_, func
+from typing import List, Optional
+from datetime import datetime
+import math
 
 from app.core.database import get_db
 from app.models import InviteTask, TaskStatus
-from app.schemas.invite_task import InviteTaskCreate, InviteTaskResponse, InviteTaskUpdate
+from app.schemas.invite_task import (
+    InviteTaskCreate, 
+    InviteTaskResponse, 
+    InviteTaskUpdate,
+    TaskFilterSchema,
+    TaskListResponse,
+    TaskDuplicateRequest,
+    TaskBulkRequest,
+    TaskBulkAction,
+    TaskSortBy,
+    SortOrder
+)
 
 router = APIRouter()
 
