@@ -27,6 +27,61 @@ class TaskSortBy(str, Enum):
     PROGRESS = "progress_percentage"
 
 
+class TaskSettingsSchema(BaseModel):
+    """Схема для дополнительных настроек задачи"""
+    auto_retry_failed: bool = True
+    max_retry_attempts: int = 3
+    use_proxy: bool = False
+    proxy_settings: Optional[Dict[str, Any]] = None
+    custom_headers: Optional[Dict[str, str]] = None
+    
+    class Config:
+        extra = "allow"  # Позволяет дополнительные поля
+
+
+class InviteTaskResponse(BaseModel):
+    """Схема для ответа с задачей приглашений"""
+    id: int
+    user_id: int
+    name: str
+    description: Optional[str]
+    
+    status: TaskStatus
+    priority: TaskPriority
+    platform: str
+    
+    # Статистика
+    target_count: int
+    completed_count: int
+    failed_count: int
+    progress_percentage: float
+    
+    # Параметры
+    delay_between_invites: int
+    max_invites_per_account: int
+    invite_message: Optional[str]
+    
+    # Временные рамки
+    created_at: datetime
+    updated_at: datetime
+    start_time: Optional[datetime]
+    end_time: Optional[datetime]
+    scheduled_start: Optional[datetime]
+    
+    # Ошибки
+    error_message: Optional[str]
+    
+    # Дополнительные данные
+    settings: Optional[Dict[str, Any]]
+    results: Optional[Dict[str, Any]]
+    
+    class Config:
+        from_attributes = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+
+
 class TaskFilterSchema(BaseModel):
     """Схема для фильтрации задач"""
     status: Optional[List[TaskStatus]] = Field(None, description="Фильтр по статусам")
@@ -80,18 +135,6 @@ class TaskBulkRequest(BaseModel):
     parameters: Optional[Dict[str, Any]] = Field(None, description="Дополнительные параметры")
 
 
-class TaskSettingsSchema(BaseModel):
-    """Схема для дополнительных настроек задачи"""
-    auto_retry_failed: bool = True
-    max_retry_attempts: int = 3
-    use_proxy: bool = False
-    proxy_settings: Optional[Dict[str, Any]] = None
-    custom_headers: Optional[Dict[str, str]] = None
-    
-    class Config:
-        extra = "allow"  # Позволяет дополнительные поля
-
-
 class InviteTaskCreate(BaseModel):
     """Схема для создания задачи приглашений"""
     name: str = Field(..., min_length=1, max_length=255, description="Название задачи")
@@ -132,49 +175,6 @@ class InviteTaskUpdate(BaseModel):
     settings: Optional[TaskSettingsSchema] = None
     
     class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
-
-
-class InviteTaskResponse(BaseModel):
-    """Схема для ответа с задачей приглашений"""
-    id: int
-    user_id: int
-    name: str
-    description: Optional[str]
-    
-    status: TaskStatus
-    priority: TaskPriority
-    platform: str
-    
-    # Статистика
-    target_count: int
-    completed_count: int
-    failed_count: int
-    progress_percentage: float
-    
-    # Параметры
-    delay_between_invites: int
-    max_invites_per_account: int
-    invite_message: Optional[str]
-    
-    # Временные рамки
-    created_at: datetime
-    updated_at: datetime
-    start_time: Optional[datetime]
-    end_time: Optional[datetime]
-    scheduled_start: Optional[datetime]
-    
-    # Ошибки
-    error_message: Optional[str]
-    
-    # Дополнительные данные
-    settings: Optional[Dict[str, Any]]
-    results: Optional[Dict[str, Any]]
-    
-    class Config:
-        from_attributes = True
         json_encoders = {
             datetime: lambda v: v.isoformat()
         } 
