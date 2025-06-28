@@ -1,24 +1,45 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import Sidebar from '../components/Sidebar';
+import Header from '../components/Header';
+import { inviteApi, parsingApi } from '../api';
+import Loader from '../components/Loader';
+import ErrorMessage from '../components/ErrorMessage';
+import Button from '../components/Button';
 
-// Типы данных
 interface InviteTask {
-  id: number;
-  name: string;
+  id: string;
+  user_id: number;
+  platform: 'telegram' | 'instagram' | 'whatsapp';
+  task_type: 'invite_to_group' | 'send_messages';
+  title: string;
   description?: string;
-  platform: string;
-  status: 'PENDING' | 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  target_group_id?: string;
+  message_template?: string;
   priority: 'HIGH' | 'NORMAL' | 'LOW';
-  target_count: number;
-  completed_count: number;
-  failed_count: number;
+  status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+  progress: number;
   created_at: string;
   updated_at: string;
+  scheduled_at?: string;
+  started_at?: string;
+  completed_at?: string;
+  error_message?: string;
+  target_count?: number;
+  invited_count?: number;
+  failed_count?: number;
+  settings?: {
+    delay_between_invites?: number;
+    batch_size?: number;
+    auto_add_contacts?: boolean;
+    fallback_to_messages?: boolean;
+  };
 }
 
 interface TaskStats {
-  task_id: number;
-  task_name: string;
+  task_id: string;
+  task_title: string;
   task_status: string;
   targets_statistics: {
     total_targets: number;
@@ -37,183 +58,418 @@ interface TaskStats {
     flood_wait: number;
     avg_execution_time: number;
   };
+  accounts_statistics: any[];
 }
 
-const Mailing: React.FC = () => {
+interface ExecutionLog {
+  id: string;
+  task_id: string;
+  target_id: string;
+  account_id: string;
+  action: string;
+  status: string;
+  details: any;
+  created_at: string;
+}
+
+interface Account {
+  account_id: string;
+  platform: string;
+  username?: string;
+  status: string;
+  daily_invite_limit: number;
+  daily_invites_used: number;
+  flood_wait_until?: string;
+}
+
+interface ParseTask {
+  id: string;
+  platform: string;
+  status: string;
+  result_count: number;
+  created_at: string;
+  link: string;
+}
+
+const Mailing = () => {
+  const navigate = useNavigate();
   const { t } = useTranslation();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768);
   
-  // Состояние компонента
+  // Основное состояние
+  const [activeTab, setActiveTab] = useState<'create' | 'tasks' | 'import' | 'stats'>('tasks');
+  
+  // Задачи приглашений
   const [tasks, setTasks] = useState<InviteTask[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>('');
-  const [selectedTask, setSelectedTask] = useState<InviteTask | null>(null);
-  const [taskStats, setTaskStats] = useState<TaskStats | null>(null);
-  const [activeTab, setActiveTab] = useState<'tasks' | 'create' | 'import' | 'stats'>('tasks');
-  
-  // Форма создания задачи
-  const [newTask, setNewTask] = useState({
-    name: '',
-    description: '',
-    platform: 'telegram',
-    priority: 'NORMAL' as const,
-    invite_message: '',
-    delay_between_invites: 5
+  const [tasksFilter, setTasksFilter] = useState({
+    platform: '',
+    status: '',
+    page: 1,
+    limit: 20
   });
   
-  // Состояние для импорта файлов
+  // Создание задачи
+  const [createForm, setCreateForm] = useState({
+    platform: 'telegram' as const,
+    task_type: 'invite_to_group' as const,
+    title: '',
+    description: '',
+    target_group_id: '',
+    message_template: '',
+    priority: 'NORMAL' as const,
+    settings: {
+      delay_between_invites: 15,
+      batch_size: 10,
+      auto_add_contacts: true,
+      fallback_to_messages: true
+    }
+  });
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+  
+  // Импорт данных
+  const [importTab, setImportTab] = useState<'parsing' | 'file'>('parsing');
+  const [selectedTaskForImport, setSelectedTaskForImport] = useState<string>('');
+  const [parseTasks, setParseTasks] = useState<ParseTask[]>([]);
+  const [selectedParseTask, setSelectedParseTask] = useState<string>('');
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importProgress, setImportProgress] = useState<{
-    importing: boolean;
-    result?: any;
-  }>({ importing: false });
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState('');
+  
+  // Статистика
+  const [selectedTaskForStats, setSelectedTaskForStats] = useState<string>('');
+  const [taskStats, setTaskStats] = useState<TaskStats | null>(null);
+  const [executionLogs, setExecutionLogs] = useState<ExecutionLog[]>([]);
+  const [statsLoading, setStatsLoading] = useState(false);
+  
+  // Аккаунты
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(false);
 
-  // Загрузка задач при монтировании компонента
   useEffect(() => {
-    loadTasks();
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 768);
+      if (window.innerWidth >= 768) setSidebarOpen(false);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // API функции
-  const apiCall = async (endpoint: string, options: RequestInit = {}) => {
-    const token = localStorage.getItem('access_token');
-    const response = await fetch(`/api/invite${endpoint}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-      },
+  useEffect(() => {
+    loadTasks();
+    loadAccounts();
+  }, [tasksFilter]);
+
+  useEffect(() => {
+    if (activeTab === 'import') {
+      loadParseTasks();
+    }
+  }, [activeTab]);
+
+  // Real-time обновление прогресса
+  useEffect(() => {
+    const activeTasksSSE = new Map<string, EventSource>();
+
+    const activeTasks = tasks.filter(task => 
+      task.status === 'pending' || task.status === 'running'
+    );
+
+    activeTasks.forEach(task => {
+      if (!activeTasksSSE.has(task.id)) {
+        const eventSource = new EventSource(
+          `/api/invite/tasks/${task.id}/progress-stream`
+        );
+
+        eventSource.onmessage = (event) => {
+          try {
+            const progressData = JSON.parse(event.data);
+            
+            setTasks(prevTasks => 
+              prevTasks.map(t => 
+                t.id === task.id 
+                  ? { ...t, 
+                      progress: progressData.progress, 
+                      status: progressData.status,
+                      invited_count: progressData.invited_count,
+                      failed_count: progressData.failed_count,
+                      updated_at: progressData.timestamp 
+                    }
+                  : t
+              )
+            );
+
+            if (['completed', 'failed', 'cancelled'].includes(progressData.status)) {
+              eventSource.close();
+              activeTasksSSE.delete(task.id);
+            }
+          } catch (err) {
+            console.error('Error parsing SSE data:', err);
+          }
+        };
+
+        eventSource.onerror = (error) => {
+          console.error('SSE error for task', task.id, error);
+          eventSource.close();
+          activeTasksSSE.delete(task.id);
+        };
+
+        activeTasksSSE.set(task.id, eventSource);
+      }
     });
 
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
-    }
+    activeTasksSSE.forEach((eventSource, taskId) => {
+      const isStillActive = activeTasks.some(task => task.id === taskId);
+      if (!isStillActive) {
+        eventSource.close();
+        activeTasksSSE.delete(taskId);
+      }
+    });
 
-    return response.json();
-  };
+    return () => {
+      activeTasksSSE.forEach(eventSource => eventSource.close());
+      activeTasksSSE.clear();
+    };
+  }, [tasks.map(t => `${t.id}:${t.status}`).join(',')]);
+
+  // Fallback: обновление каждые 15 секунд
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      loadTasks();
+    }, 15000);
+
+    return () => clearInterval(intervalId);
+  }, [tasksFilter]);
 
   const loadTasks = async () => {
     setLoading(true);
     setError('');
+    
     try {
-      const data = await apiCall('/tasks/');
-      setTasks(data.items || []);
+      const apiFilter = {
+        platform: tasksFilter.platform || undefined,
+        status: tasksFilter.status || undefined,
+        page: tasksFilter.page,
+        limit: tasksFilter.limit
+      };
+      
+      const res = await inviteApi.tasks.list(apiFilter as any);
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(data.tasks || data);
+      } else {
+        setError('Ошибка загрузки задач приглашений');
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка загрузки задач');
+      setError('Ошибка сети при загрузке задач');
+      console.error('Error loading tasks:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const createTask = async () => {
-    if (!newTask.name.trim()) {
-      setError('Введите название задачи');
-      return;
-    }
-
-    setLoading(true);
+  const loadAccounts = async () => {
+    setAccountsLoading(true);
     try {
-      await apiCall('/tasks/', {
-        method: 'POST',
-        body: JSON.stringify(newTask),
-      });
-      
-      setNewTask({
-        name: '',
-        description: '',
-        platform: 'telegram',
-        priority: 'NORMAL',
-        invite_message: '',
-        delay_between_invites: 5
-      });
-      
-      await loadTasks();
-      setActiveTab('tasks');
+      const res = await inviteApi.accounts();
+      if (res.ok) {
+        const data = await res.json();
+        setAccounts(data);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка создания задачи');
+      console.error('Error loading accounts:', err);
     } finally {
-      setLoading(false);
+      setAccountsLoading(false);
     }
   };
 
-  const executeTask = async (taskId: number) => {
+  const loadParseTasks = async () => {
     try {
-      await apiCall(`/tasks/${taskId}/execute`, { method: 'POST' });
-      await loadTasks();
+      const res = await inviteApi.parsingTasks();
+      if (res.ok) {
+        const data = await res.json();
+        setParseTasks(data);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка запуска задачи');
+      console.error('Error loading parse tasks:', err);
     }
   };
 
-  const pauseTask = async (taskId: number) => {
-    try {
-      await apiCall(`/tasks/${taskId}/pause`, { method: 'POST' });
-      await loadTasks();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка приостановки задачи');
-    }
-  };
-
-  const resumeTask = async (taskId: number) => {
-    try {
-      await apiCall(`/tasks/${taskId}/resume`, { method: 'POST' });
-      await loadTasks();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка возобновления задачи');
-    }
-  };
-
-  const loadTaskStats = async (taskId: number) => {
-    try {
-      const stats = await apiCall(`/tasks/${taskId}/stats`);
-      setTaskStats(stats);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка загрузки статистики');
-    }
-  };
-
-  const handleFileImport = async (taskId: number) => {
-    if (!importFile) {
-      setError('Выберите файл для импорта');
+  const handleCreateTask = async () => {
+    if (!createForm.title.trim()) {
+      setCreateError('Введите название задачи');
       return;
     }
 
-    setImportProgress({ importing: true });
-    const formData = new FormData();
-    formData.append('file', importFile);
-    formData.append('source_name', `import_${Date.now()}`);
+    if (createForm.task_type === 'invite_to_group' && !createForm.target_group_id.trim()) {
+      setCreateError('Укажите ID/ссылку группы или канала для приглашений');
+      return;
+    }
+
+    if (createForm.task_type === 'send_messages' && !createForm.message_template.trim()) {
+      setCreateError('Введите текст сообщения');
+      return;
+    }
+
+    setCreating(true);
+    setCreateError('');
 
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await fetch(`/api/invite/tasks/${taskId}/import/file`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
+      const res = await inviteApi.tasks.create({
+        platform: createForm.platform,
+        task_type: createForm.task_type,
+        title: createForm.title,
+        description: createForm.description || undefined,
+        target_group_id: createForm.target_group_id || undefined,
+        message_template: createForm.message_template || undefined,
+        priority: createForm.priority,
+        settings: createForm.settings
       });
 
-      if (!response.ok) {
-        throw new Error(`Import failed: ${response.status}`);
+      if (res.ok) {
+        setCreateForm(prev => ({ ...prev, title: '', description: '', target_group_id: '', message_template: '' }));
+        setCreateError('');
+        loadTasks();
+        setActiveTab('tasks');
+      } else {
+        const error = await res.json();
+        setCreateError(error.detail || 'Ошибка создания задачи');
+      }
+    } catch (err) {
+      setCreateError('Ошибка сети');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleTaskAction = async (taskId: string, action: 'start' | 'pause' | 'resume' | 'cancel' | 'delete') => {
+    try {
+      let res;
+      if (action === 'start') {
+        res = await inviteApi.execution.start(taskId);
+      } else if (action === 'pause') {
+        res = await inviteApi.execution.pause(taskId);
+      } else if (action === 'resume') {
+        res = await inviteApi.execution.resume(taskId);
+      } else if (action === 'cancel') {
+        if (!confirm('Вы уверены, что хотите отменить эту задачу?')) return;
+        res = await inviteApi.execution.cancel(taskId);
+      } else if (action === 'delete') {
+        if (!confirm('Вы уверены, что хотите удалить эту задачу?')) return;
+        res = await inviteApi.tasks.delete(taskId);
       }
 
-      const result = await response.json();
-      setImportProgress({ importing: false, result });
-      setImportFile(null);
-      await loadTasks();
+      if (res?.ok) {
+        loadTasks();
+      }
     } catch (err) {
-      setImportProgress({ importing: false });
-      setError(err instanceof Error ? err.message : 'Ошибка импорта файла');
+      console.error(`Error ${action} task:`, err);
     }
   };
 
-  // Функции для статусов и стилей
+  const handleViewStats = async (taskId: string) => {
+    setSelectedTaskForStats(taskId);
+    setStatsLoading(true);
+    setActiveTab('stats');
+    
+    try {
+      const [statsRes, logsRes] = await Promise.all([
+        inviteApi.execution.stats(taskId),
+        inviteApi.execution.logs(taskId, { limit: 50 })
+      ]);
+      
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        setTaskStats(statsData);
+      }
+      
+      if (logsRes.ok) {
+        const logsData = await logsRes.json();
+        setExecutionLogs(logsData.logs || logsData);
+      }
+    } catch (err) {
+      console.error('Error loading stats:', err);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  const handleImportFromParsing = async () => {
+    if (!selectedTaskForImport || !selectedParseTask) {
+      setImportError('Выберите задачу для импорта и источник данных');
+      return;
+    }
+
+    setImporting(true);
+    setImportError('');
+
+    try {
+      const res = await inviteApi.import.parsing(selectedTaskForImport, {
+        parsing_task_id: selectedParseTask,
+        source_name: `parsing_${selectedParseTask}`
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        setImportError('');
+        loadTasks();
+        setActiveTab('tasks');
+      } else {
+        const error = await res.json();
+        setImportError(error.detail || 'Ошибка импорта данных');
+      }
+    } catch (err) {
+      setImportError('Ошибка сети');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleImportFromFile = async () => {
+    if (!selectedTaskForImport || !importFile) {
+      setImportError('Выберите задачу для импорта и файл');
+      return;
+    }
+
+    setImporting(true);
+    setImportError('');
+
+    try {
+      const res = await inviteApi.import.file(selectedTaskForImport, importFile, {
+        source_name: `file_${Date.now()}`
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        setImportError('');
+        setImportFile(null);
+        loadTasks();
+        setActiveTab('tasks');
+      } else {
+        const error = await res.json();
+        setImportError(error.detail || 'Ошибка импорта файла');
+      }
+    } catch (err) {
+      setImportError('Ошибка сети');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString('ru-RU');
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'RUNNING': return 'text-blue-600 bg-blue-100';
-      case 'COMPLETED': return 'text-green-600 bg-green-100';
-      case 'FAILED': return 'text-red-600 bg-red-100';
-      case 'PAUSED': return 'text-yellow-600 bg-yellow-100';
-      case 'CANCELLED': return 'text-gray-600 bg-gray-100';
+      case 'completed': return 'text-green-600 bg-green-100';
+      case 'running': return 'text-blue-600 bg-blue-100';
+      case 'pending': return 'text-yellow-600 bg-yellow-100';
+      case 'paused': return 'text-orange-600 bg-orange-100';
+      case 'failed': return 'text-red-600 bg-red-100';
+      case 'cancelled': return 'text-gray-600 bg-gray-100';
       default: return 'text-gray-600 bg-gray-100';
     }
   };
@@ -227,452 +483,263 @@ const Mailing: React.FC = () => {
     }
   };
 
-  const getProgressPercentage = (task: InviteTask) => {
-    if (task.target_count === 0) return 0;
-    return Math.round(((task.completed_count + task.failed_count) / task.target_count) * 100);
+  const getPlatformIcon = (platform: string) => {
+    switch (platform) {
+      case 'telegram': return '📱';
+      case 'instagram': return '📸';
+      case 'whatsapp': return '💬';
+      default: return '🌐';
+    }
   };
 
+  if (loading && tasks.length === 0) {
+    return (
+      <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
+        <div className="flex items-center justify-center w-full">
+          <Loader />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Заголовок */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            {t('Массовые приглашения')}
-          </h1>
-          <p className="text-gray-600">
-            {t('Управление задачами приглашений в мессенджеры')}
-          </p>
-        </div>
-
-        {/* Сообщения об ошибках */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-            {error}
-            <button
-              onClick={() => setError('')}
-              className="float-right text-red-500 hover:text-red-700"
-            >
-              ×
-            </button>
+    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Sidebar isOpen={isDesktop || isSidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <div className="flex-1 flex flex-col min-h-screen">
+        <Header title="Массовые приглашения" onMenuClick={() => setSidebarOpen(true)} />
+        
+        <main className="flex-1 p-4 md:p-8">
+          {error && <ErrorMessage message={error} />}
+          
+          {/* Вкладки */}
+          <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
+            <nav className="flex space-x-8">
+              {[
+                { key: 'tasks', label: 'Задачи', icon: '📋' },
+                { key: 'create', label: 'Создать', icon: '➕' },
+                { key: 'import', label: 'Импорт', icon: '📂' },
+                { key: 'stats', label: 'Статистика', icon: '📊' }
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key as any)}
+                  className={`flex items-center px-3 py-2 text-sm font-medium rounded-t-md transition-colors ${
+                    activeTab === tab.key
+                      ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-500 dark:bg-blue-900 dark:text-blue-200'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  <span className="mr-2">{tab.icon}</span>
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
           </div>
-        )}
 
-        {/* Навигационные табы */}
-        <div className="mb-6">
-          <nav className="flex space-x-8">
-            {[
-              { key: 'tasks', label: 'Задачи', icon: '📋' },
-              { key: 'create', label: 'Создать', icon: '➕' },
-              { key: 'import', label: 'Импорт', icon: '📂' },
-              { key: 'stats', label: 'Статистика', icon: '📊' }
-            ].map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key as any)}
-                className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeTab === tab.key
-                    ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-500'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <span className="mr-2">{tab.icon}</span>
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        {/* Контент табов */}
-        <div className="bg-white rounded-lg shadow">
-          {/* Таб: Список задач */}
-          {activeTab === 'tasks' && (
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold">Список задач</h2>
-                <button
-                  onClick={loadTasks}
-                  disabled={loading}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {loading ? 'Загрузка...' : 'Обновить'}
-                </button>
-              </div>
-
-              {/* Таблица задач */}
-              <div className="overflow-x-auto">
-                <table className="min-w-full table-auto">
-                  <thead>
-                    <tr className="bg-gray-50">
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Название
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Платформа
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Статус
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Прогресс
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Приоритет
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Действия
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {tasks.map(task => (
-                      <tr key={task.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">
-                              {task.name}
-                            </div>
-                            {task.description && (
-                              <div className="text-sm text-gray-500">
-                                {task.description}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {task.platform}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
-                            {task.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div
-                              className="bg-blue-600 h-2 rounded-full"
-                              style={{ width: `${getProgressPercentage(task)}%` }}
-                            ></div>
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {task.completed_count + task.failed_count} / {task.target_count}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
-                            {task.priority}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                          {task.status === 'PENDING' && (
-                            <button
-                              onClick={() => executeTask(task.id)}
-                              className="text-green-600 hover:text-green-900"
-                            >
-                              ▶ Запустить
-                            </button>
-                          )}
-                          {task.status === 'RUNNING' && (
-                            <button
-                              onClick={() => pauseTask(task.id)}
-                              className="text-yellow-600 hover:text-yellow-900"
-                            >
-                              ⏸ Пауза
-                            </button>
-                          )}
-                          {task.status === 'PAUSED' && (
-                            <button
-                              onClick={() => resumeTask(task.id)}
-                              className="text-blue-600 hover:text-blue-900"
-                            >
-                              ⏯ Продолжить
-                            </button>
-                          )}
-                          <button
-                            onClick={() => {
-                              setSelectedTask(task);
-                              loadTaskStats(task.id);
-                              setActiveTab('stats');
-                            }}
-                            className="text-blue-600 hover:text-blue-900"
-                          >
-                            📊 Статистика
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                {tasks.length === 0 && !loading && (
-                  <div className="text-center py-8 text-gray-500">
-                    Задач пока нет. Создайте первую задачу!
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Таб: Создание задачи */}
-          {activeTab === 'create' && (
-            <div className="p-6">
-              <h2 className="text-xl font-semibold mb-6">Создать новую задачу</h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Название задачи *
-                  </label>
-                  <input
-                    type="text"
-                    value={newTask.name}
-                    onChange={(e) => setNewTask({ ...newTask, name: e.target.value })}
-                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Например: Приглашения в группу"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Платформа
-                  </label>
-                  <select
-                    value={newTask.platform}
-                    onChange={(e) => setNewTask({ ...newTask, platform: e.target.value })}
-                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="telegram">Telegram</option>
-                    <option value="instagram">Instagram</option>
-                    <option value="whatsapp">WhatsApp</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Приоритет
-                  </label>
-                  <select
-                    value={newTask.priority}
-                    onChange={(e) => setNewTask({ ...newTask, priority: e.target.value as any })}
-                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="HIGH">Высокий</option>
-                    <option value="NORMAL">Обычный</option>
-                    <option value="LOW">Низкий</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Задержка между приглашениями (сек)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="60"
-                    value={newTask.delay_between_invites}
-                    onChange={(e) => setNewTask({ ...newTask, delay_between_invites: parseInt(e.target.value) })}
-                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Описание
-                  </label>
-                  <textarea
-                    value={newTask.description}
-                    onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                    rows={3}
-                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Описание задачи (необязательно)"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Сообщение для приглашения
-                  </label>
-                  <textarea
-                    value={newTask.invite_message}
-                    onChange={(e) => setNewTask({ ...newTask, invite_message: e.target.value })}
-                    rows={4}
-                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Привет! Приглашаю тебя в нашу группу..."
-                  />
-                </div>
-              </div>
-
-              <div className="mt-6 flex justify-end space-x-3">
-                <button
-                  onClick={() => setActiveTab('tasks')}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                >
-                  Отмена
-                </button>
-                <button
-                  onClick={createTask}
-                  disabled={loading || !newTask.name.trim()}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {loading ? 'Создание...' : 'Создать задачу'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Таб: Импорт данных */}
-          {activeTab === 'import' && (
-            <div className="p-6">
-              <h2 className="text-xl font-semibold mb-6">Импорт целевой аудитории</h2>
-              
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Выберите задачу для импорта
-                  </label>
-                  <select
-                    value={selectedTask?.id || ''}
-                    onChange={(e) => {
-                      const task = tasks.find(t => t.id === parseInt(e.target.value));
-                      setSelectedTask(task || null);
-                    }}
-                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Выберите задачу</option>
-                    {tasks.map(task => (
-                      <option key={task.id} value={task.id}>
-                        {task.name} ({task.platform})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {selectedTask && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Загрузить файл (CSV, JSON, TXT)
-                    </label>
-                    <input
-                      type="file"
-                      accept=".csv,.json,.txt"
-                      onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                      className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    />
-                    <p className="text-sm text-gray-500 mt-2">
-                      Поддерживаемые форматы: CSV (с заголовками), JSON (массив объектов), TXT (по одному значению на строку)
-                    </p>
-                  </div>
-                )}
-
-                {importFile && selectedTask && (
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => handleFileImport(selectedTask.id)}
-                      disabled={importProgress.importing}
-                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+          {/* Контент вкладок */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+            
+            {/* Вкладка: Список задач */}
+            {activeTab === 'tasks' && (
+              <div className="p-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                    Задачи приглашений
+                  </h2>
+                  
+                  {/* Фильтры */}
+                  <div className="flex flex-wrap gap-3">
+                    <select
+                      value={tasksFilter.platform}
+                      onChange={(e) => setTasksFilter(prev => ({ ...prev, platform: e.target.value }))}
+                      className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
                     >
-                      {importProgress.importing ? 'Импорт...' : 'Импортировать'}
-                    </button>
-                  </div>
-                )}
-
-                {importProgress.result && (
-                  <div className="p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg">
-                    <h3 className="font-medium">Импорт завершен!</h3>
-                    <p>Импортировано: {importProgress.result.imported_count}</p>
-                    <p>Ошибок: {importProgress.result.error_count}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Таб: Статистика */}
-          {activeTab === 'stats' && taskStats && (
-            <div className="p-6">
-              <h2 className="text-xl font-semibold mb-6">
-                Статистика: {taskStats.task_name}
-              </h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Статистика по целям */}
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h3 className="font-medium text-blue-800 mb-3">Целевая аудитория</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span>Всего целей:</span>
-                      <span className="font-medium">{taskStats.targets_statistics.total_targets}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Приглашено:</span>
-                      <span className="font-medium text-green-600">{taskStats.targets_statistics.invited_targets}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Неудачно:</span>
-                      <span className="font-medium text-red-600">{taskStats.targets_statistics.failed_targets}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Прогресс:</span>
-                      <span className="font-medium">{taskStats.targets_statistics.progress_percentage}%</span>
-                    </div>
+                      <option value="">Все платформы</option>
+                      <option value="telegram">Telegram</option>
+                      <option value="instagram">Instagram</option>
+                      <option value="whatsapp">WhatsApp</option>
+                    </select>
+                    
+                    <select
+                      value={tasksFilter.status}
+                      onChange={(e) => setTasksFilter(prev => ({ ...prev, status: e.target.value }))}
+                      className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                    >
+                      <option value="">Все статусы</option>
+                      <option value="pending">Ожидает</option>
+                      <option value="running">Выполняется</option>
+                      <option value="paused">Приостановлена</option>
+                      <option value="completed">Завершена</option>
+                      <option value="failed">Ошибка</option>
+                      <option value="cancelled">Отменена</option>
+                    </select>
+                    
+                    <Button
+                      onClick={loadTasks}
+                      disabled={loading}
+                      variant="outline"
+                      className="px-4 py-2"
+                    >
+                      {loading ? 'Загрузка...' : 'Обновить'}
+                    </Button>
                   </div>
                 </div>
 
-                {/* Статистика выполнения */}
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <h3 className="font-medium text-green-800 mb-3">Выполнение</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span>Попыток:</span>
-                      <span className="font-medium">{taskStats.execution_statistics.total_attempts}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Успешно:</span>
-                      <span className="font-medium text-green-600">{taskStats.execution_statistics.successful_invites}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Rate limit:</span>
-                      <span className="font-medium text-yellow-600">{taskStats.execution_statistics.rate_limited}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Время (сек):</span>
-                      <span className="font-medium">{taskStats.execution_statistics.avg_execution_time}</span>
-                    </div>
-                  </div>
-                </div>
+                {/* Таблица задач */}
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-700">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                          Название
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                          Платформа
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                          Тип
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                          Статус
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                          Прогресс
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                          Приоритет
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                          Действия
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                      {tasks.map(task => (
+                        <tr key={task.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                {task.title}
+                              </div>
+                              {task.description && (
+                                <div className="text-sm text-gray-500 dark:text-gray-400">
+                                  {task.description.substring(0, 50)}...
+                                </div>
+                              )}
+                              <div className="text-xs text-gray-400 dark:text-gray-500">
+                                {formatDate(task.created_at)}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <span className="mr-2">{getPlatformIcon(task.platform)}</span>
+                              <span className="text-sm text-gray-900 dark:text-gray-100 capitalize">
+                                {task.platform}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                              {task.task_type === 'invite_to_group' ? 'Приглашения' : 'Сообщения'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
+                              {task.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                              <div
+                                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${task.progress || 0}%` }}
+                              ></div>
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              {task.invited_count || 0} / {task.target_count || 0}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
+                              {task.priority}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex flex-wrap gap-2">
+                              {task.status === 'pending' && (
+                                <button
+                                  onClick={() => handleTaskAction(task.id, 'start')}
+                                  className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                  title="Запустить"
+                                >
+                                  ▶
+                                </button>
+                              )}
+                              {task.status === 'running' && (
+                                <button
+                                  onClick={() => handleTaskAction(task.id, 'pause')}
+                                  className="text-yellow-600 hover:text-yellow-900 dark:text-yellow-400 dark:hover:text-yellow-300"
+                                  title="Пауза"
+                                >
+                                  ⏸
+                                </button>
+                              )}
+                              {task.status === 'paused' && (
+                                <button
+                                  onClick={() => handleTaskAction(task.id, 'resume')}
+                                  className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                                  title="Продолжить"
+                                >
+                                  ⏯
+                                </button>
+                              )}
+                              {(task.status === 'running' || task.status === 'pending') && (
+                                <button
+                                  onClick={() => handleTaskAction(task.id, 'cancel')}
+                                  className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                  title="Отменить"
+                                >
+                                  ⏹
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleViewStats(task.id)}
+                                className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                                title="Статистика"
+                              >
+                                📊
+                              </button>
+                              {task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled' ? (
+                                <button
+                                  onClick={() => handleTaskAction(task.id, 'delete')}
+                                  className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                  title="Удалить"
+                                >
+                                  🗑
+                                </button>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
 
-                {/* Статус задачи */}
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-medium text-gray-800 mb-3">Статус</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span>Статус:</span>
-                      <span className={`font-medium px-2 py-1 rounded text-xs ${getStatusColor(taskStats.task_status)}`}>
-                        {taskStats.task_status}
-                      </span>
+                  {tasks.length === 0 && !loading && (
+                    <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                      <div className="text-4xl mb-4">📱</div>
+                      <div className="text-lg font-medium mb-2">Задач пока нет</div>
+                      <div className="text-sm">Создайте первую задачу приглашений!</div>
                     </div>
-                    <div className="flex justify-between">
-                      <span>Успешность:</span>
-                      <span className="font-medium">{taskStats.targets_statistics.success_rate}%</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
+            )}
 
-              <div className="mt-6">
-                <button
-                  onClick={() => setActiveTab('tasks')}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
-                >
-                  Вернуться к задачам
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+            {/* Продолжение компонента в следующей части... */}
+          </div>
+        </main>
       </div>
     </div>
   );
