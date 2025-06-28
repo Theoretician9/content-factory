@@ -20,8 +20,8 @@
 
 ### ✅ 1.3 Базовая конфигурация
 - [x] Создать core/config.py с Settings классом
-- [ ] Интегрировать Vault с AppRole аутентификацией
-- [ ] Настроить JWT валидацию
+- [x] Интегрировать Vault с AppRole аутентификацией
+- [x] Настроить JWT валидацию из Vault
 - [x] Создать database.py для async SQLAlchemy
 
 ## ФАЗА 2: API И СХЕМЫ ✅ БАЗОВАЯ РЕАЛИЗАЦИЯ ЗАВЕРШЕНА
@@ -173,10 +173,10 @@
 ## ФАЗА 9: PRODUCTION РАЗВЕРТЫВАНИЕ
 
 ### ✅ 9.1 Vault и безопасность
-- [ ] Создать INVITE_SERVICE_ROLE_ID и SECRET_ID
-- [ ] Политики доступа в Vault
-- [ ] JWT secret для сервиса
-- [ ] Telegram API credentials в Vault
+- [x] Создать INVITE_VAULT_ROLE_ID и SECRET_ID (AppRole настроен)
+- [x] Политики доступа в Vault (invite-service-policy создана)
+- [x] JWT secret для сервиса (автоматическая загрузка из Vault)
+- [ ] Telegram API credentials в Vault (требуется при интеграции)
 
 ### ✅ 9.2 API Gateway интеграция
 - [ ] Добавить routes /api/invite/{path}
