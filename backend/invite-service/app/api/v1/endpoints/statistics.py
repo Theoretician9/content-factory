@@ -174,7 +174,7 @@ async def get_task_logs(
     task_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    result_filter: Optional[ExecutionResult] = Query(None),
+    action_filter: Optional[ActionType] = Query(None),
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
