@@ -690,6 +690,70 @@ async def proxy_parsing_service(request: Request, path: str):
         logger.error(json.dumps({"event": "parsing_service_error", "url": target_url, "error": str(e)}))
         raise HTTPException(status_code=500, detail="Internal server error")
 
+# Invite Service proxy router
+@app.api_route("/api/invite/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def proxy_invite_service(request: Request, path: str):
+    """
+    Проксирование всех запросов к Invite Service
+    """
+    # Подготовка URL - все запросы направляем в /api/v1/
+    target_url = f"{SERVICE_URLS['invite']}/api/v1/{path}"
+    
+    # Копирование headers (включая Authorization)
+    headers = {}
+    for name, value in request.headers.items():
+        if name.lower() not in ["host", "content-length"]:
+            headers[name] = value
+    
+    # Логирование для отладки авторизации
+    auth_header = headers.get("authorization", "MISSING")
+    logger.info(json.dumps({
+        "event": "proxy_to_invite_service", 
+        "path": path, 
+        "method": request.method,
+        "auth_header": auth_header[:50] + "..." if len(auth_header) > 50 else auth_header,
+        "target_url": target_url
+    }))
+    
+    # Копирование query parameters
+    query_params = str(request.url.query)
+    if query_params:
+        target_url += f"?{query_params}"
+    
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            # Получение body для POST/PUT запросов
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+            
+            # Выполнение запроса к Invite Service
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=headers,
+                content=body
+            )
+            
+            # Возврат ответа с оригинальными headers
+            response_headers = dict(response.headers)
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers=response_headers,
+                media_type=response_headers.get("content-type")
+            )
+            
+    except httpx.ConnectError:
+        logger.error(json.dumps({"event": "invite_service_connection_error", "url": target_url}))
+        raise HTTPException(status_code=502, detail="Invite service unavailable")
+    except httpx.TimeoutException:
+        logger.error(json.dumps({"event": "invite_service_timeout", "url": target_url}))
+        raise HTTPException(status_code=504, detail="Invite service timeout")
+    except Exception as e:
+        logger.error(json.dumps({"event": "invite_service_error", "url": target_url, "error": str(e)}))
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 app.include_router(api_router)
 
 # Заглушки для сервисов которые еще не реализованы
@@ -698,10 +762,7 @@ async def get_billing_tariff():
     """Заглушка для billing service."""
     return {"plan": "free", "status": "active", "limits": {"parsing": 100}}
 
-@app.get("/api/mailing/status") 
-async def get_mailing_status():
-    """Заглушка для mailing service."""
-    return {"status": "inactive", "campaigns": 0}
+# Mailing functionality now handled by Invite Service via /api/invite/ proxy
 
 @app.get("/api/autocall/status")
 async def get_autocall_status():
