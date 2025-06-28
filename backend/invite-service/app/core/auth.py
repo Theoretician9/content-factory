@@ -7,9 +7,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 from typing import Optional
 
-from .config import get_settings
-
-settings = get_settings()
+from .config import settings
 security = HTTPBearer()
 
 def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int:
