@@ -385,6 +385,247 @@ class VaultClient:
 3. Протестировать работу - сервис автоматически использует AppRole
 4. При отсутствии AppRole переменных сервис fallback на VAULT_TOKEN
 
+### 🔧 ШАБЛОН НАСТРОЙКИ НОВЫХ СЕРВИСОВ С VAULT APPROLE
+
+> **Это пошаговое руководство для настройки любого нового сервиса с Vault AppRole authentication. Используется для всех микросервисов проекта.**
+
+#### **Шаг 1: Подключение к Vault**
+```bash
+# Подключение к контейнеру Vault
+docker exec -it html-vault-1 sh
+
+# Настройка переменных окружения
+export VAULT_ADDR=http://127.0.0.1:8201
+export VAULT_TOKEN=REMOVED
+```
+
+#### **Шаг 2: Анализ существующих ролей**
+```bash
+# Посмотреть какие роли уже есть
+vault list auth/approle/role
+
+# Проверить детали существующих ролей (например parsing-service)
+vault read auth/approle/role/parsing-service
+
+# Посмотреть доступные политики
+vault policy list
+```
+
+#### **Шаг 3: Создание политики для нового сервиса**
+```bash
+# Создать политику для нового сервиса (замените SERVICE_NAME на имя сервиса)
+vault policy write SERVICE_NAME-policy - <<EOF
+# SERVICE_NAME Policy
+# Read access to JWT secrets
+path "kv/data/jwt" {
+  capabilities = ["read"]
+}
+
+# Read access to integration-service secrets (для API ключей платформ)
+path "kv/data/integration-service" {
+  capabilities = ["read"]
+}
+
+# Read/write access to service-specific secrets
+path "kv/data/SERVICE_NAME/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+
+# Read/write access to service templates (если нужно)
+path "kv/data/SERVICE_NAME/templates/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+EOF
+```
+
+#### **Шаг 4: Создание AppRole роли**
+```bash
+# Создать роль для нового сервиса (замените SERVICE_NAME)
+vault write auth/approle/role/SERVICE_NAME \
+  token_policies="SERVICE_NAME-policy,integration-service" \
+  token_ttl=24h \
+  token_max_ttl=24h \
+  secret_id_num_uses=0 \
+  token_num_uses=0 \
+  bind_secret_id=true \
+  local_secret_ids=false
+```
+
+#### **Шаг 5: Получение credentials**
+```bash
+# Получить role_id (постоянный идентификатор)
+vault read auth/approle/role/SERVICE_NAME/role-id
+
+# Сгенерировать secret_id (временный ключ)
+vault write -f auth/approle/role/SERVICE_NAME/secret-id
+
+# Проверить что роль создалась правильно
+vault read auth/approle/role/SERVICE_NAME
+```
+
+#### **Шаг 6: Добавление переменных в .env**
+```bash
+# Добавить в .env файл на сервере (замените на реальные значения из команд выше)
+SERVICE_NAME_VAULT_ROLE_ID=<role_id_из_команды_выше>
+SERVICE_NAME_VAULT_SECRET_ID=<secret_id_из_команды_выше>
+```
+
+#### **Шаг 7: Обновление docker-compose.yml**
+```yaml
+# Добавить в environment секцию сервиса в docker-compose.yml
+environment:
+  - VAULT_ADDR=http://vault:8201
+  - VAULT_TOKEN=${VAULT_TOKEN}                           # Fallback
+  - VAULT_ROLE_ID=${SERVICE_NAME_VAULT_ROLE_ID}          # AppRole
+  - VAULT_SECRET_ID=${SERVICE_NAME_VAULT_SECRET_ID}      # AppRole
+  # ... остальные переменные
+```
+
+#### **Шаг 8: Создание VaultClient в коде сервиса**
+```python
+# app/core/vault.py
+import os
+import logging
+import requests
+import time
+from typing import Optional, Dict, Any
+
+class ServiceVaultClient:
+    def __init__(self):
+        self.vault_addr = os.getenv('VAULT_ADDR', 'http://vault:8201')
+        self.vault_token = None
+        self.token_expires_at = None
+        
+        # AppRole Authentication
+        self.role_id = os.getenv('VAULT_ROLE_ID')
+        self.secret_id = os.getenv('VAULT_SECRET_ID')
+        
+        if self.role_id and self.secret_id:
+            self._authenticate_with_approle()
+        else:
+            # Fallback на токенную аутентификацию
+            self.vault_token = os.getenv('VAULT_TOKEN')
+            if not self.vault_token:
+                raise ValueError("Vault credentials are required")
+    
+    def _authenticate_with_approle(self):
+        auth_data = {"role_id": self.role_id, "secret_id": self.secret_id}
+        response = requests.post(f"{self.vault_addr}/v1/auth/approle/login", json=auth_data)
+        response.raise_for_status()
+        
+        auth_result = response.json()
+        self.vault_token = auth_result["auth"]["client_token"]
+        
+        lease_duration = auth_result["auth"]["lease_duration"]
+        self.token_expires_at = time.time() + lease_duration - 300
+    
+    def get_secret(self, path: str) -> Optional[Dict[str, Any]]:
+        # Автоматическое обновление токена
+        if self.token_expires_at and time.time() >= self.token_expires_at:
+            self._authenticate_with_approle()
+        
+        url = f"{self.vault_addr}/v1/kv/data/{path}"
+        headers = {"X-Vault-Token": self.vault_token}
+        
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        
+        return response.json()["data"]["data"]
+
+# Global client instance
+_vault_client = None
+
+def get_vault_client():
+    global _vault_client
+    if _vault_client is None:
+        _vault_client = ServiceVaultClient()
+    return _vault_client
+```
+
+#### **Шаг 9: Интеграция с config.py**
+```python
+# app/core/config.py
+class Settings(BaseSettings):
+    # JWT настройки (будет загружена из Vault)
+    JWT_SECRET_KEY: Optional[str] = None
+    
+    def __init__(self, **values):
+        super().__init__(**values)
+        
+        try:
+            # Lazy import для избежания циклических импортов
+            from .vault import get_vault_client
+            
+            vault_client = get_vault_client()
+            secret_data = vault_client.get_secret("jwt")
+            
+            if secret_data and 'secret_key' in secret_data:
+                self.JWT_SECRET_KEY = secret_data['secret_key']
+                print(f"✅ SERVICE_NAME: JWT секрет получен из Vault")
+            else:
+                raise Exception("JWT secret not found in Vault")
+                
+        except Exception as e:
+            # Fallback на переменные окружения
+            self.JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'fallback-secret-key')
+            print(f"⚠️ SERVICE_NAME: Используется JWT из ENV: {e}")
+```
+
+#### **Шаг 10: Добавление health check**
+```python
+# app/api/v1/endpoints/health.py
+@router.get("/detailed")
+async def detailed_health_check():
+    health_data = {"status": "healthy", "components": {}}
+    
+    # Проверка Vault
+    try:
+        from app.core.vault import get_vault_client
+        vault_client = get_vault_client()
+        
+        if vault_client.health_check():
+            health_data["components"]["vault"] = {"status": "healthy"}
+        else:
+            health_data["components"]["vault"] = {"status": "unhealthy"}
+            health_data["status"] = "unhealthy"
+    except Exception as e:
+        health_data["components"]["vault"] = {"status": "unhealthy", "error": str(e)}
+        health_data["status"] = "unhealthy"
+    
+    return health_data
+```
+
+#### **Шаг 11: Тестирование интеграции**
+```bash
+# Перезапустить сервис
+docker-compose restart SERVICE_NAME
+
+# Проверить логи запуска
+docker-compose logs SERVICE_NAME --tail 20
+
+# Проверить health check с Vault
+docker exec html-api-gateway-1 python3 -c "
+import urllib.request
+response = urllib.request.urlopen('http://SERVICE_NAME:8000/api/v1/health/detailed')
+print(response.read().decode())
+"
+```
+
+#### **Пример: Реальная настройка invite-service**
+```bash
+# Credentials полученные для invite-service:
+INVITE_VAULT_ROLE_ID=a6acb157-4fda-87f5-8bbd-36246cf2f15e
+INVITE_VAULT_SECRET_ID=233463c9-e9eb-f835-14f6-d44570734ca1
+```
+
+#### **Важные принципы:**
+- ✅ **Lazy import** в config.py для избежания circular imports
+- ✅ **Fallback токены** для плавной миграции
+- ✅ **Автоматическое обновление токенов** с TTL контролем
+- ✅ **Отдельные политики** для каждого сервиса
+- ✅ **Health checks** для мониторинга Vault интеграции
+- ✅ **Именование переменных** SERVICE_NAME_VAULT_ROLE_ID/SECRET_ID
+
 ## Фронтенд
 - ✅ **React + TypeScript** приложение запущено на порту 3000
 - ✅ **Tailwind CSS** для современной стилизации
