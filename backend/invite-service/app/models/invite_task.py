@@ -12,8 +12,7 @@ from .base import BaseModel
 class TaskStatus(str, enum.Enum):
     """Статусы задач приглашений"""
     PENDING = "pending"          # Ожидает выполнения
-    IN_PROGRESS = "running"      # Выполняется (изменено с "in_progress" на "running")
-    RUNNING = "running"          # Выполняется (alias для совместимости)
+    RUNNING = "running"          # Выполняется
     COMPLETED = "completed"      # Завершена
     FAILED = "failed"           # Ошибка
     CANCELLED = "cancelled"     # Отменена
