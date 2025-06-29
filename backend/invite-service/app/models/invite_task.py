@@ -13,6 +13,7 @@ class TaskStatus(str, enum.Enum):
     """Статусы задач приглашений"""
     PENDING = "pending"          # Ожидает выполнения
     IN_PROGRESS = "in_progress"  # Выполняется
+    RUNNING = "running"          # Выполняется (alias для совместимости)
     COMPLETED = "completed"      # Завершена
     FAILED = "failed"           # Ошибка
     CANCELLED = "cancelled"     # Отменена
