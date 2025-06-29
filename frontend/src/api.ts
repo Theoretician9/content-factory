@@ -431,6 +431,11 @@ export const inviteApi = {
 
     // Получение статуса задачи
     status: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/status`),
+    
+    // Добавление тестовых данных аудитории
+    addTestTargets: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/add-test-targets`, {
+      method: 'POST'
+    }),
 
     // Получение детальной статистики
     stats: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/status`),
