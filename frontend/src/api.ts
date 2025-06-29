@@ -358,7 +358,7 @@ export const inviteApi = {
         name: data.title,
         description: data.description,
         platform: data.platform,
-        priority: (data.priority || 'NORMAL').toLowerCase(),
+        priority: data.priority || 'normal',
         delay_between_invites: Math.max(data.settings?.delay_between_invites || 30, 30),
         max_invites_per_account: data.settings?.batch_size || 10,
         invite_message: data.message_template,
