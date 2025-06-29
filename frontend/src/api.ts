@@ -332,8 +332,8 @@ export const parsingApi = {
 // API функции для Invite Service
 export const inviteApi = {
   // Health checks
-  health: () => apiFetch('/api/invite/health'),
-  healthDetailed: () => apiFetch('/api/invite/health/detailed'),
+  health: () => apiFetch('/api/invite/health/'),
+  healthDetailed: () => apiFetch('/api/invite/health/detailed/'),
 
   // Задачи приглашений
   tasks: {
