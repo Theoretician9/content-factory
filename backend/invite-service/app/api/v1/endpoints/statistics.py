@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import select, func, text
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
@@ -18,7 +17,7 @@ router = APIRouter()
 @router.get("/tasks/{task_id}/stats")
 async def get_task_stats(
     task_id: int,
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
     """
@@ -29,7 +28,7 @@ async def get_task_stats(
         InviteTask.id == task_id,
         InviteTask.user_id == user_id
     )
-    task_result = await db.execute(task_query)
+    task_result = db.execute(task_query)
     task = task_result.scalar_one_or_none()
     
     if not task:
@@ -44,7 +43,7 @@ async def get_task_stats(
         func.count(InviteTarget.id).filter(InviteTarget.status == TargetStatus.SKIPPED).label('skipped_targets'),
     ).where(InviteTarget.task_id == task_id)
     
-    targets_stats_result = await db.execute(targets_stats_query)
+    targets_stats_result = db.execute(targets_stats_query)
     targets_stats = targets_stats_result.first()
     
     # Статистика по результатам выполнения из логов
@@ -57,7 +56,7 @@ async def get_task_stats(
         func.avg(InviteExecutionLog.execution_time_ms).label('avg_execution_time')
     ).where(InviteExecutionLog.task_id == task_id)
     
-    execution_stats_result = await db.execute(execution_stats_query)
+    execution_stats_result = db.execute(execution_stats_query)
     execution_stats = execution_stats_result.first()
     
     # Статистика по времени выполнения
@@ -66,7 +65,7 @@ async def get_task_stats(
         func.max(InviteExecutionLog.created_at).label('last_execution'),
     ).where(InviteExecutionLog.task_id == task_id)
     
-    time_stats_result = await db.execute(time_stats_query)
+    time_stats_result = db.execute(time_stats_query)
     time_stats = time_stats_result.first()
     
     # Рассчитываем процент выполнения
@@ -113,7 +112,7 @@ async def get_task_stats(
 async def get_task_report(
     task_id: int,
     include_logs: bool = Query(False, description="Include detailed execution logs"),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
     """
@@ -124,7 +123,7 @@ async def get_task_report(
         InviteTask.id == task_id,
         InviteTask.user_id == user_id
     )
-    task_result = await db.execute(task_query)
+    task_result = db.execute(task_query)
     task = task_result.scalar_one_or_none()
     
     if not task:
@@ -151,7 +150,7 @@ async def get_task_report(
             InviteExecutionLog.task_id == task_id
         ).order_by(InviteExecutionLog.created_at.desc()).limit(100)
         
-        logs_result = await db.execute(logs_query)
+        logs_result = db.execute(logs_query)
         logs = logs_result.scalars().all()
         
         report_data["execution_logs"] = [
@@ -175,7 +174,7 @@ async def get_task_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     action_filter: Optional[ActionType] = Query(None),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
     """
@@ -186,7 +185,7 @@ async def get_task_logs(
         InviteTask.id == task_id,
         InviteTask.user_id == user_id
     )
-    task_result = await db.execute(task_query)
+    task_result = db.execute(task_query)
     task = task_result.scalar_one_or_none()
     
     if not task:
@@ -208,14 +207,14 @@ async def get_task_logs(
     if action_filter:
         count_query = count_query.where(InviteExecutionLog.action_type == action_filter)
     
-    total_result = await db.execute(count_query)
+    total_result = db.execute(count_query)
     total = total_result.scalar()
     
     # Пагинация
     offset = (page - 1) * page_size
     logs_query = logs_query.order_by(InviteExecutionLog.created_at.desc()).offset(offset).limit(page_size)
     
-    logs_result = await db.execute(logs_query)
+    logs_result = db.execute(logs_query)
     logs = logs_result.scalars().all()
     
     total_pages = (total + page_size - 1) // page_size
@@ -249,7 +248,7 @@ async def get_task_logs(
 
 @router.get("/dashboard/summary")
 async def get_dashboard_summary(
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
     """
@@ -264,7 +263,7 @@ async def get_dashboard_summary(
         func.count(InviteTask.id).filter(InviteTask.status == TaskStatus.FAILED).label('failed_tasks'),
     ).where(InviteTask.user_id == user_id)
     
-    tasks_stats_result = await db.execute(tasks_stats_query)
+    tasks_stats_result = db.execute(tasks_stats_query)
     tasks_stats = tasks_stats_result.first()
     
     # Общая статистика по приглашениям за последние 30 дней
@@ -279,7 +278,7 @@ async def get_dashboard_summary(
         InviteExecutionLog.created_at >= thirty_days_ago
     )
     
-    invites_stats_result = await db.execute(invites_stats_query)
+    invites_stats_result = db.execute(invites_stats_query)
     invites_stats = invites_stats_result.first()
     
     # Последние активные задачи
@@ -287,7 +286,7 @@ async def get_dashboard_summary(
         InviteTask.user_id == user_id
     ).order_by(InviteTask.updated_at.desc()).limit(5)
     
-    recent_tasks_result = await db.execute(recent_tasks_query)
+    recent_tasks_result = db.execute(recent_tasks_query)
     recent_tasks = recent_tasks_result.scalars().all()
     
     success_rate = 0
