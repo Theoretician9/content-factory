@@ -166,7 +166,8 @@ const Mailing = () => {
   }, [activeTab]);
 
   // Деликатное Real-time обновление только прогресса активных задач
-  useEffect(() => {
+  // Временно отключено до реализации progress-stream endpoint в backend
+  /* useEffect(() => {
     const activeTasksSSE = new Map<string, EventSource>();
 
     const activeTasks = tasks.filter(task => 
@@ -227,7 +228,7 @@ const Mailing = () => {
       activeTasksSSE.forEach(eventSource => eventSource.close());
       activeTasksSSE.clear();
     };
-  }, [tasks.filter(t => t.status === 'pending' || t.status === 'running').map(t => t.id).join(',')]);
+  }, [tasks.filter(t => t.status === 'pending' || t.status === 'running').map(t => t.id).join(',')]); */
 
   // Убираем агрессивное автообновление каждые 15 секунд
   // Вместо этого обновление только по запросу пользователя
