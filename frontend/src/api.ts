@@ -352,7 +352,7 @@ export const inviteApi = {
         }
       });
       const queryString = searchParams.toString();
-      return apiFetch(`/api/invite/tasks${queryString ? `?${queryString}` : ''}`);
+      return apiFetch(`/api/invite/tasks/${queryString ? `?${queryString}` : ''}`);
     },
 
     // Получение конкретной задачи
@@ -433,10 +433,10 @@ export const inviteApi = {
   },
 
   // Аккаунты для приглашений
-  accounts: () => apiFetch('/api/invite/accounts'),
+  accounts: () => apiFetch('/api/invite/accounts/'),
 
   // Задачи парсинга
-  parsingTasks: () => apiFetch('/api/invite/parsing-tasks'),
+  parsingTasks: () => apiFetch('/api/invite/parsing-tasks/'),
 
   // Импорт данных
   import: {
