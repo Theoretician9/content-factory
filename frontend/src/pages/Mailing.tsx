@@ -17,7 +17,7 @@ interface InviteTask {
   description?: string;
   target_group_id?: string;
   message_template?: string;
-  priority: 'HIGH' | 'NORMAL' | 'LOW';
+  priority: 'high' | 'normal' | 'low' | 'urgent';
   status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   created_at: string;
@@ -113,9 +113,9 @@ const Mailing = () => {
     description: '',
     target_group_id: '',
     message_template: '',
-    priority: 'NORMAL' as const,
+    priority: 'normal' as const,
     settings: {
-      delay_between_invites: 15,
+      delay_between_invites: 30,
       batch_size: 10,
       auto_add_contacts: true,
       fallback_to_messages: true
@@ -1037,9 +1037,9 @@ const Mailing = () => {
                         description: '',
                         target_group_id: '',
                         message_template: '',
-                        priority: 'NORMAL',
+                        priority: 'normal',
                         settings: {
-                          delay_between_invites: 15,
+                          delay_between_invites: 30,
                           batch_size: 10,
                           auto_add_contacts: true,
                           fallback_to_messages: true

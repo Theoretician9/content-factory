@@ -345,7 +345,7 @@ export const inviteApi = {
       description?: string;
       target_group_id?: string; // для приглашений в группу
       message_template?: string; // для личных сообщений
-      priority?: 'HIGH' | 'NORMAL' | 'LOW';
+      priority?: 'high' | 'normal' | 'low' | 'urgent';
       settings?: {
         delay_between_invites?: number;
         batch_size?: number;
