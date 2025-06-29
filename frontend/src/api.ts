@@ -436,7 +436,7 @@ export const inviteApi = {
   accounts: () => apiFetch('/api/invite/accounts/'),
 
   // Задачи парсинга
-  parsingTasks: () => apiFetch('/api/invite/parsing-tasks/'),
+  parsingTasks: () => apiFetch('/api/invite/parsing-tasks'),
 
   // Импорт данных
   import: {
