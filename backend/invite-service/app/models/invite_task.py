@@ -12,7 +12,7 @@ from .base import BaseModel
 class TaskStatus(str, enum.Enum):
     """Статусы задач приглашений"""
     PENDING = "pending"          # Ожидает выполнения
-    IN_PROGRESS = "in_progress"  # Выполняется
+    IN_PROGRESS = "running"      # Выполняется (изменено с "in_progress" на "running")
     RUNNING = "running"          # Выполняется (alias для совместимости)
     COMPLETED = "completed"      # Завершена
     FAILED = "failed"           # Ошибка
@@ -86,4 +86,4 @@ class InviteTask(BaseModel):
     @property
     def is_active(self) -> bool:
         """Проверка, активна ли задача"""
-        return self.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS, TaskStatus.PAUSED] 
+        return self.status in [TaskStatus.PENDING, TaskStatus.RUNNING, TaskStatus.PAUSED] 
