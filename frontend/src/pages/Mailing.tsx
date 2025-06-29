@@ -91,11 +91,21 @@ const Mailing = () => {
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768);
   
   // Основное состояние
-  const [activeTab, setActiveTab] = useState<'create' | 'tasks' | 'import' | 'stats'>('tasks');
+  const [activeTab, setActiveTab] = useState<'create' | 'tasks' | 'stats'>('tasks');
   const [tasks, setTasks] = useState<InviteTask[]>([]);
   
   // Добавляем состояние для автообновления
   const [autoRefresh, setAutoRefresh] = useState(false);
+  
+  // Модальное окно импорта при запуске задачи
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [taskToStart, setTaskToStart] = useState<string | null>(null);
+  const [importTab, setImportTab] = useState<'parsing' | 'file'>('parsing');
+  const [selectedParseTask, setSelectedParseTask] = useState('');
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [parseTasks, setParseTasks] = useState<ParseTask[]>([]);
   
   // Задачи приглашений
   const [tasksFilter, setTasksFilter] = useState({
@@ -124,24 +134,18 @@ const Mailing = () => {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
   
-  // Импорт данных
-  const [importTab, setImportTab] = useState<'parsing' | 'file'>('parsing');
-  const [selectedTaskForImport, setSelectedTaskForImport] = useState<string>('');
-  const [parseTasks, setParseTasks] = useState<ParseTask[]>([]);
-  const [selectedParseTask, setSelectedParseTask] = useState<string>('');
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState('');
-  
   // Статистика
-  const [selectedTaskForStats, setSelectedTaskForStats] = useState<string>('');
-  const [taskStats, setTaskStats] = useState<TaskStats | null>(null);
-  const [executionLogs, setExecutionLogs] = useState<ExecutionLog[]>([]);
+  const [statsData, setStatsData] = useState<TaskStats | null>(null);
+  const [statsError, setStatsError] = useState('');
   const [statsLoading, setStatsLoading] = useState(false);
   
   // Аккаунты
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(false);
+
+  // Статистика и логи
+  const [selectedTaskForStats, setSelectedTaskForStats] = useState<string | null>(null);
+  const [executionLogs, setExecutionLogs] = useState<ExecutionLog[]>([]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -408,7 +412,7 @@ const Mailing = () => {
       
       if (statsRes.ok) {
         const statsData = await statsRes.json();
-        setTaskStats(statsData);
+        setStatsData(statsData);
       }
       
       if (logsRes.ok) {
@@ -423,8 +427,8 @@ const Mailing = () => {
   };
 
   const handleImportFromParsing = async () => {
-    if (!selectedTaskForImport || !selectedParseTask) {
-      setImportError('Выберите задачу для импорта и источник данных');
+    if (!taskToStart || !selectedParseTask) {
+      setImportError('Выберите источник данных');
       return;
     }
 
@@ -432,7 +436,7 @@ const Mailing = () => {
     setImportError('');
 
     try {
-      const res = await inviteApi.import.parsing(selectedTaskForImport, {
+      const res = await inviteApi.import.parsing(taskToStart, {
         parsing_task_id: selectedParseTask,
         source_name: `parsing_${selectedParseTask}`
       });
@@ -441,6 +445,14 @@ const Mailing = () => {
         const data = await res.json();
         setImportError('');
         alert(`Импорт завершен! Добавлено ${data.imported_count} записей.`);
+        
+        // Закрываем модальное окно и запускаем задачу
+        setShowImportModal(false);
+        const startRes = await inviteApi.execution.start(taskToStart);
+        if (startRes.ok) {
+          alert('Задача запущена!');
+        }
+        
         // Тихое обновление после импорта
         loadTasks(false);
       } else {
@@ -455,8 +467,8 @@ const Mailing = () => {
   };
 
   const handleImportFromFile = async () => {
-    if (!selectedTaskForImport || !importFile) {
-      setImportError('Выберите задачу для импорта и файл');
+    if (!taskToStart || !importFile) {
+      setImportError('Выберите файл');
       return;
     }
 
@@ -464,7 +476,7 @@ const Mailing = () => {
     setImportError('');
 
     try {
-      const res = await inviteApi.import.file(selectedTaskForImport, importFile, {
+      const res = await inviteApi.import.file(taskToStart, importFile, {
         source_name: `file_${Date.now()}`
       });
 
@@ -473,6 +485,14 @@ const Mailing = () => {
         setImportError('');
         setImportFile(null);
         alert(`Импорт завершен! Добавлено ${data.imported_count} записей.`);
+        
+        // Закрываем модальное окно и запускаем задачу
+        setShowImportModal(false);
+        const startRes = await inviteApi.execution.start(taskToStart);
+        if (startRes.ok) {
+          alert('Задача запущена!');
+        }
+        
         // Тихое обновление после импорта из файла
         loadTasks(false);
       } else {
@@ -545,7 +565,6 @@ const Mailing = () => {
               {[
                 { key: 'tasks', label: 'Задачи', icon: '📋' },
                 { key: 'create', label: 'Создать', icon: '➕' },
-                { key: 'import', label: 'Импорт', icon: '📂' },
                 { key: 'stats', label: 'Статистика', icon: '📊' }
               ].map(tab => (
                 <button
@@ -1067,198 +1086,6 @@ const Mailing = () => {
               </div>
             )}
 
-            {/* Вкладка: Импорт */}
-            {activeTab === 'import' && (
-              <div className="p-6">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6">
-                  Импорт аудитории
-                </h2>
-                
-                {importError && (
-                  <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-                    {importError}
-                  </div>
-                )}
-
-                {/* Выбор задачи для импорта */}
-                <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded-lg">
-                  <h3 className="text-lg font-medium text-yellow-900 dark:text-yellow-100 mb-4">
-                    Выберите задачу для импорта аудитории
-                  </h3>
-                  <select
-                    value={selectedTaskForImport}
-                    onChange={(e) => setSelectedTaskForImport(e.target.value)}
-                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                  >
-                    <option value="">Выберите задачу...</option>
-                    {tasks.filter(task => task.status === 'pending').map(task => (
-                      <option key={task.id} value={task.id}>
-                        {task.title} ({task.platform})
-                      </option>
-                    ))}
-                  </select>
-                  {tasks.filter(task => task.status === 'pending').length === 0 && (
-                    <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-2">
-                      Нет задач, готовых к импорту. Создайте новую задачу во вкладке "Создать".
-                    </p>
-                  )}
-                </div>
-
-                {selectedTaskForImport && (
-                  <div className="max-w-4xl">
-                    {/* Переключатель источника данных */}
-                    <div className="mb-6">
-                      <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
-                        <button
-                          onClick={() => setImportTab('parsing')}
-                          className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
-                            importTab === 'parsing'
-                              ? 'bg-white text-blue-700 shadow-sm dark:bg-gray-700 dark:text-blue-200'
-                              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-                          }`}
-                        >
-                          <span className="mr-2">🔍</span>
-                          Из парсинга
-                        </button>
-                        <button
-                          onClick={() => setImportTab('file')}
-                          className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
-                            importTab === 'file'
-                              ? 'bg-white text-blue-700 shadow-sm dark:bg-gray-700 dark:text-blue-200'
-                              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-                          }`}
-                        >
-                          <span className="mr-2">📁</span>
-                          Из файла
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Импорт из парсинга */}
-                    {importTab === 'parsing' && (
-                      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-                          Импорт из результатов парсинга
-                        </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                          Выберите ранее собранную базу аудитории из системы парсинга
-                        </p>
-
-                        <div className="mb-4">
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Результат парсинга
-                          </label>
-                          <select
-                            value={selectedParseTask}
-                            onChange={(e) => setSelectedParseTask(e.target.value)}
-                            className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                          >
-                            <option value="">Выберите результат парсинга...</option>
-                            {parseTasks.map(parseTask => (
-                              <option key={parseTask.id} value={parseTask.id}>
-                                {parseTask.platform} - {parseTask.link} ({parseTask.result_count} контактов)
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {parseTasks.length === 0 && (
-                          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                            <div className="text-4xl mb-4">🔍</div>
-                            <div className="text-lg font-medium mb-2">Нет результатов парсинга</div>
-                            <div className="text-sm">Сначала соберите аудиторию в разделе "Парсинг"</div>
-                          </div>
-                        )}
-
-                        <div className="mt-6">
-                          <Button
-                            onClick={handleImportFromParsing}
-                            disabled={importing || !selectedParseTask}
-                            className="w-full px-6 py-3"
-                          >
-                            {importing ? (
-                              <>
-                                <span className="animate-spin mr-2">⏳</span>
-                                Импортирование...
-                              </>
-                            ) : (
-                              <>
-                                <span className="mr-2">📥</span>
-                                Импортировать из парсинга
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Импорт из файла */}
-                    {importTab === 'file' && (
-                      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-                          Импорт из файла
-                        </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                          Загрузите файл с контактами в формате CSV, TXT или JSON
-                        </p>
-
-                        <div className="mb-4">
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Файл с контактами
-                          </label>
-                          <input
-                            type="file"
-                            accept=".csv,.txt,.json"
-                            onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                            className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                          />
-                        </div>
-
-                        {importFile && (
-                          <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-md">
-                            <div className="text-sm">
-                              <strong>Выбранный файл:</strong> {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg">
-                          <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
-                            💡 Формат файла
-                          </h4>
-                          <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-                            <li><strong>CSV:</strong> username,phone,first_name,last_name</li>
-                            <li><strong>TXT:</strong> один контакт на строку (@username или +phone)</li>
-                            <li><strong>JSON:</strong> {`[{"username": "user1", "phone": "+1234567890"}]`}</li>
-                          </ul>
-                        </div>
-
-                        <div className="mt-6">
-                          <Button
-                            onClick={handleImportFromFile}
-                            disabled={importing || !importFile}
-                            className="w-full px-6 py-3"
-                          >
-                            {importing ? (
-                              <>
-                                <span className="animate-spin mr-2">⏳</span>
-                                Импортирование...
-                              </>
-                            ) : (
-                              <>
-                                <span className="mr-2">📁</span>
-                                Импортировать из файла
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Вкладка: Статистика */}
             {activeTab === 'stats' && (
               <div className="p-6">
@@ -1300,17 +1127,17 @@ const Mailing = () => {
                       <div className="flex justify-center py-12">
                         <div className="animate-spin h-8 w-8 border-b-2 border-blue-600"></div>
                       </div>
-                    ) : taskStats ? (
+                    ) : statsData ? (
                       <div className="space-y-6">
                         {/* Заголовок задачи и кнопка назад */}
                         <div className="flex items-center justify-between">
                           <div>
                             <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                              {taskStats.task_title}
+                              {statsData.task_title}
                             </h3>
                             <p className="text-sm text-gray-500 dark:text-gray-400">
-                              Статус: <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(taskStats.task_status)}`}>
-                                {taskStats.task_status}
+                              Статус: <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(statsData.task_status)}`}>
+                                {statsData.task_status}
                               </span>
                             </p>
                           </div>
@@ -1326,25 +1153,25 @@ const Mailing = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                             <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                              {taskStats.targets_statistics.total_targets}
+                              {statsData.targets_statistics.total_targets}
                             </div>
                             <div className="text-sm text-gray-500 dark:text-gray-400">Всего целей</div>
                           </div>
                           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                             <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                              {taskStats.targets_statistics.invited_targets}
+                              {statsData.targets_statistics.invited_targets}
                             </div>
                             <div className="text-sm text-gray-500 dark:text-gray-400">Приглашено</div>
                           </div>
                           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                             <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-                              {taskStats.targets_statistics.failed_targets}
+                              {statsData.targets_statistics.failed_targets}
                             </div>
                             <div className="text-sm text-gray-500 dark:text-gray-400">Неудачно</div>
                           </div>
                           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                             <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                              {taskStats.targets_statistics.success_rate.toFixed(1)}%
+                              {statsData.targets_statistics.success_rate.toFixed(1)}%
                             </div>
                             <div className="text-sm text-gray-500 dark:text-gray-400">Успешность</div>
                           </div>
@@ -1360,29 +1187,29 @@ const Mailing = () => {
                             <div className="space-y-3">
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Ожидают:</span>
-                                <span className="font-medium">{taskStats.targets_statistics.pending_targets}</span>
+                                <span className="font-medium">{statsData.targets_statistics.pending_targets}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Приглашены:</span>
-                                <span className="font-medium text-green-600">{taskStats.targets_statistics.invited_targets}</span>
+                                <span className="font-medium text-green-600">{statsData.targets_statistics.invited_targets}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Неудачно:</span>
-                                <span className="font-medium text-red-600">{taskStats.targets_statistics.failed_targets}</span>
+                                <span className="font-medium text-red-600">{statsData.targets_statistics.failed_targets}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Пропущены:</span>
-                                <span className="font-medium text-gray-600">{taskStats.targets_statistics.skipped_targets}</span>
+                                <span className="font-medium text-gray-600">{statsData.targets_statistics.skipped_targets}</span>
                               </div>
                               <div className="border-t pt-3 mt-3">
                                 <div className="flex justify-between font-semibold">
                                   <span>Прогресс:</span>
-                                  <span>{taskStats.targets_statistics.progress_percentage.toFixed(1)}%</span>
+                                  <span>{statsData.targets_statistics.progress_percentage.toFixed(1)}%</span>
                                 </div>
                                 <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2 mt-2">
                                   <div
                                     className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                    style={{ width: `${taskStats.targets_statistics.progress_percentage}%` }}
+                                    style={{ width: `${statsData.targets_statistics.progress_percentage}%` }}
                                   ></div>
                                 </div>
                               </div>
@@ -1397,28 +1224,28 @@ const Mailing = () => {
                             <div className="space-y-3">
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Всего попыток:</span>
-                                <span className="font-medium">{taskStats.execution_statistics.total_attempts}</span>
+                                <span className="font-medium">{statsData.execution_statistics.total_attempts}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Успешных:</span>
-                                <span className="font-medium text-green-600">{taskStats.execution_statistics.successful_invites}</span>
+                                <span className="font-medium text-green-600">{statsData.execution_statistics.successful_invites}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Неудачных:</span>
-                                <span className="font-medium text-red-600">{taskStats.execution_statistics.failed_invites}</span>
+                                <span className="font-medium text-red-600">{statsData.execution_statistics.failed_invites}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Rate Limited:</span>
-                                <span className="font-medium text-orange-600">{taskStats.execution_statistics.rate_limited}</span>
+                                <span className="font-medium text-orange-600">{statsData.execution_statistics.rate_limited}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Flood Wait:</span>
-                                <span className="font-medium text-yellow-600">{taskStats.execution_statistics.flood_wait}</span>
+                                <span className="font-medium text-yellow-600">{statsData.execution_statistics.flood_wait}</span>
                               </div>
                               <div className="border-t pt-3 mt-3">
                                 <div className="flex justify-between">
                                   <span className="text-gray-600 dark:text-gray-400">Среднее время:</span>
-                                  <span className="font-medium">{taskStats.execution_statistics.avg_execution_time.toFixed(2)}с</span>
+                                  <span className="font-medium">{statsData.execution_statistics.avg_execution_time.toFixed(2)}с</span>
                                 </div>
                               </div>
                             </div>
@@ -1478,13 +1305,13 @@ const Mailing = () => {
                         </div>
 
                         {/* Статистика по аккаунтам */}
-                        {taskStats.accounts_statistics.length > 0 && (
+                        {statsData.accounts_statistics.length > 0 && (
                           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
                             <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
                               👥 Статистика по аккаунтам
                             </h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {taskStats.accounts_statistics.map((account, index) => (
+                              {statsData.accounts_statistics.map((account, index) => (
                                 <div key={index} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                                   <div className="font-medium text-gray-900 dark:text-gray-100 mb-2">
                                     {account.username || account.account_id}
