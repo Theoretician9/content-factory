@@ -320,7 +320,7 @@ export const inviteApi = {
         auto_add_contacts?: boolean;
         fallback_to_messages?: boolean;
       };
-    }) => apiFetch('/api/invite/tasks', {
+    }) => apiFetch('/api/invite/tasks/', {
       method: 'POST',
       body: JSON.stringify({
         name: data.title,
