@@ -10,7 +10,7 @@ from datetime import datetime
 import math
 
 from app.core.database import get_db
-from app.models import InviteTask, TaskStatus, TaskPriority
+from app.models import InviteTask, TaskStatus, TaskPriority, InviteTarget, TargetStatus
 from app.schemas.invite_task import (
     InviteTaskCreate, 
     InviteTaskResponse, 
@@ -460,7 +460,6 @@ async def execute_invite_task(
         )
     
     # Проверка наличия целевой аудитории
-    from app.models import InviteTarget
     target_count = db.query(InviteTarget).filter(InviteTarget.task_id == task_id).count()
     
     if target_count == 0:
@@ -565,8 +564,6 @@ async def get_task_status(
         )
     
     # Получение статистики по целям
-    from app.models import InviteTarget, TargetStatus
-    
     targets_stats = db.query(
         InviteTarget.status,
         func.count(InviteTarget.id).label('count')
@@ -715,7 +712,6 @@ async def test_single_invite(
         )
     
     # Проверка существования цели
-    from app.models import InviteTarget
     target = db.query(InviteTarget).filter(
         InviteTarget.id == target_id,
         InviteTarget.task_id == task_id
@@ -746,4 +742,60 @@ async def test_single_invite(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка отправки тестового приглашения: {str(e)}"
-        ) 
+        )
+
+
+@router.post("/tasks/{task_id}/add-test-targets")
+async def add_test_targets(
+    task_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Добавить тестовые данные аудитории для задачи
+    """
+    try:
+        # Проверяем доступ к задаче
+        task = db.query(InviteTask).filter(
+            InviteTask.id == task_id,
+            InviteTask.user_id == user_id
+        ).first()
+        
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        # Создаем тестовые цели
+        test_targets = []
+        for i in range(1, 11):  # 10 тестовых записей
+            target = InviteTarget(
+                task_id=task_id,
+                platform=task.platform,
+                username=f"test_user_{i}",
+                user_id_platform=f"test_id_{i}",
+                phone_number=f"+7900000000{i}",
+                first_name=f"Test",
+                last_name=f"User{i}",
+                status=TargetStatus.PENDING,
+                source="test_data"
+            )
+            test_targets.append(target)
+        
+        # Добавляем в базу
+        db.add_all(test_targets)
+        
+        # Обновляем счетчик целей в задаче
+        task.target_count = len(test_targets)
+        db.commit()
+        
+        logger.info(f"✅ Добавлено {len(test_targets)} тестовых целей для задачи {task_id}")
+        
+        return {
+            "success": True,
+            "message": f"Добавлено {len(test_targets)} тестовых целей",
+            "targets_added": len(test_targets)
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка добавления тестовых целей: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error adding test targets: {str(e)}") 

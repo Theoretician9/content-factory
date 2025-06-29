@@ -761,15 +761,13 @@ const Mailing = () => {
                               >
                                 📊
                               </button>
-                              {task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled' ? (
-                                <button
-                                  onClick={() => handleTaskAction(task.id, 'delete')}
-                                  className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                                  title="Удалить"
-                                >
-                                  🗑
-                                </button>
-                              ) : null}
+                              <button
+                                onClick={() => handleTaskAction(task.id, 'delete')}
+                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                title="Удалить"
+                              >
+                                🗑
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -862,9 +860,9 @@ const Mailing = () => {
                         onChange={(e) => setCreateForm(prev => ({ ...prev, priority: e.target.value as any }))}
                         className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                       >
-                        <option value="HIGH">🔴 Высокий</option>
-                        <option value="NORMAL">🔵 Обычный</option>
-                        <option value="LOW">⚪ Низкий</option>
+                        <option value="high">🔴 Высокий</option>
+                        <option value="normal">🔵 Обычный</option>
+                        <option value="low">⚪ Низкий</option>
                       </select>
                     </div>
 
