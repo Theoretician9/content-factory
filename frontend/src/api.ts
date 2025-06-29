@@ -73,7 +73,39 @@ export async function apiFetch(url: string, options: ExtendedRequestInit = {}) {
 // Централизованные функции для микросервисов
 export const api = {
   getTariff: () => apiFetch('/api/billing/tariff'),
-  getMailingStatus: () => apiFetch('/api/mailing/status'),
+  getMailingStatus: async () => {
+    try {
+      // Получаем статус invite service
+      const healthRes = await inviteApi.health();
+      
+      if (healthRes.ok) {
+        const health = await healthRes.json();
+        return new Response(JSON.stringify({
+          status: 'active',
+          service: 'invite-service'
+        }), { 
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } else {
+        return new Response(JSON.stringify({
+          status: 'error',
+          service: 'invite-service'
+        }), { 
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    } catch (error) {
+      return new Response(JSON.stringify({
+        status: 'error',
+        service: 'invite-service'
+      }), { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  },
   getIntegrationsStatus: async () => {
     try {
       // Получаем статистику интеграций
@@ -326,8 +358,8 @@ export const inviteApi = {
         name: data.title,
         description: data.description,
         platform: data.platform,
-        priority: data.priority || 'NORMAL',
-        delay_between_invites: data.settings?.delay_between_invites || 15,
+        priority: (data.priority || 'NORMAL').toLowerCase(),
+        delay_between_invites: Math.max(data.settings?.delay_between_invites || 30, 30),
         max_invites_per_account: data.settings?.batch_size || 10,
         invite_message: data.message_template,
         settings: data.settings
