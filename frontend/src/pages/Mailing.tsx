@@ -119,14 +119,11 @@ const Mailing = () => {
   const [createForm, setCreateForm] = useState({
     platform: 'telegram' as const,
     task_type: 'invite_to_group' as const,
-    title: '',
     description: '',
     target_group_id: '',
     message_template: '',
     priority: 'normal' as const,
     settings: {
-      delay_between_invites: 30,
-      batch_size: 10,
       auto_add_contacts: true,
       fallback_to_messages: true
     }
@@ -1124,14 +1121,11 @@ const Mailing = () => {
                       onClick={() => setCreateForm({
                         platform: 'telegram',
                         task_type: 'invite_to_group',
-                        title: '',
                         description: '',
                         target_group_id: '',
                         message_template: '',
                         priority: 'normal',
                         settings: {
-                          delay_between_invites: 30,
-                          batch_size: 10,
                           auto_add_contacts: true,
                           fallback_to_messages: true
                         }
