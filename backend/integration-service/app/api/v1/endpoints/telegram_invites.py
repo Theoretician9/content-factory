@@ -5,7 +5,7 @@ API endpoints для Telegram приглашений через Integration Serv
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from telethon.errors import FloodWaitError, PeerFloodError, UserNotMutualContactError
-# PrivacyRestrictedError не существует в этой версии telethon, используем общий Exception
+# Убрал PrivacyRestrictedError - не существует в этой версии telethon
 from telethon.tl.functions.channels import InviteToChannelRequest
 from telethon.tl.functions.messages import AddChatUserRequest
 from typing import Dict, Any, Optional
@@ -149,17 +149,6 @@ async def send_telegram_invite(
                 }
             )
         
-        except PrivacyRestrictedError as e:
-            # Настройки приватности пользователя
-            logger.info(f"Privacy restricted для {invite_data.target_username or invite_data.target_phone}")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={
-                    "error": "privacy_restricted",
-                    "message": "Настройки приватности пользователя запрещают приглашения"
-                }
-            )
-        
         except PeerFloodError as e:
             # Слишком много запросов к пользователям
             logger.warning(f"PeerFlood для аккаунта {account_id}")
@@ -183,15 +172,27 @@ async def send_telegram_invite(
             )
         
         except Exception as e:
-            # Общие ошибки
-            logger.error(f"Telegram invite error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "error": "invite_failed",
-                    "message": str(e)
-                }
-            )
+            # Обработка ошибок приватности и других общих ошибок
+            error_msg = str(e).lower()
+            if "privacy" in error_msg or "restricted" in error_msg:
+                logger.info(f"Privacy restricted для {invite_data.target_username or invite_data.target_phone}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "privacy_restricted",
+                        "message": "Настройки приватности пользователя запрещают приглашения"
+                    }
+                )
+            else:
+                # Общие ошибки
+                logger.error(f"Telegram invite error: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "error": "invite_failed",
+                        "message": str(e)
+                    }
+                )
         
         # Успешный результат
         end_time = datetime.utcnow()
