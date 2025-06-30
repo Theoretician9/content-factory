@@ -6,13 +6,10 @@ from fastapi import APIRouter, Depends
 from typing import List, Dict, Any
 import logging
 
+from app.core.auth import get_current_user_id
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-
-def get_current_user_id() -> int:
-    """Получение ID текущего пользователя из JWT токена"""
-    return 1  # Заглушка
 
 
 @router.get("/parsing-tasks", response_model=List[Dict[str, Any]])
@@ -21,7 +18,8 @@ async def get_parsing_tasks(user_id: int = Depends(get_current_user_id)):
     Получение списка задач парсинга для импорта аудитории
     """
     try:
-        # Заглушка - возвращаем тестовые данные
+        logger.info(f"Получение задач парсинга для пользователя {user_id}")
+        # TODO: Реализовать интеграцию с parsing-service
         return [
             {
                 "id": "parse_001",

@@ -1,5 +1,5 @@
 """
-API endpoints для работы с аккаунтами интеграций
+API endpoints для работы с аккаунтами платформ
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,42 +8,40 @@ import httpx
 import logging
 
 from app.core.config import settings
+from app.core.auth import get_current_user_id
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def get_current_user_id() -> int:
-    """Получение ID текущего пользователя из JWT токена"""
-    # TODO: Реализовать извлечение user_id из JWT токена
-    return 1  # Заглушка
-
-
 @router.get("/", response_model=List[Dict[str, Any]])
 async def get_accounts(user_id: int = Depends(get_current_user_id)):
     """
-    Получение списка доступных аккаунтов для invite-задач
+    Получение списка доступных аккаунтов для приглашений
     """
     try:
-        # Заглушка - возвращаем тестовые данные
+        logger.info(f"Получение аккаунтов для пользователя {user_id}")
+        # TODO: Реализовать интеграцию с integration-service для получения реальных аккаунтов
         return [
             {
-                "account_id": "telegram_001",
-                "platform": "telegram", 
-                "username": "@test_account",
+                "id": "tg_001",
+                "platform": "telegram",
+                "username": "@user_account_1",
                 "status": "active",
-                "daily_invite_limit": 50,
                 "daily_invites_used": 5,
-                "flood_wait_until": None
+                "daily_invites_limit": 50,
+                "flood_wait_until": None,
+                "last_used": "2024-12-28T10:30:00Z"
             },
             {
-                "account_id": "telegram_002", 
-                "platform": "telegram",
-                "username": "@demo_bot", 
-                "status": "active",
-                "daily_invite_limit": 30,
-                "daily_invites_used": 0,
-                "flood_wait_until": None
+                "id": "tg_002",
+                "platform": "telegram", 
+                "username": "@user_account_2",
+                "status": "cooldown",
+                "daily_invites_used": 45,
+                "daily_invites_limit": 50,
+                "flood_wait_until": "2024-12-28T15:30:00Z",
+                "last_used": "2024-12-28T14:30:00Z"
             }
         ]
         

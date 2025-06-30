@@ -13,6 +13,7 @@ import csv
 import json
 
 from app.core.database import get_db
+from app.core.auth import get_current_user_id
 from app.models import InviteTarget, InviteTask, TargetStatus
 from app.schemas.target import (
     InviteTargetCreate,
@@ -33,14 +34,8 @@ from app.schemas.target import (
 router = APIRouter()
 
 
-def get_current_user_id() -> int:
-    """Получение ID текущего пользователя из JWT токена"""
-    # TODO: Реализовать извлечение user_id из JWT токена
-    return 1  # Заглушка
-
-
 def check_task_ownership(task_id: int, user_id: int, db: Session) -> InviteTask:
-    """Проверка что задача принадлежит пользователю"""
+    """Проверка принадлежности задачи пользователю"""
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
         InviteTask.user_id == user_id
