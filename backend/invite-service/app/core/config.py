@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     # Integration Service
     INTEGRATION_SERVICE_URL: str = os.getenv("INTEGRATION_SERVICE_URL", "http://integration-service:8000")
     
+    # Parsing Service
+    PARSING_SERVICE_URL: str = os.getenv("PARSING_SERVICE_URL", "http://parsing-service:8000")
+    
     # Ограничения для задач приглашений
     MAX_INVITES_PER_TASK: int = int(os.getenv("MAX_INVITES_PER_TASK", "1000"))
     MAX_CONCURRENT_TASKS: int = int(os.getenv("MAX_CONCURRENT_TASKS", "5"))
