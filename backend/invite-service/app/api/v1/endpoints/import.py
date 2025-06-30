@@ -491,7 +491,7 @@ async def _parse_txt_content(content: str) -> tuple[List[Dict], List[str]]:
     
     return targets, errors
 
-async def _get_jwt_token_for_parsing_service() -> str:
+async def _get_jwt_token_for_parsing_service(user_id: int = 1) -> str:
     """Получение JWT токена для межсервисного взаимодействия с Parsing Service"""
     try:
         from app.core.vault import get_vault_client
@@ -503,15 +503,20 @@ async def _get_jwt_token_for_parsing_service() -> str:
         if not secret_data or 'secret_key' not in secret_data:
             raise Exception("JWT secret not found in Vault")
         
-        # Создаем токен для invite-service
+        # 🔍 ДИАГНОСТИКА: логируем создание токена
+        logger.debug(f"🔍 DIAGNOSTIC: Creating JWT token for user_id={user_id}")
+        
+        # Создаем токен для invite-service с реальным user_id
         payload = {
             'service': 'invite-service',
-            'user_id': 1,  # Системный токен
+            'user_id': user_id,  # ✅ ИСПРАВЛЕНО: используем реальный user_id
             'exp': int((datetime.utcnow() + timedelta(hours=1)).timestamp())
         }
         
         import jwt
         token = jwt.encode(payload, secret_data['secret_key'], algorithm='HS256')
+        
+        logger.debug(f"🔍 DIAGNOSTIC: JWT token created successfully for user_id={user_id}")
         return token
         
     except Exception as e:
