@@ -89,12 +89,15 @@ async def import_targets_from_file(
             except Exception as e:
                 errors.append(f"Failed to save target {target_data}: {str(e)}")
         
-        # Обновляем счетчик целей в задаче (добавляем к существующему)
-        current_count_query = select(InviteTarget).where(InviteTarget.task_id == task_id)
-        current_count_result = await db.execute(current_count_query)
-        current_targets = current_count_result.scalars().all()
+        # Сначала коммитим новые цели
+        await db.commit()
         
-        task.target_count = len(current_targets) + len(saved_targets)
+        # Затем обновляем счетчик целей в задаче (получаем реальный count из базы)
+        count_query = select(InviteTarget).where(InviteTarget.task_id == task_id)
+        count_result = await db.execute(count_query)
+        all_targets = count_result.scalars().all()
+        
+        task.target_count = len(all_targets)
         task.updated_at = datetime.utcnow()
         
         await db.commit()
