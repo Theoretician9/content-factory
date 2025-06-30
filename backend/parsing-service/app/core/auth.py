@@ -135,16 +135,26 @@ async def get_user_id_from_request(request: Request) -> int:
         logger.info(f"🔍 DIAGNOSTIC: JWT decode successful")
         logger.info(f"🔍 DIAGNOSTIC: JWT PAYLOAD: {payload}")
         
-        email = payload.get("sub")
-        logger.info(f"🔍 DIAGNOSTIC: Extracted email/sub: '{email}'")
+        # Поддержка двух форматов токенов:
+        # 1. Стандартные JWT с полем 'sub' (email) - от фронтенда
+        # 2. Межсервисные токены с полем 'user_id' (integer) - между сервисами
+        email_or_user_id = payload.get("sub") or payload.get("user_id")
+        logger.info(f"🔍 DIAGNOSTIC: Extracted email/user_id: '{email_or_user_id}' (type: {type(email_or_user_id)})")
         
-        if not email:
-            logger.error(f"🚫 DIAGNOSTIC: JWT token missing 'sub' field in payload: {payload}")
-            raise AuthenticationError("Invalid token: missing email")
+        if not email_or_user_id:
+            logger.error(f"🚫 DIAGNOSTIC: JWT token missing both 'sub' and 'user_id' fields in payload: {payload}")
+            raise AuthenticationError("Invalid token: missing user identifier")
         
-        # Преобразуем email в user_id через API Gateway (как в integration-service)
+        # Если это числовой user_id (межсервисный токен)
+        if isinstance(email_or_user_id, int):
+            logger.info(f"🔍 DIAGNOSTIC: Inter-service token detected with user_id: {email_or_user_id}")
+            logger.info(f"✅ DIAGNOSTIC: JWT Authentication successful - User ID: {email_or_user_id}")
+            return email_or_user_id
+        
+        # Если это email (стандартный JWT токен от фронтенда)
+        email = str(email_or_user_id)
         if "@" in email:
-            logger.info(f"🔍 DIAGNOSTIC: Email format detected, calling API Gateway for user_id")
+            logger.info(f"🔍 DIAGNOSTIC: Standard JWT token detected, calling API Gateway for user_id")
             user_id = await get_user_id_by_email_via_api_gateway(email)
             logger.info(f"🔍 DIAGNOSTIC: API Gateway returned user_id: {user_id}")
             
@@ -155,11 +165,15 @@ async def get_user_id_from_request(request: Request) -> int:
             logger.info(f"✅ DIAGNOSTIC: JWT Authentication successful - User ID: {user_id}")
             return user_id
         else:
-            # Если в токене уже user_id
-            logger.info(f"🔍 DIAGNOSTIC: User ID format detected, converting to int")
-            user_id = int(email)
-            logger.info(f"✅ DIAGNOSTIC: JWT Authentication successful - User ID: {user_id}")
-            return user_id
+            # Если это строковый user_id
+            logger.info(f"🔍 DIAGNOSTIC: String user_id format detected, converting to int")
+            try:
+                user_id = int(email)
+                logger.info(f"✅ DIAGNOSTIC: JWT Authentication successful - User ID: {user_id}")
+                return user_id
+            except ValueError:
+                logger.error(f"🚫 DIAGNOSTIC: Invalid user identifier format: {email}")
+                raise AuthenticationError("Invalid token: bad user identifier")
             
     except jwt.ExpiredSignatureError as e:
         logger.error(f"🚫 DIAGNOSTIC: JWT token expired: {e}")
