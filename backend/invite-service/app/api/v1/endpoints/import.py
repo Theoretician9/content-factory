@@ -245,27 +245,35 @@ async def import_targets_from_parsing(
             
             for i, result in enumerate(parsing_results):
                 try:
-                    # Извлекаем данные из результата парсинга
+                    # Извлекаем данные из результата парсинга - ✅ ИСПРАВЛЕНО: безопасная обработка None
                     target_data = {
-                        "username": result.get('username', '').strip() or None,
-                        "phone_number": result.get('author_phone', '').strip() or None,
-                        "user_id_platform": result.get('platform_id', '').strip() or None,
-                        "full_name": result.get('display_name', '').strip() or None,
+                        "username": result.get('username', '') or '',
+                        "phone_number": result.get('author_phone', '') or '',
+                        "user_id_platform": result.get('platform_id', '') or '',
+                        "full_name": result.get('display_name', '') or '',
                     }
                     
+                    # Безопасно очищаем строки от пробелов
+                    cleaned_data = {}
+                    for key, value in target_data.items():
+                        if value and str(value).strip():
+                            cleaned_data[key] = str(value).strip()
+                        else:
+                            cleaned_data[key] = None
+                    
                     # Проверяем что есть хотя бы один идентификатор
-                    if not any([target_data["username"], target_data["phone_number"], 
-                               target_data["user_id_platform"]]):
+                    if not any([cleaned_data["username"], cleaned_data["phone_number"], 
+                               cleaned_data["user_id_platform"]]):
                         errors.append(f"Result {i}: No valid identifier found")
                         continue
                     
                     # Создаем InviteTarget
                     invite_target = InviteTarget(
                         task_id=task_id,
-                        username=target_data["username"],
-                        phone_number=target_data["phone_number"],
-                        user_id_platform=target_data["user_id_platform"],
-                        full_name=target_data["full_name"],
+                        username=cleaned_data["username"],
+                        phone_number=cleaned_data["phone_number"],
+                        user_id_platform=cleaned_data["user_id_platform"],
+                        full_name=cleaned_data["full_name"],
                         source="parsing_import",
                         extra_data={
                             "parsing_task_id": parsing_task_id,
@@ -283,7 +291,12 @@ async def import_targets_from_parsing(
                     errors.append(f"Result {i}: {str(e)}")
                     logger.error(f"Error processing parsing result {i}: {e}")
             
-            # Обновляем счетчик целей в задаче (добавляем к существующему)
+            # ✅ ИСПРАВЛЕНО: сначала коммитим новые записи
+            logger.info(f"🔍 DIAGNOSTIC: About to commit {len(imported_targets)} new targets")
+            db.commit()
+            logger.info(f"🔍 DIAGNOSTIC: Committed successfully")
+            
+            # Затем подсчитываем все цели в задаче
             current_targets = db.query(InviteTarget).filter(InviteTarget.task_id == task_id).all()
             
             # 🔍 ДИАГНОСТИКА: подсчет целей при импорте из парсинга
@@ -294,13 +307,14 @@ async def import_targets_from_parsing(
             
             logger.info(f"🔍 DIAGNOSTIC: Parsing import count update")
             logger.info(f"🔍 DIAGNOSTIC: Task {task_id} old target_count: {old_count}")
-            logger.info(f"🔍 DIAGNOSTIC: Current targets in DB: {targets_in_db}")
+            logger.info(f"🔍 DIAGNOSTIC: Current targets in DB AFTER commit: {targets_in_db}")
             logger.info(f"🔍 DIAGNOSTIC: New targets imported: {new_targets_count}")
             logger.info(f"🔍 DIAGNOSTIC: Final target_count will be: {final_count}")
             
             task.target_count = final_count
             task.updated_at = datetime.utcnow()
             
+            # Коммитим обновление задачи
             db.commit()
             
             # 🔍 ДИАГНОСТИКА: финальная проверка
