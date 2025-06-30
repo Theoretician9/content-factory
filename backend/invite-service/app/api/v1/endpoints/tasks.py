@@ -431,10 +431,10 @@ async def delete_invite_task(
 @router.post("/{task_id}/execute")
 async def execute_invite_task(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Запуск выполнения задачи приглашений"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
@@ -495,10 +495,10 @@ async def execute_invite_task(
 @router.post("/{task_id}/pause")
 async def pause_invite_task(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Приостановка выполнения задачи"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
@@ -542,10 +542,10 @@ async def pause_invite_task(
 @router.get("/{task_id}/status")
 async def get_task_status(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Получение детального статуса выполнения задачи"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
@@ -606,10 +606,10 @@ async def get_task_status(
 @router.get("/{task_id}/accounts")
 async def get_task_available_accounts(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Получение доступных аккаунтов для выполнения задачи"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
@@ -629,7 +629,6 @@ async def get_task_available_accounts(
         adapter = get_platform_adapter(task.platform)
         
         # Асинхронная инициализация аккаунтов
-        import asyncio
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
@@ -690,10 +689,10 @@ async def test_single_invite(
     task_id: int,
     target_id: int,
     account_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Тестовая отправка одного приглашения"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
