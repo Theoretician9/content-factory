@@ -162,15 +162,21 @@ async def import_targets_from_file(
 @router.post("/tasks/{task_id}/import/parsing")
 async def import_targets_from_parsing(
     task_id: int,
-    parsing_task_id: str,
-    source_name: str = "parsing_import",
-    limit: Optional[int] = Query(None, description="Limit number of targets to import"),
+    request_data: dict,
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
     """
     Импорт целевой аудитории из результатов parsing-service
     """
+    # ✅ ИСПРАВЛЕНО: извлекаем параметры из body
+    parsing_task_id = request_data.get("parsing_task_id")
+    source_name = request_data.get("source_name", "parsing_import")
+    limit = request_data.get("limit")
+    
+    if not parsing_task_id:
+        raise HTTPException(status_code=400, detail="parsing_task_id is required")
+    
     # Проверяем доступ к задаче
     task_query = select(InviteTask).where(
         InviteTask.id == task_id,
