@@ -7,6 +7,7 @@ import json
 import io
 import logging
 from datetime import datetime
+import httpx
 
 from app.core.database import get_db
 from app.models.invite_task import InviteTask
@@ -115,7 +116,7 @@ async def import_targets_from_file(
 @router.post("/tasks/{task_id}/import/parsing")
 async def import_targets_from_parsing(
     task_id: int,
-    parsing_task_id: int,
+    parsing_task_id: str,
     source_name: str = "parsing_import",
     limit: Optional[int] = Query(None, description="Limit number of targets to import"),
     db: AsyncSession = Depends(get_db),
@@ -136,27 +137,128 @@ async def import_targets_from_parsing(
         raise HTTPException(status_code=404, detail="Task not found")
     
     try:
-        # Здесь будет интеграция с parsing-service
-        # Пока заглушка для демонстрации концепции
+        # Получаем JWT токен для аутентификации в parsing-service
+        token = await _get_jwt_token_for_parsing_service()
         
-        # TODO: Реальная интеграция с parsing-service
-        # - Получить результаты парсинга по parsing_task_id
-        # - Валидировать что parsing_task принадлежит пользователю
-        # - Конвертировать результаты в формат InviteTarget
-        # - Сохранить в БД
+        parsing_service_url = "http://parsing-service:8000"
         
-        logger.info(f"Запрос импорта из parsing-service для задачи {task_id}, parsing_task_id: {parsing_task_id}")
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Сначала проверяем что задача парсинга принадлежит пользователю
+            task_response = await client.get(
+                f"{parsing_service_url}/tasks/{parsing_task_id}",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            
+            if task_response.status_code == 404:
+                raise HTTPException(status_code=404, detail="Parsing task not found")
+            elif task_response.status_code != 200:
+                raise HTTPException(status_code=500, detail="Failed to verify parsing task")
+            
+            task_data = task_response.json()
+            
+            # Проверяем принадлежность пользователю
+            if task_data.get('user_id') != user_id:
+                raise HTTPException(status_code=404, detail="Parsing task not found")
+            
+            # Получаем результаты парсинга
+            results_params = {}
+            if limit:
+                results_params['limit'] = limit
+            
+            results_response = await client.get(
+                f"{parsing_service_url}/results/{parsing_task_id}",
+                headers={"Authorization": f"Bearer {token}"},
+                params=results_params
+            )
+            
+            if results_response.status_code != 200:
+                raise HTTPException(status_code=500, detail="Failed to get parsing results")
+            
+            results_data = results_response.json()
+            parsing_results = results_data.get('results', [])
+            
+            if not parsing_results:
+                return {
+                    "success": False,
+                    "message": "No parsing results found for this task",
+                    "parsing_task_id": parsing_task_id,
+                    "imported_count": 0
+                }
+            
+            # Конвертируем результаты парсинга в формат InviteTarget
+            imported_targets = []
+            errors = []
+            
+            for i, result in enumerate(parsing_results):
+                try:
+                    # Извлекаем данные из результата парсинга
+                    target_data = {
+                        "username": result.get('username', '').strip() or None,
+                        "phone_number": result.get('author_phone', '').strip() or None,
+                        "user_id_platform": result.get('platform_id', '').strip() or None,
+                        "full_name": result.get('display_name', '').strip() or None,
+                    }
+                    
+                    # Проверяем что есть хотя бы один идентификатор
+                    if not any([target_data["username"], target_data["phone_number"], 
+                               target_data["user_id_platform"]]):
+                        errors.append(f"Result {i}: No valid identifier found")
+                        continue
+                    
+                    # Создаем InviteTarget
+                    invite_target = InviteTarget(
+                        task_id=task_id,
+                        username=target_data["username"],
+                        phone_number=target_data["phone_number"],
+                        user_id_platform=target_data["user_id_platform"],
+                        full_name=target_data["full_name"],
+                        source="parsing_import",
+                        extra_data={
+                            "parsing_task_id": parsing_task_id,
+                            "parsing_result_id": result.get('id'),
+                            "source_name": source_name,
+                            "imported_at": datetime.utcnow().isoformat(),
+                            "original_data": result  # Сохраняем оригинальные данные
+                        }
+                    )
+                    
+                    db.add(invite_target)
+                    imported_targets.append(invite_target)
+                    
+                except Exception as e:
+                    errors.append(f"Result {i}: {str(e)}")
+                    logger.error(f"Error processing parsing result {i}: {e}")
+            
+            # Обновляем счетчик целей в задаче (добавляем к существующему)
+            current_count_query = select(InviteTarget).where(InviteTarget.task_id == task_id)
+            current_count_result = await db.execute(current_count_query)
+            current_targets = current_count_result.scalars().all()
+            
+            task.target_count = len(current_targets) + len(imported_targets)
+            task.updated_at = datetime.utcnow()
+            
+            await db.commit()
+            
+            logger.info(f"Импортировано {len(imported_targets)} целей из задачи парсинга {parsing_task_id} для задачи {task_id}")
+            
+            return {
+                "success": True,
+                "message": f"Successfully imported {len(imported_targets)} targets from parsing results",
+                "parsing_task_id": parsing_task_id,
+                "task_id": task_id,
+                "imported_count": len(imported_targets),
+                "error_count": len(errors),
+                "total_processed": len(parsing_results),
+                "errors": errors[:10] if errors else [],  # Показываем только первые 10 ошибок
+                "source_name": source_name,
+                "parsing_task_title": task_data.get('title', 'Unknown'),
+                "parsing_platform": task_data.get('platform', 'telegram')
+            }
         
-        # Временная заглушка
-        return {
-            "success": False,
-            "message": "Parsing import not yet implemented",
-            "parsing_task_id": parsing_task_id,
-            "task_id": task_id,
-            "note": "This endpoint will be implemented when parsing-service integration is ready"
-        }
-        
+    except HTTPException:
+        raise
     except Exception as e:
+        await db.rollback()
         logger.error(f"Error importing from parsing-service: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Parsing import failed: {str(e)}")
 
@@ -326,4 +428,31 @@ async def _parse_txt_content(content: str) -> tuple[List[Dict], List[str]]:
         else:
             errors.append(f"Line {line_num}: Unrecognized format")
     
-    return targets, errors 
+    return targets, errors
+
+async def _get_jwt_token_for_parsing_service() -> str:
+    """Получение JWT токена для межсервисного взаимодействия с Parsing Service"""
+    try:
+        from app.core.vault import get_vault_client
+        from datetime import datetime, timedelta
+        
+        vault_client = get_vault_client()
+        secret_data = vault_client.get_secret("jwt")
+        
+        if not secret_data or 'secret_key' not in secret_data:
+            raise Exception("JWT secret not found in Vault")
+        
+        # Создаем токен для invite-service
+        payload = {
+            'service': 'invite-service',
+            'user_id': 1,  # Системный токен
+            'exp': int((datetime.utcnow() + timedelta(hours=1)).timestamp())
+        }
+        
+        import jwt
+        token = jwt.encode(payload, secret_data['secret_key'], algorithm='HS256')
+        return token
+        
+    except Exception as e:
+        logger.error(f"Error getting JWT token for parsing service: {e}")
+        raise 
