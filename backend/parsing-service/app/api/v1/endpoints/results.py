@@ -134,9 +134,33 @@ async def list_results_grouped_by_task(
                 config_result = await db.execute(config_query)
                 config = config_result.scalar() or {}
                 
-                # Extract target info from config
-                targets = config.get('targets', [])
-                target_url = targets[0] if targets else 'Unknown'
+                # 🔍 ДИАГНОСТИКА: логируем реальное содержимое config
+                logger.debug(f"🔍 DIAGNOSTIC: Task {task.task_id} config: {config}")
+                
+                # Extract target info from config - поддержка обоих форматов
+                target_url = 'Unknown'
+                
+                # Проверяем новый формат: targets (массив)
+                if 'targets' in config and config['targets']:
+                    targets = config['targets']
+                    target_url = targets[0] if isinstance(targets, list) and targets else str(targets)
+                    logger.debug(f"🔍 DIAGNOSTIC: Found targets array: {targets}, using: {target_url}")
+                
+                # Проверяем старый формат: target (одиночное поле)
+                elif 'target' in config and config['target']:
+                    target_url = str(config['target'])
+                    logger.debug(f"🔍 DIAGNOSTIC: Found single target: {target_url}")
+                
+                # Fallback: пытаемся найти любой URL-подобный паттерн в config
+                else:
+                    logger.warning(f"🔍 DIAGNOSTIC: No target/targets found in config: {config}")
+                    for key, value in config.items():
+                        if isinstance(value, str) and ('t.me/' in value or '@' in value):
+                            target_url = value
+                            logger.debug(f"🔍 DIAGNOSTIC: Found URL-like value in {key}: {target_url}")
+                            break
+                
+                logger.debug(f"🔍 DIAGNOSTIC: Final target_url for task {task.task_id}: {target_url}")
                 
                 formatted_task = {
                     "task_id": task.task_id,
