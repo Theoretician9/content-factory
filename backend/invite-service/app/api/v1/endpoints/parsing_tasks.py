@@ -8,6 +8,7 @@ import httpx
 import logging
 import jwt
 from datetime import datetime, timedelta
+import traceback
 
 from app.core.config import settings
 from app.core.auth import get_current_user_id
@@ -21,11 +22,18 @@ async def get_jwt_token_for_parsing_service() -> str:
     try:
         from app.core.vault import get_vault_client
         
+        logger.info("🔍 DIAGNOSTIC: Getting JWT token for parsing service")
+        
         vault_client = get_vault_client()
         secret_data = vault_client.get_secret("jwt")
         
+        logger.info(f"🔍 DIAGNOSTIC: Secret data received: {bool(secret_data)}")
+        
         if not secret_data or 'secret_key' not in secret_data:
+            logger.error("❌ DIAGNOSTIC: JWT secret not found in Vault")
             raise Exception("JWT secret not found in Vault")
+        
+        logger.info(f"🔍 DIAGNOSTIC: JWT secret key length: {len(secret_data['secret_key'])}")
         
         # Создаем токен для invite-service
         payload = {
@@ -34,11 +42,18 @@ async def get_jwt_token_for_parsing_service() -> str:
             'exp': int((datetime.utcnow() + timedelta(hours=1)).timestamp())
         }
         
+        logger.info(f"🔍 DIAGNOSTIC: JWT payload: {payload}")
+        
         token = jwt.encode(payload, secret_data['secret_key'], algorithm='HS256')
+        
+        logger.info(f"🔍 DIAGNOSTIC: JWT token created, length: {len(token)}")
+        logger.info(f"🔍 DIAGNOSTIC: JWT token preview: {token[:50]}...")
+        
         return token
         
     except Exception as e:
-        logger.error(f"Error getting JWT token for parsing service: {e}")
+        logger.error(f"❌ DIAGNOSTIC: Error getting JWT token for parsing service: {e}")
+        logger.error(f"❌ DIAGNOSTIC: JWT token traceback: {traceback.format_exc()}")
         raise
 
 
@@ -48,30 +63,46 @@ async def get_parsing_tasks(user_id: int = Depends(get_current_user_id)):
     Получение списка задач парсинга для импорта аудитории
     """
     try:
-        logger.info(f"Получение задач парсинга для пользователя {user_id}")
+        logger.info(f"🔍 DIAGNOSTIC: Получение задач парсинга для пользователя {user_id}")
         
         # Получаем JWT токен для межсервисного взаимодействия
+        logger.info("🔍 DIAGNOSTIC: Получение JWT токена...")
         token = await get_jwt_token_for_parsing_service()
+        logger.info("🔍 DIAGNOSTIC: JWT токен получен успешно")
         
         # Запрос к parsing-service с фильтрацией по user_id
-        async with httpx.AsyncClient() as client:
+        logger.info(f"🔍 DIAGNOSTIC: Отправка запроса к {settings.PARSING_SERVICE_URL}/api/v1/results/grouped")
+        logger.info(f"🔍 DIAGNOSTIC: Headers: Authorization: Bearer {token[:50]}...")
+        logger.info(f"🔍 DIAGNOSTIC: Params: user_id={user_id}")
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
                 f"{settings.PARSING_SERVICE_URL}/api/v1/results/grouped",
                 headers={"Authorization": f"Bearer {token}"},
                 params={"user_id": user_id}
             )
             
+            logger.info(f"🔍 DIAGNOSTIC: Ответ от parsing-service: status={response.status_code}")
+            logger.info(f"🔍 DIAGNOSTIC: Response headers: {dict(response.headers)}")
+            
             if response.status_code == 200:
+                logger.info("🔍 DIAGNOSTIC: Успешный ответ, парсинг JSON...")
                 data = response.json()
-                tasks = data.get("tasks", [])
+                logger.info(f"🔍 DIAGNOSTIC: JSON data keys: {list(data.keys())}")
                 
-                logger.info(f"Получено {len(tasks)} задач парсинга для пользователя {user_id}")
+                tasks = data.get("tasks", [])
+                logger.info(f"🔍 DIAGNOSTIC: Получено {len(tasks)} задач из parsing-service")
+                
+                if tasks:
+                    logger.info(f"🔍 DIAGNOSTIC: Пример первой задачи: {tasks[0]}")
                 
                 # Преобразуем в формат для фронтенда
                 formatted_tasks = []
-                for task in tasks:
+                for i, task in enumerate(tasks):
+                    logger.debug(f"🔍 DIAGNOSTIC: Обработка задачи {i+1}: {task.get('task_id')}")
+                    
                     if task.get("total_results", 0) > 0:  # Только задачи с результатами
-                        formatted_tasks.append({
+                        formatted_task = {
                             "id": task.get("task_id"),
                             "platform": task.get("platform", "telegram"),
                             "status": task.get("status", "completed"),
@@ -80,16 +111,30 @@ async def get_parsing_tasks(user_id: int = Depends(get_current_user_id)):
                             "total_results": task.get("total_results", 0),
                             "created_at": task.get("created_at"),
                             "can_import": True
-                        })
+                        }
+                        formatted_tasks.append(formatted_task)
+                        logger.debug(f"🔍 DIAGNOSTIC: Задача {i+1} добавлена в результат")
+                    else:
+                        logger.debug(f"🔍 DIAGNOSTIC: Задача {i+1} пропущена (нет результатов)")
                 
+                logger.info(f"🔍 DIAGNOSTIC: Возвращаем {len(formatted_tasks)} отформатированных задач")
                 return formatted_tasks
                 
             else:
-                logger.error(f"Ошибка получения данных из parsing-service: {response.status_code} - {response.text}")
+                logger.error(f"❌ DIAGNOSTIC: Ошибка получения данных из parsing-service: {response.status_code}")
+                logger.error(f"❌ DIAGNOSTIC: Response body: {response.text}")
+                logger.error(f"❌ DIAGNOSTIC: Response headers: {dict(response.headers)}")
                 return []
         
+    except httpx.TimeoutException as e:
+        logger.error(f"❌ DIAGNOSTIC: Timeout при запросе к parsing-service: {e}")
+        return []
+    except httpx.ConnectError as e:
+        logger.error(f"❌ DIAGNOSTIC: Ошибка соединения с parsing-service: {e}")
+        return []
     except Exception as e:
-        logger.error(f"Ошибка при получении задач парсинга: {str(e)}")
+        logger.error(f"❌ DIAGNOSTIC: Ошибка при получении задач парсинга: {str(e)}")
+        logger.error(f"❌ DIAGNOSTIC: Full traceback: {traceback.format_exc()}")
         # Возвращаем пустой список вместо заглушки
         return []
 
