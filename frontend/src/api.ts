@@ -433,7 +433,7 @@ export const inviteApi = {
     status: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/status`),
     
     // Проверка администраторских прав в группе/канале
-    checkAdminRights: (groupLink: string) => apiFetch('/api/invite/tasks/check-admin-rights', {
+    checkAdminRights: (groupLink: string) => apiFetch('/api/invite/check-admin-rights', {
       method: 'POST',
       body: JSON.stringify({ group_link: groupLink })
     }),
