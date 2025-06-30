@@ -117,10 +117,10 @@ def apply_target_sorting(query, sort_by: TargetSortBy, sort_order: str):
 async def create_target(
     task_id: int,
     target_data: InviteTargetCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Создание нового целевого контакта для задачи"""
-    user_id = get_current_user_id()
     
     # Проверка доступа к задаче
     task = check_task_ownership(task_id, user_id, db)
