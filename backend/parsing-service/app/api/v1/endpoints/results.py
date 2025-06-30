@@ -90,7 +90,7 @@ async def list_results_grouped_by_task(
     try:
         logger.info(f"🔍 DIAGNOSTIC: Building SQL query for user_id={user_id}")
         
-        # Query to get task summaries with result counts
+        # Query to get task summaries with result counts (без config в GROUP BY)
         query = select(
             ParseTask.id,
             ParseTask.task_id,
@@ -98,13 +98,12 @@ async def list_results_grouped_by_task(
             ParseTask.platform,
             ParseTask.status,
             ParseTask.created_at,
-            ParseTask.config,
             func.count(ParseResult.id).label('total_results')
         ).outerjoin(
             ParseResult, ParseTask.id == ParseResult.task_id
         ).group_by(
             ParseTask.id, ParseTask.task_id, ParseTask.title, 
-            ParseTask.platform, ParseTask.status, ParseTask.created_at, ParseTask.config
+            ParseTask.platform, ParseTask.status, ParseTask.created_at
         )
         
         logger.info("🔍 DIAGNOSTIC: Query built successfully")
@@ -124,13 +123,18 @@ async def list_results_grouped_by_task(
         tasks = result.all()
         logger.info(f"🔍 DIAGNOSTIC: Found {len(tasks)} tasks in database")
         
+        # Получаем config для каждой задачи отдельно
         formatted_tasks = []
         for i, task in enumerate(tasks):
             try:
                 logger.debug(f"🔍 DIAGNOSTIC: Processing task {i+1}/{len(tasks)}: {task.task_id}")
                 
+                # Получаем config отдельным запросом
+                config_query = select(ParseTask.config).where(ParseTask.id == task.id)
+                config_result = await db.execute(config_query)
+                config = config_result.scalar() or {}
+                
                 # Extract target info from config
-                config = task.config or {}
                 targets = config.get('targets', [])
                 target_url = targets[0] if targets else 'Unknown'
                 
