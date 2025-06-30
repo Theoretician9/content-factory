@@ -87,10 +87,10 @@ def apply_task_sorting(query, sort_by: TaskSortBy, sort_order: SortOrder):
 @router.post("/", response_model=InviteTaskResponse)
 async def create_invite_task(
     task_data: InviteTaskCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Создание новой задачи приглашений"""
-    user_id = get_current_user_id()
     
     try:
         # Создание новой задачи
@@ -139,10 +139,10 @@ async def get_invite_tasks(
     sort_by: TaskSortBy = Query(TaskSortBy.CREATED_AT, description="Поле для сортировки"),
     sort_order: SortOrder = Query(SortOrder.DESC, description="Порядок сортировки"),
     
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Получение списка задач приглашений с фильтрацией и пагинацией"""
-    user_id = get_current_user_id()
     
     # Создание объекта фильтров
     filters = TaskFilterSchema(
@@ -193,10 +193,10 @@ async def get_invite_tasks(
 @router.get("/{task_id}", response_model=InviteTaskResponse)
 async def get_invite_task(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Получение конкретной задачи приглашений"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
@@ -216,10 +216,10 @@ async def get_invite_task(
 async def update_invite_task(
     task_id: int,
     task_update: InviteTaskUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Полное обновление задачи приглашений"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
@@ -260,10 +260,10 @@ async def update_invite_task(
 async def duplicate_invite_task(
     task_id: int,
     duplicate_data: TaskDuplicateRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Дублирование задачи приглашений"""
-    user_id = get_current_user_id()
     
     # Получение оригинальной задачи
     original_task = db.query(InviteTask).filter(
@@ -313,10 +313,10 @@ async def duplicate_invite_task(
 @router.post("/bulk", response_model=dict)
 async def bulk_task_operations(
     bulk_request: TaskBulkRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Массовые операции с задачами"""
-    user_id = get_current_user_id()
     
     # Проверка существования всех задач и прав доступа
     tasks = db.query(InviteTask).filter(
@@ -396,10 +396,10 @@ async def bulk_task_operations(
 @router.delete("/{task_id}")
 async def delete_invite_task(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Удаление задачи приглашений"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
