@@ -1,9 +1,9 @@
 """Parse results API endpoints."""
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, join
 from typing import List, Optional
 import json
 import csv
@@ -11,32 +11,119 @@ import io
 
 from app.database import get_db
 from app.models.parse_result import ParseResult
+from app.models.parse_task import ParseTask
 
 router = APIRouter()
 
 @router.get("/")
-async def list_results(db: AsyncSession = Depends(get_db)):
-    """List all parsing results."""
-    result = await db.execute(
-        select(func.count(ParseResult.id)).select_from(ParseResult)
-    )
-    total = result.scalar() or 0
+async def list_results(
+    user_id: Optional[int] = Query(None, description="Filter by user ID"),
+    platform: Optional[str] = Query(None, description="Filter by platform"),
+    limit: int = Query(100, ge=1, le=1000, description="Limit results"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    db: AsyncSession = Depends(get_db)
+):
+    """List parsing results with user filtering."""
     
-    # Get sample results
-    result = await db.execute(
-        select(ParseResult).limit(100).order_by(ParseResult.created_at.desc())
+    # Build base query with JOIN to ParseTask
+    query = select(ParseResult).join(ParseTask, ParseResult.task_id == ParseTask.id)
+    count_query = select(func.count(ParseResult.id)).select_from(
+        join(ParseResult, ParseTask, ParseResult.task_id == ParseTask.id)
     )
+    
+    # Apply user filter
+    if user_id is not None:
+        query = query.where(ParseTask.user_id == user_id)
+        count_query = count_query.where(ParseTask.user_id == user_id)
+    
+    # Apply platform filter
+    if platform:
+        query = query.where(ParseResult.platform == platform)
+        count_query = count_query.where(ParseResult.platform == platform)
+    
+    # Get total count
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+    
+    # Apply pagination and ordering
+    query = query.order_by(ParseResult.created_at.desc()).offset(offset).limit(limit)
+    
+    # Execute query
+    result = await db.execute(query)
     results = result.scalars().all()
     
     return {
-        "results": [_format_result(r) for r in results],
+        "items": [_format_result(r) for r in results],
         "total": total,
-        "status": "active"
+        "page": offset // limit + 1 if limit > 0 else 1,
+        "page_size": limit,
+        "has_more": offset + limit < total,
+        "filters": {
+            "user_id": user_id,
+            "platform": platform
+        }
+    }
+
+@router.get("/grouped")
+async def list_results_grouped_by_task(
+    user_id: Optional[int] = Query(None, description="Filter by user ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """List parsing results grouped by tasks for user."""
+    
+    # Query to get task summaries with result counts
+    query = select(
+        ParseTask.id,
+        ParseTask.task_id,
+        ParseTask.title,
+        ParseTask.platform,
+        ParseTask.status,
+        ParseTask.created_at,
+        ParseTask.config,
+        func.count(ParseResult.id).label('total_results')
+    ).outerjoin(
+        ParseResult, ParseTask.id == ParseResult.task_id
+    ).group_by(
+        ParseTask.id, ParseTask.task_id, ParseTask.title, 
+        ParseTask.platform, ParseTask.status, ParseTask.created_at, ParseTask.config
+    )
+    
+    # Apply user filter
+    if user_id is not None:
+        query = query.where(ParseTask.user_id == user_id)
+    
+    # Order by creation date
+    query = query.order_by(ParseTask.created_at.desc())
+    
+    result = await db.execute(query)
+    tasks = result.all()
+    
+    formatted_tasks = []
+    for task in tasks:
+        # Extract target info from config
+        config = task.config or {}
+        targets = config.get('targets', [])
+        target_url = targets[0] if targets else 'Unknown'
+        
+        formatted_tasks.append({
+            "task_id": task.task_id,
+            "platform": task.platform.value if hasattr(task.platform, 'value') else str(task.platform),
+            "target_url": target_url,
+            "title": task.title,
+            "status": task.status.value if hasattr(task.status, 'value') else str(task.status),
+            "total_results": task.total_results,
+            "created_at": task.created_at.isoformat() if task.created_at else None
+        })
+    
+    return {
+        "tasks": formatted_tasks,
+        "total_tasks": len(formatted_tasks)
     }
 
 @router.get("/{task_id}")
 async def get_result(
     task_id: str,
+    user_id: Optional[int] = Query(None, description="Filter by user ID"),
     db: AsyncSession = Depends(get_db),
     format: Optional[str] = "json",
     platform_filter: Optional[str] = None,
@@ -45,8 +132,19 @@ async def get_result(
 ):
     """Get parsing results for specific task."""
     
-    # Build query
-    query = select(ParseResult).where(ParseResult.task_id == task_id)
+    # Build query with user verification
+    query = select(ParseResult).join(ParseTask, ParseResult.task_id == ParseTask.id)
+    
+    # Filter by task_id (string or int)
+    try:
+        task_id_int = int(task_id)
+        query = query.where(ParseTask.id == task_id_int)
+    except ValueError:
+        query = query.where(ParseTask.task_id == task_id)
+    
+    # Apply user filter for security
+    if user_id is not None:
+        query = query.where(ParseTask.user_id == user_id)
     
     # Apply platform filter
     if platform_filter:
@@ -94,13 +192,26 @@ async def get_result(
 @router.get("/{task_id}/export")
 async def export_result(
     task_id: str, 
+    user_id: Optional[int] = Query(None, description="Filter by user ID"),
     format: str = "json",
     db: AsyncSession = Depends(get_db)
 ):
     """Export parsing result in specified format."""
     
-    # Get all results for the task
-    query = select(ParseResult).where(ParseResult.task_id == task_id).order_by(ParseResult.created_at.desc())
+    # Get all results for the task with user verification
+    query = select(ParseResult).join(ParseTask, ParseResult.task_id == ParseTask.id)
+    
+    try:
+        task_id_int = int(task_id)
+        query = query.where(ParseTask.id == task_id_int)
+    except ValueError:
+        query = query.where(ParseTask.task_id == task_id)
+    
+    if user_id is not None:
+        query = query.where(ParseTask.user_id == user_id)
+        
+    query = query.order_by(ParseResult.created_at.desc())
+    
     result = await db.execute(query)
     results = result.scalars().all()
     
