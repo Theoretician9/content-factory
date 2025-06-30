@@ -41,31 +41,48 @@ class AccountManager:
             List of account dictionaries with status information
         """
         try:
+            logger.info("🔍 GET_AVAILABLE: Starting get_available_accounts")
+            
             async with AsyncSessionLocal() as db_session:
+                logger.info("🗃️  GET_AVAILABLE: Connecting to database")
+                
                 # Get all account states from database
                 stmt = select(AccountState).where(
                     AccountState.status.in_([AccountStatus.FREE.value, AccountStatus.BLOCKED.value])
                 )
+                logger.info(f"🔍 GET_AVAILABLE: Querying AccountState with status in [{AccountStatus.FREE.value}, {AccountStatus.BLOCKED.value}]")
+                
                 result = await db_session.execute(stmt)
                 account_states = result.scalars().all()
+                logger.info(f"📊 GET_AVAILABLE: Found {len(account_states)} account states in database")
+                
+                # Log all found account states
+                for i, acc in enumerate(account_states):
+                    logger.info(f"📋 GET_AVAILABLE: Account {i+1}: id={acc.account_id}, status={acc.status}, blocked_until={acc.blocked_until}")
                 
                 # Filter only truly available accounts (not blocked by FloodWait)
                 available_accounts = []
                 for account_state in account_states:
-                    if account_state.is_available():
-                        available_accounts.append({
+                    is_available = account_state.is_available()
+                    logger.info(f"🔍 GET_AVAILABLE: Account {account_state.account_id} is_available={is_available}")
+                    
+                    if is_available:
+                        account_data = {
                             'account_id': account_state.account_id,
                             'session_id': account_state.session_id,
                             'status': account_state.status,
                             'last_activity': account_state.last_activity,
                             'total_tasks_completed': account_state.total_tasks_completed
-                        })
+                        }
+                        available_accounts.append(account_data)
+                        logger.info(f"✅ GET_AVAILABLE: Added available account {account_state.account_id}")
                 
-                logger.info(f"🟢 Found {len(available_accounts)} available accounts out of {len(account_states)} total")
+                logger.info(f"🟢 GET_AVAILABLE: Found {len(available_accounts)} available accounts out of {len(account_states)} total")
                 return available_accounts
                 
         except Exception as e:
-            logger.error(f"❌ Error getting available accounts: {e}")
+            logger.error(f"❌ GET_AVAILABLE: Error getting available accounts: {e}")
+            logger.exception("Full get_available_accounts error traceback:")
             return []
     
     async def get_account_status(self) -> Dict:
