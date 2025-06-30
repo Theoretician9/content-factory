@@ -110,18 +110,18 @@ interface AdminCheckResult {
 }
 
 const Mailing = () => {
-  const navigate = useNavigate();
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  
+  // Состояния интерфейса
+  const [activeTab, setActiveTab] = useState<'tasks' | 'create' | 'stats'>('tasks');
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  
+  // Задачи и загрузка
+  const [tasks, setTasks] = useState<InviteTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768);
-  
-  // Основное состояние
-  const [activeTab, setActiveTab] = useState<'create' | 'tasks' | 'stats'>('tasks');
-  const [tasks, setTasks] = useState<InviteTask[]>([]);
-  
-  // Добавляем состояние для автообновления
   const [autoRefresh, setAutoRefresh] = useState(false);
   
   // Модальное окно импорта при запуске задачи
