@@ -4,7 +4,8 @@ API endpoints для Telegram приглашений через Integration Serv
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from telethon.errors import FloodWaitError, PrivacyRestrictedError, PeerFloodError, UserNotMutualContactError
+from telethon.errors import FloodWaitError, PeerFloodError, UserNotMutualContactError
+# PrivacyRestrictedError не существует в этой версии telethon, используем общий Exception
 from telethon.tl.functions.channels import InviteToChannelRequest
 from telethon.tl.functions.messages import AddChatUserRequest
 from typing import Dict, Any, Optional
