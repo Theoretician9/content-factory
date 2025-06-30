@@ -432,15 +432,10 @@ export const inviteApi = {
     // Получение статуса задачи
     status: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/status`),
     
-    // Проверка администраторских прав
+    // Проверка администраторских прав в группе/канале
     checkAdminRights: (groupLink: string) => apiFetch('/api/invite/tasks/check-admin-rights', {
       method: 'POST',
       body: JSON.stringify({ group_link: groupLink })
-    }),
-    
-    // Добавление тестовых данных аудитории
-    addTestTargets: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/add-test-targets`, {
-      method: 'POST'
     }),
 
     // Получение детальной статистики
@@ -472,12 +467,6 @@ export const inviteApi = {
     }) => apiFetch(`/api/invite/tasks/${taskId}/test-invite`, {
       method: 'POST',
       body: JSON.stringify(data)
-    }),
-
-    // Проверка администраторских прав
-    checkAdminRights: (groupLink: string) => apiFetch('/api/invite/tasks/check-admin-rights', {
-      method: 'POST',
-      body: JSON.stringify({ group_link: groupLink })
     }),
   },
 
