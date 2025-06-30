@@ -53,6 +53,12 @@ async def import_targets_from_file(
         content = await file.read()
         content_str = content.decode('utf-8')
         
+        # 🔍 ДИАГНОСТИКА: логируем параметры импорта
+        logger.info(f"🔍 DIAGNOSTIC: Starting file import for task {task_id}")
+        logger.info(f"🔍 DIAGNOSTIC: File: {file.filename}, size: {len(content)} bytes")
+        logger.info(f"🔍 DIAGNOSTIC: File extension: {file_extension}")
+        logger.info(f"🔍 DIAGNOSTIC: Task current target_count: {task.target_count}")
+        
         imported_targets = []
         errors = []
         
@@ -63,13 +69,20 @@ async def import_targets_from_file(
         elif file_extension == 'txt':
             imported_targets, errors = await _parse_txt_content(content_str)
         
+        # 🔍 ДИАГНОСТИКА: результаты парсинга файла
+        logger.info(f"🔍 DIAGNOSTIC: Parsed file results - imported: {len(imported_targets)}, errors: {len(errors)}")
+        
         if not imported_targets and errors:
+            logger.error(f"🔍 DIAGNOSTIC: File parsing failed with errors: {errors[:3]}")
             raise HTTPException(status_code=400, detail=f"Failed to parse file: {'; '.join(errors[:5])}")
         
         # Сохраняем цели в базу данных
         saved_targets = []
-        for target_data in imported_targets:
+        for i, target_data in enumerate(imported_targets):
             try:
+                # 🔍 ДИАГНОСТИКА: логируем каждую цель
+                logger.debug(f"🔍 DIAGNOSTIC: Processing target {i+1}: {target_data}")
+                
                 target = InviteTarget(
                     task_id=task_id,
                     username=target_data.get('username'),
@@ -86,21 +99,45 @@ async def import_targets_from_file(
                 )
                 db.add(target)
                 saved_targets.append(target)
+                
+                # 🔍 ДИАГНОСТИКА: подтверждаем создание объекта
+                logger.debug(f"🔍 DIAGNOSTIC: Created InviteTarget {i+1} for task {task_id}")
+                
             except Exception as e:
+                logger.error(f"🔍 DIAGNOSTIC: Failed to create target {i+1}: {e}")
                 errors.append(f"Failed to save target {target_data}: {str(e)}")
+        
+        # 🔍 ДИАГНОСТИКА: состояние перед коммитом
+        logger.info(f"🔍 DIAGNOSTIC: About to commit {len(saved_targets)} targets to database")
         
         # Сначала коммитим новые цели
         await db.commit()
+        
+        # 🔍 ДИАГНОСТИКА: состояние после коммита
+        logger.info(f"🔍 DIAGNOSTIC: Committed {len(saved_targets)} targets successfully")
         
         # Затем обновляем счетчик целей в задаче (получаем реальный count из базы)
         count_query = select(InviteTarget).where(InviteTarget.task_id == task_id)
         count_result = await db.execute(count_query)
         all_targets = count_result.scalars().all()
         
-        task.target_count = len(all_targets)
+        # 🔍 ДИАГНОСТИКА: подсчет целей
+        old_count = task.target_count
+        new_count = len(all_targets)
+        logger.info(f"🔍 DIAGNOSTIC: Target count update - old: {old_count}, new: {new_count}")
+        logger.info(f"🔍 DIAGNOSTIC: Database query returned {len(all_targets)} targets for task {task_id}")
+        
+        task.target_count = new_count
         task.updated_at = datetime.utcnow()
         
+        # 🔍 ДИАГНОСТИКА: обновление задачи
+        logger.info(f"🔍 DIAGNOSTIC: Updating task.target_count from {old_count} to {new_count}")
+        
         await db.commit()
+        
+        # 🔍 ДИАГНОСТИКА: финальная проверка
+        logger.info(f"🔍 DIAGNOSTIC: File import completed successfully")
+        logger.info(f"🔍 DIAGNOSTIC: Final task.target_count: {task.target_count}")
         
         logger.info(f"Импортировано {len(saved_targets)} целей для задачи {task_id} из файла {file.filename}. Общий счетчик: {task.target_count}")
         
@@ -243,10 +280,25 @@ async def import_targets_from_parsing(
             current_count_result = await db.execute(current_count_query)
             current_targets = current_count_result.scalars().all()
             
-            task.target_count = len(current_targets) + len(imported_targets)
+            # 🔍 ДИАГНОСТИКА: подсчет целей при импорте из парсинга
+            old_count = task.target_count
+            targets_in_db = len(current_targets)
+            new_targets_count = len(imported_targets)
+            final_count = targets_in_db  # Используем реальное количество из БД
+            
+            logger.info(f"🔍 DIAGNOSTIC: Parsing import count update")
+            logger.info(f"🔍 DIAGNOSTIC: Task {task_id} old target_count: {old_count}")
+            logger.info(f"🔍 DIAGNOSTIC: Current targets in DB: {targets_in_db}")
+            logger.info(f"🔍 DIAGNOSTIC: New targets imported: {new_targets_count}")
+            logger.info(f"🔍 DIAGNOSTIC: Final target_count will be: {final_count}")
+            
+            task.target_count = final_count
             task.updated_at = datetime.utcnow()
             
             await db.commit()
+            
+            # 🔍 ДИАГНОСТИКА: финальная проверка
+            logger.info(f"🔍 DIAGNOSTIC: Parsing import completed, task.target_count: {task.target_count}")
             
             logger.info(f"Импортировано {len(imported_targets)} целей из задачи парсинга {parsing_task_id} для задачи {task_id}")
             
