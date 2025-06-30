@@ -1,6 +1,6 @@
 """Parse results API endpoints with user filtering."""
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -12,6 +12,7 @@ import io
 from app.database import get_db
 from app.models.parse_result import ParseResult
 from app.models.parse_task import ParseTask
+from app.core.auth import get_user_id_from_request
 
 router = APIRouter()
 
