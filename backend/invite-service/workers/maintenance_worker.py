@@ -3,6 +3,7 @@ Celery воркеры для периодических задач обслуж�
 """
 
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import List
 from sqlalchemy import and_
