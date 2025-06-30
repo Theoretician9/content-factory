@@ -28,12 +28,6 @@ from app.core.auth import get_current_user_id
 router = APIRouter()
 
 
-def get_current_user_id() -> int:
-    """Получение ID текущего пользователя из JWT токена"""
-    # TODO: Реализовать извлечение user_id из JWT токена
-    return 1  # Заглушка
-
-
 def apply_task_filters(query, filters: TaskFilterSchema, user_id: int):
     """Применение фильтров к запросу задач"""
     # Базовая фильтрация по пользователю
