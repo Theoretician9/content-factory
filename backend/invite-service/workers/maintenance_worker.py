@@ -221,13 +221,16 @@ def health_check_services():
     
     # Проверка Integration Service
     try:
-        from app.services.integration_client import get_integration_client
+        # ✅ ИСПРАВЛЕНО: убираем async проверку для совместимости с Celery
+        import httpx
         
-        client = get_integration_client()
-        results["integration_service"] = await client.health_check()
+        # Простая синхронная проверка доступности Integration Service
+        response = httpx.get("http://integration-service:8000/health", timeout=5.0)
+        results["integration_service"] = response.status_code == 200
         
     except Exception as e:
         logger.warning(f"Integration Service недоступен: {str(e)}")
+        results["integration_service"] = False
     
     # Проверка Redis
     try:
