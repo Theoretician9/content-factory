@@ -9,6 +9,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 import httpx
 import os
+import traceback
 
 from .config import settings
 
@@ -103,54 +104,74 @@ async def get_user_id_from_request(request: Request) -> int:
     Raises:
         AuthenticationError: If token is missing or invalid
     """
+    logger.info("🔍 DIAGNOSTIC: Starting get_user_id_from_request")
+    logger.info(f"🔍 DIAGNOSTIC: Request headers: {dict(request.headers)}")
+    
     # Get token from Authorization header
     auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+    logger.info(f"🔍 DIAGNOSTIC: Auth header present: {bool(auth_header)}")
+    
     if not auth_header:
-        logger.error("🚫 Missing Authorization header")
+        logger.error("🚫 DIAGNOSTIC: Missing Authorization header")
+        logger.error(f"🚫 DIAGNOSTIC: Available headers: {list(request.headers.keys())}")
         raise AuthenticationError("Authorization header missing")
     
     # Extract token from "Bearer <token>"
     if not auth_header.startswith("Bearer "):
-        logger.error("🚫 Invalid Authorization header format")
+        logger.error(f"🚫 DIAGNOSTIC: Invalid Authorization header format: '{auth_header[:50]}...'")
         raise AuthenticationError("Invalid Authorization header format")
     
     token = auth_header[7:]
-    logger.info(f"🔍 Processing JWT token: {token[:30]}...")
+    logger.info(f"🔍 DIAGNOSTIC: Extracted token length: {len(token)}")
+    logger.info(f"🔍 DIAGNOSTIC: Token preview: {token[:50]}...")
     
     try:
+        logger.info("🔍 DIAGNOSTIC: Attempting JWT decode...")
+        logger.info(f"🔍 DIAGNOSTIC: JWT_SECRET_KEY present: {bool(settings.JWT_SECRET_KEY)}")
+        logger.info(f"🔍 DIAGNOSTIC: JWT_SECRET_KEY length: {len(settings.JWT_SECRET_KEY) if settings.JWT_SECRET_KEY else 0}")
+        
         # Decode JWT token
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
-        email = payload.get("sub")
-        if not email:
-            logger.error(f"🚫 JWT token missing 'sub' field: {payload}")
-            raise AuthenticationError("Invalid token: missing email")
+        logger.info(f"🔍 DIAGNOSTIC: JWT decode successful")
+        logger.info(f"🔍 DIAGNOSTIC: JWT PAYLOAD: {payload}")
         
-        logger.info(f"🔍 JWT PAYLOAD: {payload}")
-        logger.info(f"🔍 USER EMAIL: '{email}'")
+        email = payload.get("sub")
+        logger.info(f"🔍 DIAGNOSTIC: Extracted email/sub: '{email}'")
+        
+        if not email:
+            logger.error(f"🚫 DIAGNOSTIC: JWT token missing 'sub' field in payload: {payload}")
+            raise AuthenticationError("Invalid token: missing email")
         
         # Преобразуем email в user_id через API Gateway (как в integration-service)
         if "@" in email:
+            logger.info(f"🔍 DIAGNOSTIC: Email format detected, calling API Gateway for user_id")
             user_id = await get_user_id_by_email_via_api_gateway(email)
+            logger.info(f"🔍 DIAGNOSTIC: API Gateway returned user_id: {user_id}")
+            
             if not user_id:
-                logger.error(f"🚫 User not found for email: {email}")
+                logger.error(f"🚫 DIAGNOSTIC: User not found for email: {email}")
                 raise AuthenticationError("Invalid token: user not found")
             
-            logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
+            logger.info(f"✅ DIAGNOSTIC: JWT Authentication successful - User ID: {user_id}")
             return user_id
         else:
             # Если в токене уже user_id
+            logger.info(f"🔍 DIAGNOSTIC: User ID format detected, converting to int")
             user_id = int(email)
-            logger.info(f"✅ JWT Authentication successful - User ID: {user_id}")
+            logger.info(f"✅ DIAGNOSTIC: JWT Authentication successful - User ID: {user_id}")
             return user_id
             
-    except jwt.ExpiredSignatureError:
-        logger.error("🚫 JWT token expired")
+    except jwt.ExpiredSignatureError as e:
+        logger.error(f"🚫 DIAGNOSTIC: JWT token expired: {e}")
+        logger.error(f"🚫 DIAGNOSTIC: JWT expired traceback: {traceback.format_exc()}")
         raise AuthenticationError("Token expired")
     except jwt.InvalidTokenError as e:
-        logger.error(f"🚫 Invalid JWT token: {e}")
+        logger.error(f"🚫 DIAGNOSTIC: Invalid JWT token: {e}")
+        logger.error(f"🚫 DIAGNOSTIC: JWT invalid traceback: {traceback.format_exc()}")
         raise AuthenticationError("Invalid token")
     except Exception as e:
-        logger.error(f"🚫 Authentication error: {e}")
+        logger.error(f"🚫 DIAGNOSTIC: Authentication error: {e}")
+        logger.error(f"🚫 DIAGNOSTIC: Authentication traceback: {traceback.format_exc()}")
         raise AuthenticationError("Authentication failed")
 
 
