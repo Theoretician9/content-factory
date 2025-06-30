@@ -5,20 +5,17 @@ API endpoints для выполнения задач приглашений
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import Optional
+from typing import Optional, Dict, Any
+import logging
 from datetime import datetime
 import asyncio
 
 from app.core.database import get_db
+from app.core.auth import get_current_user_id
 from app.models import InviteTask, InviteTarget, TaskStatus, TargetStatus
 
 router = APIRouter()
-
-
-def get_current_user_id() -> int:
-    """Получение ID текущего пользователя из JWT токена"""
-    # TODO: Реализовать извлечение user_id из JWT токена
-    return 1  # Заглушка
+logger = logging.getLogger(__name__)
 
 
 @router.post("/{task_id}/execute")
@@ -49,6 +46,8 @@ async def execute_invite_task(
     
     # Проверка наличия целевой аудитории
     target_count = db.query(InviteTarget).filter(InviteTarget.task_id == task_id).count()
+    
+    logger.info(f"Задача {task_id}: найдено {target_count} целей для выполнения")
     
     if target_count == 0:
         raise HTTPException(
