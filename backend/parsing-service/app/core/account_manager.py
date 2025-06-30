@@ -242,51 +242,87 @@ class AccountManager:
         that don't exist in our database yet.
         """
         try:
+            logger.info("🔄 SYNC: Starting sync_accounts_from_integration_service")
+            
             # Get accounts from integration-service
             async with aiohttp.ClientSession() as session:
                 url = f"{self.integration_service_url}/api/v1/telegram/internal/active-accounts"
+                logger.info(f"🌐 SYNC: Making request to {url}")
+                
                 async with session.get(url) as response:
+                    logger.info(f"📡 SYNC: Response status: {response.status}")
+                    
                     if response.status != 200:
-                        logger.error(f"❌ Failed to get accounts from integration-service: {response.status}")
+                        logger.error(f"❌ SYNC: Failed to get accounts from integration-service: {response.status}")
                         return
                     
                     integration_accounts = await response.json()
+                    logger.info(f"📥 SYNC: Received {len(integration_accounts)} accounts from integration-service")
             
             if not integration_accounts:
-                logger.warning("⚠️ No accounts received from integration-service")
+                logger.warning("⚠️ SYNC: No accounts received from integration-service")
                 return
+            
+            # Log first account for debugging
+            if integration_accounts:
+                logger.info(f"🔍 SYNC: Sample account data: {integration_accounts[0]}")
             
             # Sync with database
             async with AsyncSessionLocal() as db_session:
+                logger.info("🗃️  SYNC: Connecting to database")
+                
                 # Get existing account states
                 stmt = select(AccountState)
                 result = await db_session.execute(stmt)
                 existing_accounts = {acc.account_id: acc for acc in result.scalars().all()}
+                logger.info(f"📊 SYNC: Found {len(existing_accounts)} existing accounts in database")
                 
                 # Create new account states for accounts not in database
                 new_accounts_created = 0
+                accounts_processed = 0
+                
                 for integration_account in integration_accounts:
+                    accounts_processed += 1
                     account_id = str(integration_account.get('id') or integration_account.get('session_id'))
+                    logger.info(f"🔄 SYNC: Processing account {accounts_processed}/{len(integration_accounts)}: {account_id}")
                     
                     if account_id not in existing_accounts:
-                        # Create new account state
-                        new_account_state = AccountState(
-                            account_id=account_id,
-                            session_id=integration_account.get('session_id'),
-                            status=AccountStatus.FREE.value,
-                            account_info=str(integration_account)  # Store full account info
-                        )
-                        db_session.add(new_account_state)
-                        new_accounts_created += 1
+                        logger.info(f"➕ SYNC: Creating new AccountState for {account_id}")
+                        
+                        try:
+                            # Create new account state
+                            new_account_state = AccountState(
+                                account_id=account_id,
+                                session_id=integration_account.get('session_id'),
+                                status=AccountStatus.FREE.value,
+                                account_info=str(integration_account)  # Store full account info
+                            )
+                            db_session.add(new_account_state)
+                            new_accounts_created += 1
+                            logger.info(f"✅ SYNC: Added AccountState for {account_id}")
+                            
+                        except Exception as create_error:
+                            logger.error(f"❌ SYNC: Error creating AccountState for {account_id}: {create_error}")
+                            continue
+                    else:
+                        logger.info(f"⏭️  SYNC: Account {account_id} already exists in database")
                 
                 if new_accounts_created > 0:
+                    logger.info(f"💾 SYNC: Committing {new_accounts_created} new accounts to database")
                     await db_session.commit()
-                    logger.info(f"✅ Created {new_accounts_created} new account states")
+                    logger.info(f"✅ SYNC: Successfully created {new_accounts_created} new account states")
                 else:
-                    logger.info("✅ All integration-service accounts already synced")
+                    logger.info("✅ SYNC: All integration-service accounts already synced")
+                
+                # Final verification
+                stmt = select(AccountState)
+                result = await db_session.execute(stmt)
+                total_accounts_after = len(result.scalars().all())
+                logger.info(f"📊 SYNC: Final count: {total_accounts_after} accounts in database")
                     
         except Exception as e:
-            logger.error(f"❌ Error syncing accounts from integration-service: {e}")
+            logger.error(f"❌ SYNC: Error syncing accounts from integration-service: {e}")
+            logger.exception("Full sync error traceback:")
 
     async def get_task_queue_status(self) -> Dict:
         """
