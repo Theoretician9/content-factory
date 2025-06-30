@@ -7,6 +7,7 @@ from typing import List, Dict, Any
 import httpx
 import logging
 import jwt
+from datetime import datetime, timedelta
 
 from app.core.config import settings
 from app.core.auth import get_current_user_id
@@ -30,9 +31,7 @@ async def get_jwt_token_for_parsing_service() -> str:
         payload = {
             'service': 'invite-service',
             'user_id': 1,  # Системный токен
-            'exp': jwt.utils.get_int_from_datetime(
-                jwt.datetime.datetime.utcnow() + jwt.datetime.timedelta(hours=1)
-            )
+            'exp': int((datetime.utcnow() + timedelta(hours=1)).timestamp())
         }
         
         token = jwt.encode(payload, secret_data['secret_key'], algorithm='HS256')
