@@ -89,12 +89,17 @@ async def import_targets_from_file(
             except Exception as e:
                 errors.append(f"Failed to save target {target_data}: {str(e)}")
         
-        # Обновляем счетчик целей в задаче
-        task.target_count = len(saved_targets)
+        # Обновляем счетчик целей в задаче (добавляем к существующему)
+        current_count_query = select(InviteTarget).where(InviteTarget.task_id == task_id)
+        current_count_result = await db.execute(current_count_query)
+        current_targets = current_count_result.scalars().all()
+        
+        task.target_count = len(current_targets) + len(saved_targets)
+        task.updated_at = datetime.utcnow()
         
         await db.commit()
         
-        logger.info(f"Импортировано {len(saved_targets)} целей для задачи {task_id} из файла {file.filename}")
+        logger.info(f"Импортировано {len(saved_targets)} целей для задачи {task_id} из файла {file.filename}. Общий счетчик: {task.target_count}")
         
         return {
             "success": True,
@@ -103,6 +108,7 @@ async def import_targets_from_file(
             "total_processed": len(imported_targets) + len(errors),
             "file_name": file.filename,
             "source_name": source_name,
+            "total_targets_in_task": task.target_count,  # Добавляем общий счетчик
             "errors": errors[:10] if errors else []  # Показываем только первые 10 ошибок
         }
         
