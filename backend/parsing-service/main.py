@@ -73,8 +73,24 @@ async def lifespan(app: FastAPI):
     # Initialize metrics
     # metrics = get_metrics_collector()  # Временно отключено
     
+    # ✅ ЗАПУСК ПЕРИОДИЧЕСКОГО ОБРАБОТЧИКА ЗАДАЧ
+    async def periodic_task_processor():
+        """Периодический обработчик pending задач каждые 10 секунд."""
+        while True:
+            try:
+                await asyncio.sleep(10)  # Проверяем каждые 10 секунд
+                await process_pending_tasks()
+            except Exception as e:
+                logger.error(f"❌ Ошибка в periodic_task_processor: {e}")
+    
+    # Запускаем периодический обработчик в фоне
+    processor_task = asyncio.create_task(periodic_task_processor())
+    logger.info("🔄 Запущен периодический обработчик задач (каждые 10 секунд)")
+    
     yield
     
+    # Останавливаем периодический обработчик при завершении
+    processor_task.cancel()
     logger.info("🛑 Shutting down Multi-Platform Parser Service")
 
 
@@ -151,6 +167,15 @@ from app.api.v1.endpoints.search import router as search_router
 app.include_router(tasks_router, prefix="/v1/tasks", tags=["Parse Tasks"])
 app.include_router(results_router, prefix="/v1/results", tags=["Parse Results"])
 app.include_router(search_router, prefix="/v1/search", tags=["Community Search"])
+
+# ✅ BACKWARD COMPATIBILITY: Добавляем роуты для исправления 404 ошибок
+# Frontend может обращаться к /v1/api/v1/tasks/ (двойной v1)
+app.include_router(tasks_router, prefix="/v1/api/v1/tasks", tags=["Parse Tasks Compat"])
+app.include_router(results_router, prefix="/v1/api/v1/results", tags=["Parse Results Compat"])
+
+# ✅ ADDITIONAL COMPATIBILITY ROUTES: Для разных вариантов URL
+app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["Parse Tasks API"])
+app.include_router(results_router, prefix="/api/v1/results", tags=["Parse Results API"])
 
 
 # =============================================================================
