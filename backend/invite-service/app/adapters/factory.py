@@ -47,4 +47,9 @@ class PlatformAdapterFactory:
 
 def get_platform_adapter(platform: str) -> InvitePlatformAdapter:
     """Удобная функция для получения адаптера платформы"""
-    return PlatformAdapterFactory.get_adapter(platform) 
+    return PlatformAdapterFactory.get_adapter(platform)
+
+
+def get_supported_platforms() -> list[str]:
+    """Удобная функция для получения списка поддерживаемых платформ"""
+    return PlatformAdapterFactory.get_supported_platforms() 
