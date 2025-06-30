@@ -368,6 +368,17 @@ const Mailing = () => {
       return;
     }
 
+    // ✅ ДОПОЛНИТЕЛЬНЫЕ ПРОВЕРКИ ДЛЯ ИСТОЧНИКОВ ДАННЫХ
+    if (selectedDataSource === 'parsing' && !selectedParseTask) {
+      setDataSourceError('Выберите результат парсинга');
+      return;
+    }
+
+    if (selectedDataSource === 'file' && !importFile) {
+      setDataSourceError('Выберите файл для загрузки');
+      return;
+    }
+
     if (createForm.task_type === 'send_messages' && !createForm.message_template.trim()) {
       setCreateError('Введите текст сообщения');
       return;
@@ -383,6 +394,7 @@ const Mailing = () => {
         ? `Приглашения в ${groupName}`
         : `Приглашения в группу (${createForm.target_group_id})`;
 
+      // ✅ ШАГ 1: СОЗДАНИЕ ЗАДАЧИ
       const res = await inviteApi.tasks.create({
         platform: createForm.platform,
         task_type: createForm.task_type,
@@ -400,34 +412,88 @@ const Mailing = () => {
         }
       });
 
-      if (res.ok) {
-        // Сбрасываем форму
-        setCreateForm({
-          platform: 'telegram',
-          task_type: 'invite_to_group',
-          description: '',
-          target_group_id: '',
-          message_template: '',
-          priority: 'normal',
-          settings: {
-            auto_add_contacts: true,
-            fallback_to_messages: true
-          }
-        });
-        setAdminCheckResult(null);
-        setGroupName('');
-        setSelectedDataSource('');
-        setCreateError('');
-        
-        // Обновляем задачи после успешного создания
-        loadTasks(false);
-        setActiveTab('tasks');
-      } else {
+      if (!res.ok) {
         const error = await res.json();
         setCreateError(error.detail || 'Ошибка создания задачи');
+        return;
       }
+
+      const createdTask = await res.json();
+      const taskId = createdTask.id;
+
+      // ✅ ШАГ 2: АВТОМАТИЧЕСКИЙ ИМПОРТ ДАННЫХ
+      let importResult = null;
+      
+      if (selectedDataSource === 'parsing') {
+        // Импорт из результатов парсинга
+        const importRes = await inviteApi.import.parsing(taskId, {
+          parsing_task_id: selectedParseTask,
+          source_name: `parsing_${selectedParseTask}`
+        });
+        
+        if (importRes.ok) {
+          importResult = await importRes.json();
+        } else {
+          const error = await importRes.json();
+          setCreateError(`Задача создана, но ошибка импорта данных: ${error.detail || 'Неизвестная ошибка'}`);
+          return;
+        }
+        
+      } else if (selectedDataSource === 'file') {
+        // Импорт из файла
+        const importRes = await inviteApi.import.file(taskId, importFile!, {
+          source_name: `file_${Date.now()}`
+        });
+        
+        if (importRes.ok) {
+          importResult = await importRes.json();
+        } else {
+          const error = await importRes.json();
+          setCreateError(`Задача создана, но ошибка импорта файла: ${error.detail || 'Неизвестная ошибка'}`);
+          return;
+        }
+      }
+
+      // ✅ УСПЕШНОЕ ЗАВЕРШЕНИЕ
+      
+      // Показываем результат импорта
+      if (importResult && importResult.imported_count > 0) {
+        alert(`🎉 Задача успешно создана и настроена!\n\n` +
+              `📊 Импортировано: ${importResult.imported_count} контактов\n` +
+              `🎯 Задача готова к запуску`);
+      } else {
+        alert(`✅ Задача создана, но не удалось импортировать данные.\n` +
+              `Проверьте источник данных и попробуйте импортировать вручную.`);
+      }
+
+      // Сбрасываем форму
+      setCreateForm({
+        platform: 'telegram',
+        task_type: 'invite_to_group',
+        description: '',
+        target_group_id: '',
+        message_template: '',
+        priority: 'normal',
+        settings: {
+          auto_add_contacts: true,
+          fallback_to_messages: true
+        }
+      });
+      setAdminCheckResult(null);
+      setGroupName('');
+      setSelectedDataSource('');
+      setSelectedParseTask('');
+      setImportFile(null);
+      setCreateError('');
+      setDataSourceError('');
+      
+      // Обновляем задачи после успешного создания
+      loadTasks(false);
+      setActiveTab('tasks');
+      
     } catch (err) {
-      setCreateError('Ошибка сети');
+      console.error('Error in handleCreateTask:', err);
+      setCreateError('Ошибка сети при создании задачи');
     } finally {
       setCreating(false);
     }

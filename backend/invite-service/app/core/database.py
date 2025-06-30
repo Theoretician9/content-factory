@@ -3,6 +3,7 @@
 """
 
 import logging
+from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -38,9 +39,22 @@ async def create_tables():
 
 
 def get_db():
-    """Получение сессии базы данных"""
+    """Получение сессии базы данных (для FastAPI dependency injection)"""
     db = SessionLocal()
     try:
         yield db
+    finally:
+        db.close()
+
+
+@contextmanager
+def get_db_session():
+    """Получение сессии базы данных (для Celery воркеров)"""
+    db = SessionLocal()
+    try:
+        yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close() 
