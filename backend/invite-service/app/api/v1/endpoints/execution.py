@@ -21,53 +21,53 @@ logger = logging.getLogger(__name__)
 @router.post("/{task_id}/execute")
 async def execute_invite_task(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Запуск выполнения задачи приглашений"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
         InviteTask.user_id == user_id
     ).first()
-    
+
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Задача с ID {task_id} не найдена"
         )
-    
+
     # Проверка статуса задачи
     if task.status not in [TaskStatus.PENDING, TaskStatus.PAUSED]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Задача не может быть запущена со статусом {task.status}"
         )
-    
+
     # Проверка наличия целевой аудитории
     target_count = db.query(InviteTarget).filter(InviteTarget.task_id == task_id).count()
-    
+
     logger.info(f"Задача {task_id}: найдено {target_count} целей для выполнения")
-    
+
     if target_count == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Невозможно запустить задачу без целевой аудитории"
         )
-    
+
     try:
         # Импорт Celery задачи
         from workers.invite_worker import execute_invite_task as celery_execute_task
-        
+
         # Запуск асинхронной задачи через Celery
         result = celery_execute_task.delay(task_id)
-        
+
         # Обновление статуса задачи
         task.status = TaskStatus.RUNNING
         task.start_time = datetime.utcnow()
         task.updated_at = datetime.utcnow()
         db.commit()
-        
+
         return {
             "message": f"Задача {task_id} запущена в выполнение",
             "task_id": task_id,
@@ -75,7 +75,7 @@ async def execute_invite_task(
             "status": "running",
             "started_at": task.start_time.isoformat()
         }
-        
+
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -87,42 +87,42 @@ async def execute_invite_task(
 @router.post("/{task_id}/pause")
 async def pause_invite_task(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Приостановка выполнения задачи"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
         InviteTask.user_id == user_id
     ).first()
-    
+
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Задача с ID {task_id} не найдена"
         )
-    
+
     if task.status != TaskStatus.RUNNING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Задача не может быть приостановлена со статусом {task.status}"
         )
-    
+
     try:
         # Обновление статуса
         task.status = TaskStatus.PAUSED
         task.updated_at = datetime.utcnow()
         db.commit()
-        
+
         # TODO: Интеграция с Celery для остановки активных задач
-        
+
         return {
             "message": f"Задача {task_id} приостановлена",
             "task_id": task_id,
             "status": "paused"
         }
-        
+
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -134,47 +134,47 @@ async def pause_invite_task(
 @router.post("/{task_id}/resume")
 async def resume_invite_task(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Возобновление выполнения задачи"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
         InviteTask.user_id == user_id
     ).first()
-    
+
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Задача с ID {task_id} не найдена"
         )
-    
+
     if task.status != TaskStatus.PAUSED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Задача не может быть возобновлена со статусом {task.status}"
         )
-    
+
     try:
         # Импорт Celery задачи
         from workers.invite_worker import execute_invite_task as celery_execute_task
-        
+
         # Перезапуск задачи
         result = celery_execute_task.delay(task_id)
-        
+
         # Обновление статуса
         task.status = TaskStatus.RUNNING
         task.updated_at = datetime.utcnow()
         db.commit()
-        
+
         return {
             "message": f"Задача {task_id} возобновлена",
             "task_id": task_id,
             "celery_task_id": result.id,
             "status": "running"
         }
-        
+
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -186,43 +186,43 @@ async def resume_invite_task(
 @router.post("/{task_id}/cancel")
 async def cancel_invite_task(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Отмена выполнения задачи"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
         InviteTask.user_id == user_id
     ).first()
-    
+
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Задача с ID {task_id} не найдена"
         )
-    
+
     if task.status not in [TaskStatus.RUNNING, TaskStatus.PAUSED, TaskStatus.PENDING]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Задача не может быть отменена со статусом {task.status}"
         )
-    
+
     try:
         # Обновление статуса
         task.status = TaskStatus.CANCELLED
         task.end_time = datetime.utcnow()
         task.updated_at = datetime.utcnow()
         db.commit()
-        
+
         # TODO: Интеграция с Celery для отмены активных задач
-        
+
         return {
             "message": f"Задача {task_id} отменена",
             "task_id": task_id,
             "status": "cancelled"
         }
-        
+
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -234,22 +234,22 @@ async def cancel_invite_task(
 @router.get("/{task_id}/status")
 async def get_task_status(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Получение детального статуса выполнения задачи"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
         InviteTask.user_id == user_id
     ).first()
-    
+
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Задача с ID {task_id} не найдена"
         )
-    
+
     # Получение статистики по целям
     targets_stats = db.query(
         InviteTarget.status,
@@ -257,23 +257,23 @@ async def get_task_status(
     ).filter(
         InviteTarget.task_id == task_id
     ).group_by(InviteTarget.status).all()
-    
+
     # Преобразование в словарь
     status_counts = {status.value: 0 for status in TargetStatus}
     for stat in targets_stats:
         status_counts[stat.status.value] = stat.count
-    
+
     # Вычисление процента выполнения
     total_targets = sum(status_counts.values())
     completed_targets = status_counts.get('invited', 0) + status_counts.get('failed', 0)
     progress_percentage = (completed_targets / total_targets * 100) if total_targets > 0 else 0
-    
+
     # Время выполнения
     execution_time = None
     if task.start_time:
         end_time = task.end_time or datetime.utcnow()
         execution_time = (end_time - task.start_time).total_seconds()
-    
+
     return {
         "task_id": task_id,
         "status": task.status.value,
@@ -298,53 +298,53 @@ async def get_task_status(
 @router.get("/{task_id}/accounts")
 async def get_task_available_accounts(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Получение доступных аккаунтов для выполнения задачи"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
         InviteTask.user_id == user_id
     ).first()
-    
+
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Задача с ID {task_id} не найдена"
         )
-    
+
     try:
         # Получение адаптера платформы
         from app.adapters.factory import get_platform_adapter
-        
+
         adapter = get_platform_adapter(task.platform)
-        
+
         # Асинхронная инициализация аккаунтов
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        
+
         try:
             accounts = loop.run_until_complete(adapter.initialize_accounts(user_id))
         finally:
             loop.close()
-        
+
         # Получение rate limiting информации
         from app.utils.rate_limiter import get_rate_limiter
         rate_limiter = get_rate_limiter()
-        
+
         account_info = []
         for account in accounts:
             # Получение текущего использования
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
+
             try:
                 usage = loop.run_until_complete(rate_limiter.get_account_usage(account))
                 can_invite = loop.run_until_complete(rate_limiter.can_send_invite(account))
             finally:
                 loop.close()
-            
+
             account_info.append({
                 "account_id": account.account_id,
                 "username": account.username,
@@ -360,7 +360,7 @@ async def get_task_available_accounts(
                 "can_send_invite": can_invite,
                 "flood_wait_until": account.flood_wait_until.isoformat() if account.flood_wait_until else None
             })
-        
+
         return {
             "task_id": task_id,
             "platform": task.platform,
@@ -368,7 +368,7 @@ async def get_task_available_accounts(
             "active_accounts": len([acc for acc in accounts if acc.status.value == 'active']),
             "accounts": account_info
         }
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -381,41 +381,41 @@ async def test_single_invite(
     task_id: int,
     target_id: int,
     account_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Тестовая отправка одного приглашения"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
         InviteTask.user_id == user_id
     ).first()
-    
+
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Задача с ID {task_id} не найдена"
         )
-    
+
     # Проверка существования цели
     target = db.query(InviteTarget).filter(
         InviteTarget.id == target_id,
         InviteTarget.task_id == task_id
     ).first()
-    
+
     if not target:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Цель с ID {target_id} не найдена в задаче {task_id}"
         )
-    
+
     try:
         # Импорт Celery задачи
         from workers.invite_worker import single_invite_operation
-        
+
         # Запуск тестового приглашения
         result = single_invite_operation.delay(task_id, target_id, account_id)
-        
+
         return {
             "message": "Тестовое приглашение запущено",
             "task_id": task_id,
@@ -423,7 +423,7 @@ async def test_single_invite(
             "account_id": account_id,
             "celery_task_id": result.id
         }
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -434,27 +434,27 @@ async def test_single_invite(
 @router.get("/{task_id}/diagnose")
 async def diagnose_task_issues(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Диагностика проблем с задачей инвайтинга"""
-    user_id = get_current_user_id()
     
     # Проверка существования задачи
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
         InviteTask.user_id == user_id
     ).first()
-    
+
     if not task:
         return {
             "issue": "task_not_found",
             "details": f"Задача {task_id} не найдена для пользователя {user_id}",
             "recommendations": ["Проверьте правильность ID задачи", "Убедитесь что задача принадлежит вашему пользователю"]
         }
-    
+
     # Получение реального количества целей
     real_target_count = db.query(InviteTarget).filter(InviteTarget.task_id == task_id).count()
-    
+
     # Статистика по целям
     target_stats = db.query(
         InviteTarget.status,
@@ -462,14 +462,14 @@ async def diagnose_task_issues(
     ).filter(
         InviteTarget.task_id == task_id
     ).group_by(InviteTarget.status).all()
-    
+
     status_counts = {stat.status.value: stat.count for stat in target_stats}
     pending_count = status_counts.get('pending', 0)
-    
+
     # Анализ проблем
     issues = []
     recommendations = []
-    
+
     # Проблема 1: Нет целей
     if real_target_count == 0:
         issues.append("no_targets")
@@ -478,12 +478,12 @@ async def diagnose_task_issues(
             "Импортируйте аудиторию из результатов парсинга",
             "Проверьте что файл был загружен корректно"
         ])
-    
+
     # Проблема 2: Несоответствие счетчиков
     if task.target_count != real_target_count:
         issues.append("count_mismatch")
         recommendations.append(f"Исправьте счетчик: task.target_count={task.target_count}, реально={real_target_count}")
-    
+
     # Проблема 3: Нет pending целей
     if real_target_count > 0 and pending_count == 0:
         issues.append("no_pending_targets")
@@ -492,12 +492,12 @@ async def diagnose_task_issues(
             "Добавьте новую аудиторию",
             "Проверьте что цели не были обработаны ранее"
         ])
-    
+
     # Проблема 4: Неправильный статус задачи
     if task.status not in [TaskStatus.PENDING, TaskStatus.PAUSED]:
         issues.append("invalid_task_status")
         recommendations.append(f"Задача в статусе {task.status.value}, должна быть PENDING или PAUSED")
-    
+
     # Анализ качества данных
     data_quality = {}
     if real_target_count > 0:
@@ -505,28 +505,28 @@ async def diagnose_task_issues(
             InviteTarget.task_id == task_id,
             InviteTarget.username.isnot(None)
         ).count()
-        
+
         targets_with_phone = db.query(InviteTarget).filter(
             InviteTarget.task_id == task_id,
             InviteTarget.phone_number.isnot(None)
         ).count()
-        
+
         targets_with_id = db.query(InviteTarget).filter(
             InviteTarget.task_id == task_id,
             InviteTarget.user_id_platform.isnot(None)
         ).count()
-        
+
         data_quality = {
             "with_username": targets_with_username,
             "with_phone": targets_with_phone,
             "with_platform_id": targets_with_id,
             "percentage_with_identifiers": round((max(targets_with_username, targets_with_phone, targets_with_id) / real_target_count) * 100, 2)
         }
-        
+
         if data_quality["percentage_with_identifiers"] < 50:
             issues.append("poor_data_quality")
             recommendations.append("Низкое качество данных - проверьте формат загружаемых файлов")
-    
+
     # Общий статус
     if not issues:
         overall_status = "ready_to_execute"
@@ -534,7 +534,7 @@ async def diagnose_task_issues(
     else:
         overall_status = "has_issues"
         overall_message = f"Обнаружено проблем: {len(issues)}"
-    
+
     return {
         "task_id": task_id,
         "overall_status": overall_status,
@@ -560,35 +560,35 @@ async def diagnose_task_issues(
 @router.post("/{task_id}/fix-count")
 async def fix_task_target_count(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Исправление счетчика целей в задаче"""
-    user_id = get_current_user_id()
     
     task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
         InviteTask.user_id == user_id
     ).first()
-    
+
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Задача с ID {task_id} не найдена"
         )
-    
+
     # Подсчет реального количества целей
     real_count = db.query(InviteTarget).filter(InviteTarget.task_id == task_id).count()
     old_count = task.target_count
-    
+
     # Обновление счетчика
     task.target_count = real_count
     task.updated_at = datetime.utcnow()
-    
+
     try:
         db.commit()
-        
+
         logger.info(f"Исправлен счетчик целей для задачи {task_id}: {old_count} -> {real_count}")
-        
+
         return {
             "message": f"Счетчик целей обновлен с {old_count} на {real_count}",
             "task_id": task_id,
@@ -596,7 +596,7 @@ async def fix_task_target_count(
             "new_count": real_count,
             "fixed": True
         }
-        
+
     except Exception as e:
         db.rollback()
         logger.error(f"Ошибка исправления счетчика для задачи {task_id}: {e}")
