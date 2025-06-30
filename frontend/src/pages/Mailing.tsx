@@ -147,6 +147,16 @@ const Mailing = () => {
   const [selectedTaskForStats, setSelectedTaskForStats] = useState<string | null>(null);
   const [executionLogs, setExecutionLogs] = useState<ExecutionLog[]>([]);
 
+  // Проверка администраторских прав
+  const [adminCheckLoading, setAdminCheckLoading] = useState(false);
+  const [adminCheckResult, setAdminCheckResult] = useState<any>(null);
+  const [adminCheckError, setAdminCheckError] = useState('');
+  const [groupName, setGroupName] = useState('');
+  
+  // Выбор базы данных для задачи
+  const [selectedDataSource, setSelectedDataSource] = useState<'parsing' | 'file' | ''>('');
+  const [dataSourceError, setDataSourceError] = useState('');
+
   useEffect(() => {
     const handleResize = () => {
       setIsDesktop(window.innerWidth >= 768);
