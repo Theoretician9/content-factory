@@ -516,6 +516,43 @@ const Mailing = () => {
     }
   };
 
+  // Проверка администраторских прав при изменении ссылки группы
+  const handleGroupLinkChange = async (groupLink: string) => {
+    setCreateForm(prev => ({ ...prev, target_group_id: groupLink }));
+    
+    if (groupLink.trim()) {
+      setAdminCheckLoading(true);
+      setAdminCheckError('');
+      setAdminCheckResult(null);
+      setGroupName('');
+      
+      try {
+        const res = await inviteApi.execution.checkAdminRights(groupLink.trim());
+        
+        if (res.ok) {
+          const data = await res.json();
+          setAdminCheckResult(data);
+          setGroupName(data.group_name || '');
+          
+          if (!data.can_proceed) {
+            setAdminCheckError('Ни один из ваших аккаунтов не является администратором этой группы/канала');
+          }
+        } else {
+          const error = await res.json();
+          setAdminCheckError(error.detail || 'Ошибка проверки администраторских прав');
+        }
+      } catch (err) {
+        setAdminCheckError('Ошибка сети при проверке администраторских прав');
+      } finally {
+        setAdminCheckLoading(false);
+      }
+    } else {
+      setAdminCheckResult(null);
+      setAdminCheckError('');
+      setGroupName('');
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('ru-RU');
   };
@@ -834,23 +871,10 @@ const Mailing = () => {
                     {/* Основная информация */}
                     <div className="md:col-span-2">
                       <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-                        Основная информация
+                        Основные настройки
                       </h3>
                     </div>
                     
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Название задачи *
-                      </label>
-                      <input
-                        type="text"
-                        value={createForm.title}
-                        onChange={(e) => setCreateForm(prev => ({ ...prev, title: e.target.value }))}
-                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                        placeholder="Например: Приглашения в IT группу"
-                      />
-                    </div>
-
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Платформа
@@ -880,18 +904,75 @@ const Mailing = () => {
                       </select>
                     </div>
 
-                    <div>
+                    {/* ID группы/канала */}
+                    {createForm.task_type === 'invite_to_group' && (
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          ID или ссылка группы/канала *
+                        </label>
+                        <input
+                          type="text"
+                          value={createForm.target_group_id}
+                          onChange={(e) => handleGroupLinkChange(e.target.value)}
+                          className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                          placeholder="@group_username, t.me/group_username или -100123456789"
+                        />
+                        
+                        {/* Статус проверки админских прав */}
+                        {adminCheckLoading && (
+                          <div className="mt-2 flex items-center text-blue-600">
+                            <span className="animate-spin mr-2">⏳</span>
+                            Проверка прав администратора...
+                          </div>
+                        )}
+                        
+                        {adminCheckError && (
+                          <div className="mt-2 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                            <span className="mr-2">❌</span>{adminCheckError}
+                          </div>
+                        )}
+                        
+                        {adminCheckResult && adminCheckResult.can_proceed && (
+                          <div className="mt-2 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg">
+                            <div className="flex items-center mb-2">
+                              <span className="mr-2">✅</span>
+                              <strong>Группа найдена: {groupName}</strong>
+                            </div>
+                            <div className="text-sm">
+                              <div>Доступных администраторов: {adminCheckResult.ready_accounts?.length || 0}</div>
+                              <div>Потенциал приглашений: {adminCheckResult.estimated_capacity || 0} в день</div>
+                            </div>
+                            
+                            {adminCheckResult.ready_accounts?.length > 0 && (
+                              <div className="mt-2">
+                                <div className="text-sm font-medium mb-1">Готовые аккаунты:</div>
+                                <div className="space-y-1">
+                                  {adminCheckResult.ready_accounts.map((acc: any) => (
+                                    <div key={acc.account_id} className="text-xs bg-green-50 px-2 py-1 rounded">
+                                      @{acc.username} ({acc.available_invites} приглашений доступно)
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Приоритет */}
+                    <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Приоритет
+                        Приоритет выполнения
                       </label>
                       <select
                         value={createForm.priority}
                         onChange={(e) => setCreateForm(prev => ({ ...prev, priority: e.target.value as any }))}
                         className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                       >
-                        <option value="high">🔴 Высокий</option>
-                        <option value="normal">🔵 Обычный</option>
-                        <option value="low">⚪ Низкий</option>
+                        <option value="high">🔴 Высокий (быстрый запуск)</option>
+                        <option value="normal">🔵 Обычный (рекомендуется)</option>
+                        <option value="low">⚪ Низкий (фоновый режим)</option>
                       </select>
                     </div>
 
@@ -917,24 +998,6 @@ const Mailing = () => {
                     </div>
 
                     {createForm.task_type === 'invite_to_group' && (
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          ID или ссылка группы/канала *
-                        </label>
-                        <input
-                          type="text"
-                          value={createForm.target_group_id}
-                          onChange={(e) => setCreateForm(prev => ({ ...prev, target_group_id: e.target.value }))}
-                          className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                          placeholder="@group_username, t.me/group_username или -100123456789"
-                        />
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                          Ваш аккаунт должен быть администратором группы/канала с правами приглашать участников
-                        </p>
-                      </div>
-                    )}
-
-                    {createForm.task_type === 'send_messages' && (
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Текст сообщения *
