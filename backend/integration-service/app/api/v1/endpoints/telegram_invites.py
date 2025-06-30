@@ -218,22 +218,22 @@ async def send_telegram_invite(
 async def send_telegram_message(
     account_id: int,
     message_data: TelegramMessageRequest,
-    current_user = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
     telegram_service: TelegramService = Depends(get_telegram_service)
 ):
     """Отправка сообщения через Telegram аккаунт"""
     
+    # Изоляция пользователей
+    user_id = await get_user_id_from_request(request)
+    
     # Проверка доступа к аккаунту
-    account = db.query(TelegramSession).filter(
-        TelegramSession.id == account_id,
-        TelegramSession.user_id == current_user.id
-    ).first()
+    account = await telegram_service.session_service.get_user_session_by_id(session, user_id, account_id)
     
     if not account:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Telegram аккаунт {account_id} не найден"
+            detail="Telegram аккаунт не найден"
         )
     
     try:
