@@ -8,6 +8,8 @@ from typing import List, Optional
 import json
 import csv
 import io
+import logging
+import traceback
 
 from app.database import get_db
 from app.models.parse_result import ParseResult
@@ -72,62 +74,109 @@ async def list_results_grouped_by_task(
 ):
     """List parsing results grouped by tasks for user."""
     
+    logger = logging.getLogger(__name__)
+    logger.info("🔍 DIAGNOSTIC: Starting /grouped endpoint")
+    
     # ✅ JWT АВТОРИЗАЦИЯ: Получаем user_id из JWT токена  
     try:
+        logger.info("🔍 DIAGNOSTIC: Starting JWT authentication")
         user_id = await get_user_id_from_request(request)
-        print(f"🔐 JWT Authorization successful for grouped endpoint: user_id={user_id}")
+        logger.info(f"🔐 JWT Authorization successful for grouped endpoint: user_id={user_id}")
     except Exception as auth_error:
-        print(f"❌ JWT Authorization failed for grouped endpoint: {auth_error}")
+        logger.error(f"❌ JWT Authorization failed for grouped endpoint: {auth_error}")
+        logger.error(f"❌ DIAGNOSTIC: Full auth traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=401, detail=f"Authorization failed: {str(auth_error)}")
     
-    # Query to get task summaries with result counts
-    query = select(
-        ParseTask.id,
-        ParseTask.task_id,
-        ParseTask.title,
-        ParseTask.platform,
-        ParseTask.status,
-        ParseTask.created_at,
-        ParseTask.config,
-        func.count(ParseResult.id).label('total_results')
-    ).outerjoin(
-        ParseResult, ParseTask.id == ParseResult.task_id
-    ).group_by(
-        ParseTask.id, ParseTask.task_id, ParseTask.title, 
-        ParseTask.platform, ParseTask.status, ParseTask.created_at, ParseTask.config
-    )
-    
-    # Apply user filter from JWT token
-    query = query.where(ParseTask.user_id == user_id)
-    
-    # Order by creation date
-    query = query.order_by(ParseTask.created_at.desc())
-    
-    result = await db.execute(query)
-    tasks = result.all()
-    
-    formatted_tasks = []
-    for task in tasks:
-        # Extract target info from config
-        config = task.config or {}
-        targets = config.get('targets', [])
-        target_url = targets[0] if targets else 'Unknown'
+    try:
+        logger.info(f"🔍 DIAGNOSTIC: Building SQL query for user_id={user_id}")
         
-        formatted_tasks.append({
-            "task_id": task.task_id,
-            "platform": task.platform.value if hasattr(task.platform, 'value') else str(task.platform),
-            "target_url": target_url,
-            "title": task.title,
-            "status": task.status.value if hasattr(task.status, 'value') else str(task.status),
-            "total_results": task.total_results,
-            "created_at": task.created_at.isoformat() if task.created_at else None
-        })
-    
-    return {
-        "tasks": formatted_tasks,
-        "total_tasks": len(formatted_tasks),
-        "user_id": user_id  # Для отладки
-    }
+        # Query to get task summaries with result counts
+        query = select(
+            ParseTask.id,
+            ParseTask.task_id,
+            ParseTask.title,
+            ParseTask.platform,
+            ParseTask.status,
+            ParseTask.created_at,
+            ParseTask.config,
+            func.count(ParseResult.id).label('total_results')
+        ).outerjoin(
+            ParseResult, ParseTask.id == ParseResult.task_id
+        ).group_by(
+            ParseTask.id, ParseTask.task_id, ParseTask.title, 
+            ParseTask.platform, ParseTask.status, ParseTask.created_at, ParseTask.config
+        )
+        
+        logger.info("🔍 DIAGNOSTIC: Query built successfully")
+        
+        # Apply user filter from JWT token
+        query = query.where(ParseTask.user_id == user_id)
+        logger.info(f"🔍 DIAGNOSTIC: User filter applied for user_id={user_id}")
+        
+        # Order by creation date
+        query = query.order_by(ParseTask.created_at.desc())
+        logger.info("🔍 DIAGNOSTIC: Query ordering applied")
+        
+        logger.info("🔍 DIAGNOSTIC: Executing database query...")
+        result = await db.execute(query)
+        logger.info("🔍 DIAGNOSTIC: Database query executed successfully")
+        
+        tasks = result.all()
+        logger.info(f"🔍 DIAGNOSTIC: Found {len(tasks)} tasks in database")
+        
+        formatted_tasks = []
+        for i, task in enumerate(tasks):
+            try:
+                logger.debug(f"🔍 DIAGNOSTIC: Processing task {i+1}/{len(tasks)}: {task.task_id}")
+                
+                # Extract target info from config
+                config = task.config or {}
+                targets = config.get('targets', [])
+                target_url = targets[0] if targets else 'Unknown'
+                
+                formatted_task = {
+                    "task_id": task.task_id,
+                    "platform": task.platform.value if hasattr(task.platform, 'value') else str(task.platform),
+                    "target_url": target_url,
+                    "title": task.title,
+                    "status": task.status.value if hasattr(task.status, 'value') else str(task.status),
+                    "total_results": task.total_results,
+                    "created_at": task.created_at.isoformat() if task.created_at else None
+                }
+                
+                formatted_tasks.append(formatted_task)
+                logger.debug(f"🔍 DIAGNOSTIC: Task {i+1} formatted successfully")
+                
+            except Exception as task_error:
+                logger.error(f"❌ DIAGNOSTIC: Error processing task {i+1}: {task_error}")
+                logger.error(f"❌ DIAGNOSTIC: Task data: {task}")
+                logger.error(f"❌ DIAGNOSTIC: Task processing traceback: {traceback.format_exc()}")
+        
+        response_data = {
+            "tasks": formatted_tasks,
+            "total_tasks": len(formatted_tasks),
+            "user_id": user_id  # Для отладки
+        }
+        
+        logger.info(f"🔍 DIAGNOSTIC: Returning {len(formatted_tasks)} formatted tasks")
+        return response_data
+        
+    except Exception as e:
+        logger.error(f"❌ DIAGNOSTIC: Critical error in /grouped endpoint: {e}")
+        logger.error(f"❌ DIAGNOSTIC: Full traceback: {traceback.format_exc()}")
+        logger.error(f"❌ DIAGNOSTIC: Request headers: {dict(request.headers)}")
+        logger.error(f"❌ DIAGNOSTIC: User ID: {user_id if 'user_id' in locals() else 'NOT_SET'}")
+        
+        # Возвращаем детальную ошибку для диагностики
+        raise HTTPException(
+            status_code=500, 
+            detail={
+                "error": "internal_server_error",
+                "message": f"Database query failed: {str(e)}",
+                "details": str(e),
+                "user_id": user_id if 'user_id' in locals() else None
+            }
+        )
 
 @router.get("/{task_id}")
 async def get_result(
