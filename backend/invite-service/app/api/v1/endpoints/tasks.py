@@ -746,7 +746,7 @@ async def test_single_invite(
         )
 
 
-@router.post("/tasks/check-admin-rights")
+@router.post("/check-admin-rights")
 async def check_admin_rights(
     request: dict,
     db: Session = Depends(get_db),
@@ -840,4 +840,7 @@ async def check_admin_rights(
         
     except Exception as e:
         logger.error(f"❌ Ошибка проверки админских прав: {e}")
-        raise HTTPException(status_code=500, detail=f"Error checking admin rights: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error checking admin rights: {str(e)}")
+
+
+# Utility functions 
