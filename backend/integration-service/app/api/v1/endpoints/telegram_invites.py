@@ -2,8 +2,8 @@
 API endpoints для Telegram приглашений через Integration Service
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 from telethon.errors import FloodWaitError, PeerFloodError, UserNotMutualContactError
 # Убрал PrivacyRestrictedError - не существует в этой версии telethon
 from telethon.tl.functions.channels import InviteToChannelRequest
@@ -13,17 +13,18 @@ from datetime import datetime
 import asyncio
 import logging
 
-from app.core.database import get_db
-from app.models.telegram_sessions import TelegramSession
-from app.core.auth import get_current_user
-from app.schemas.telegram_invites import (
+# ИСПРАВЛЕННЫЕ ИМПОРТЫ в соответствии с реальной структурой
+from ....database import get_async_session
+from ....models.telegram_sessions import TelegramSession
+from ....core.auth import get_user_id_from_request
+from ....schemas.telegram_invites import (
     TelegramInviteRequest,
     TelegramInviteResponse,
     TelegramMessageRequest,
     TelegramMessageResponse,
     TelegramAccountLimitsResponse
 )
-from app.services.telegram_service import TelegramService
+from ....services.telegram_service import TelegramService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -38,28 +39,22 @@ def get_telegram_service() -> TelegramService:
 async def send_telegram_invite(
     account_id: int,
     invite_data: TelegramInviteRequest,
-    current_user = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
     telegram_service: TelegramService = Depends(get_telegram_service)
 ):
     """Отправка приглашения через Telegram аккаунт"""
     
-    # Проверка доступа к аккаунту
-    account = db.query(TelegramSession).filter(
-        TelegramSession.id == account_id,
-        TelegramSession.user_id == current_user.id
-    ).first()
+    # Изоляция пользователей  
+    user_id = await get_user_id_from_request(request)
     
-    if not account:
+    # Проверка доступа к аккаунту
+    account = await telegram_service.session_service.get_user_session_by_id(session, user_id, account_id)
+    
+    if not account or not account.is_active:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Telegram аккаунт {account_id} не найден или нет доступа"
-        )
-    
-    if not account.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Telegram аккаунт неактивен"
+            detail="Telegram аккаунт не найден или неактивен"
         )
     
     try:
@@ -71,7 +66,6 @@ async def send_telegram_invite(
         
         start_time = datetime.utcnow()
         result = None
-        error_details = None
         
         try:
             if invite_data.invite_type == "group_invite":
@@ -285,23 +279,56 @@ async def send_telegram_message(
         )
 
 
+@router.get("/accounts")
+async def get_user_telegram_accounts(
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
+    telegram_service: TelegramService = Depends(get_telegram_service)
+):
+    """Получение всех Telegram аккаунтов пользователя для Invite Service"""
+    
+    # Изоляция пользователей
+    user_id = await get_user_id_from_request(request)
+    
+    accounts = await telegram_service.get_user_sessions(session, user_id, active_only=True)
+    
+    return [
+        {
+            "id": acc.id,
+            "username": getattr(acc, 'username', None),
+            "phone": acc.phone,
+            "first_name": getattr(acc, 'first_name', None),
+            "last_name": getattr(acc, 'last_name', None),
+            "status": "active" if acc.is_active else "inactive",
+            "created_at": acc.created_at,
+            "last_activity": acc.updated_at,
+            "daily_limits": {
+                "invites": 50,
+                "messages": 40
+            }
+        }
+        for acc in accounts
+    ]
+
+
 @router.get("/accounts/{account_id}/limits", response_model=TelegramAccountLimitsResponse)
 async def get_account_limits(
     account_id: int,
-    current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
+    telegram_service: TelegramService = Depends(get_telegram_service)
 ):
     """Получение информации о лимитах аккаунта"""
     
-    account = db.query(TelegramSession).filter(
-        TelegramSession.id == account_id,
-        TelegramSession.user_id == current_user.id
-    ).first()
+    # Изоляция пользователей
+    user_id = await get_user_id_from_request(request)
+    
+    account = await telegram_service.session_service.get_user_session_by_id(session, user_id, account_id)
     
     if not account:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Telegram аккаунт {account_id} не найден"
+            detail="Telegram аккаунт не найден"
         )
     
     # Базовые лимиты Telegram
@@ -326,35 +353,4 @@ async def get_account_limits(
         },
         restrictions=[],
         last_updated=datetime.utcnow()
-    )
-
-
-@router.get("/accounts")
-async def get_user_telegram_accounts(
-    current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Получение всех Telegram аккаунтов пользователя для Invite Service"""
-    
-    accounts = db.query(TelegramSession).filter(
-        TelegramSession.user_id == current_user.id,
-        TelegramSession.is_active == True
-    ).all()
-    
-    return [
-        {
-            "id": acc.id,
-            "username": acc.username,
-            "phone": acc.phone,
-            "first_name": acc.first_name,
-            "last_name": acc.last_name,
-            "status": "active" if acc.is_active else "inactive",
-            "created_at": acc.created_at,
-            "last_activity": acc.updated_at,
-            "daily_limits": {
-                "invites": 50,
-                "messages": 40
-            }
-        }
-        for acc in accounts
-    ] 
+    ) 
