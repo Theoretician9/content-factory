@@ -184,7 +184,13 @@ async def import_targets_from_parsing(
     
     try:
         # Получаем JWT токен для аутентификации в parsing-service
-        token = await _get_jwt_token_for_parsing_service()
+        token = await _get_jwt_token_for_parsing_service(user_id)
+        
+        # 🔍 ДИАГНОСТИКА: логируем начало импорта из парсинга
+        logger.info(f"🔍 DIAGNOSTIC: Starting parsing import for task {task_id}")
+        logger.info(f"🔍 DIAGNOSTIC: Parsing task ID: {parsing_task_id}")
+        logger.info(f"🔍 DIAGNOSTIC: User ID: {user_id}")
+        logger.info(f"🔍 DIAGNOSTIC: JWT token created for user_id: {user_id}")
         
         parsing_service_url = "http://parsing-service:8000"
         
@@ -491,7 +497,7 @@ async def _parse_txt_content(content: str) -> tuple[List[Dict], List[str]]:
     
     return targets, errors
 
-async def _get_jwt_token_for_parsing_service(user_id: int = 1) -> str:
+async def _get_jwt_token_for_parsing_service(user_id: int) -> str:
     """Получение JWT токена для межсервисного взаимодействия с Parsing Service"""
     try:
         from app.core.vault import get_vault_client
