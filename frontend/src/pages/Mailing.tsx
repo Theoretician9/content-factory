@@ -180,6 +180,8 @@ const Mailing = () => {
   // Выбор базы данных для задачи
   const [selectedDataSource, setSelectedDataSource] = useState<'parsing' | 'file' | ''>('');
   const [dataSourceError, setDataSourceError] = useState('');
+  const [selectedParseTask, setSelectedParseTask] = useState<string>('');
+  const [importFile, setImportFile] = useState<File | null>(null);
 
   useEffect(() => {
     const handleResize = () => {
