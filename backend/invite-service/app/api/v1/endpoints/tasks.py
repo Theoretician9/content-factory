@@ -743,4 +743,101 @@ async def test_single_invite(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка отправки тестового приглашения: {str(e)}"
-        ) 
+        )
+
+
+@router.post("/tasks/check-admin-rights")
+async def check_admin_rights(
+    request: dict,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Проверка администраторских прав аккаунтов в группе/канале
+    """
+    try:
+        group_link = request.get("group_link", "").strip()
+        if not group_link:
+            raise HTTPException(status_code=400, detail="Не указана ссылка на группу/канал")
+        
+        # Получаем все активные Telegram аккаунты пользователя
+        # TODO: Интеграция с integration-service для получения реальных аккаунтов
+        
+        # Временная заглушка с тестовыми данными
+        mock_accounts = [
+            {
+                "account_id": "test_admin_1",
+                "username": "admin_account_1",
+                "status": "active",
+                "is_admin": True,
+                "permissions": ["invite_users", "add_admins"],
+                "daily_limit": 50,
+                "used_today": 12
+            },
+            {
+                "account_id": "test_user_2", 
+                "username": "regular_user_2",
+                "status": "active",
+                "is_admin": False,
+                "permissions": [],
+                "daily_limit": 30,
+                "used_today": 5
+            },
+            {
+                "account_id": "test_admin_3",
+                "username": "admin_account_3", 
+                "status": "rate_limited",
+                "is_admin": True,
+                "permissions": ["invite_users"],
+                "daily_limit": 40,
+                "used_today": 40,
+                "rate_limit_until": "2024-01-01T15:30:00Z"
+            }
+        ]
+        
+        # Фильтруем только администраторов с правами приглашать
+        admin_accounts = [
+            acc for acc in mock_accounts 
+            if acc["is_admin"] and "invite_users" in acc["permissions"]
+        ]
+        
+        # Проверяем готовность к работе
+        ready_accounts = []
+        unavailable_accounts = []
+        
+        for acc in admin_accounts:
+            if acc["status"] == "active" and acc["used_today"] < acc["daily_limit"]:
+                ready_accounts.append({
+                    "account_id": acc["account_id"],
+                    "username": acc["username"],
+                    "status": "ready",
+                    "available_invites": acc["daily_limit"] - acc["used_today"],
+                    "permissions": acc["permissions"]
+                })
+            else:
+                unavailable_accounts.append({
+                    "account_id": acc["account_id"],
+                    "username": acc["username"],
+                    "status": acc["status"],
+                    "reason": "rate_limited" if acc["status"] == "rate_limited" else "daily_limit_reached",
+                    "available_at": acc.get("rate_limit_until"),
+                    "permissions": acc["permissions"]
+                })
+        
+        # Извлекаем название группы из ссылки (упрощенно)
+        group_name = group_link.split('/')[-1].replace('@', '')
+        
+        return {
+            "group_link": group_link,
+            "group_name": group_name,
+            "total_accounts_checked": len(mock_accounts),
+            "admin_accounts": len(admin_accounts),
+            "ready_accounts": ready_accounts,
+            "unavailable_accounts": unavailable_accounts,
+            "can_proceed": len(ready_accounts) > 0,
+            "estimated_capacity": sum(acc["available_invites"] for acc in ready_accounts)
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка проверки админских прав: {e}")
+        raise HTTPException(status_code=500, detail=f"Error checking admin rights: {str(e)}") 
