@@ -45,90 +45,124 @@ async def get_jwt_token_for_parsing_service() -> str:
 @router.get("/", response_model=List[Dict[str, Any]])
 async def get_parsing_tasks(user_id: int = Depends(get_current_user_id)):
     """
-    Получение списка задач парсинга для импорта аудитории из Parsing Service
+    Получение списка задач парсинга для импорта аудитории
     """
     try:
         logger.info(f"Получение задач парсинга для пользователя {user_id}")
         
-        # Получаем JWT токен для авторизации в parsing-service
-        try:
-            token = await get_jwt_token_for_parsing_service()
-        except Exception as e:
-            logger.warning(f"Failed to get JWT token: {e}. Using fallback data.")
-            # Возвращаем заглушку если не удается получить токен
-            return await _get_fallback_parsing_tasks(user_id)
+        # Получаем JWT токен для межсервисного взаимодействия
+        token = await get_jwt_token_for_parsing_service()
         
-        # URL parsing-service
-        parsing_service_url = "http://parsing-service:8000"
-        
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                # Получаем список задач парсинга через прямой API
-                response = await client.get(
-                    f"{parsing_service_url}/tasks",
-                    headers={"Authorization": f"Bearer {token}"}
-                )
+        # Запрос к parsing-service с фильтрацией по user_id
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.PARSING_SERVICE_URL}/api/v1/results/grouped",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"user_id": user_id}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                tasks = data.get("tasks", [])
                 
-                if response.status_code == 200:
-                    tasks_data = response.json()
-                    
-                    # Фильтруем задачи по пользователю и статусу "completed"
-                    user_tasks = []
-                    for task in tasks_data.get('tasks', []):
-                        if (task.get('user_id') == user_id and 
-                            task.get('status') == 'completed'):
-                            
-                            # Конвертируем в формат для invite-service
-                            converted_task = {
-                                "id": task.get('task_id', task.get('id')),
-                                "platform": task.get('platform', 'telegram'),
-                                "status": task.get('status'),
-                                "result_count": task.get('result_count', 0),
-                                "created_at": task.get('created_at'),
-                                "completed_at": task.get('completed_at'),
-                                "link": task.get('target_link', task.get('link')),
-                                "task_type": task.get('task_type', 'channel_members'),
-                                "title": task.get('title', task.get('channel_name', 'Unknown')),
-                                "description": task.get('description', f"Результаты парсинга {task.get('platform', 'telegram')}")
-                            }
-                            user_tasks.append(converted_task)
-                    
-                    logger.info(f"Получено {len(user_tasks)} задач парсинга для пользователя {user_id}")
-                    return user_tasks
+                logger.info(f"Получено {len(tasks)} задач парсинга для пользователя {user_id}")
                 
-                else:
-                    logger.warning(f"Parsing service returned {response.status_code}: {response.text}")
-                    return await _get_fallback_parsing_tasks(user_id)
-                    
-            except httpx.TimeoutException:
-                logger.warning("Timeout connecting to parsing-service")
-                return await _get_fallback_parsing_tasks(user_id)
-            except httpx.ConnectError:
-                logger.warning("Cannot connect to parsing-service")
-                return await _get_fallback_parsing_tasks(user_id)
+                # Преобразуем в формат для фронтенда
+                formatted_tasks = []
+                for task in tasks:
+                    if task.get("total_results", 0) > 0:  # Только задачи с результатами
+                        formatted_tasks.append({
+                            "id": task.get("task_id"),
+                            "platform": task.get("platform", "telegram"),
+                            "status": task.get("status", "completed"),
+                            "target_url": task.get("target_url", ""),
+                            "title": task.get("title", ""),
+                            "total_results": task.get("total_results", 0),
+                            "created_at": task.get("created_at"),
+                            "can_import": True
+                        })
+                
+                return formatted_tasks
+                
+            else:
+                logger.error(f"Ошибка получения данных из parsing-service: {response.status_code} - {response.text}")
+                return []
         
     except Exception as e:
-        logger.error(f"Error getting parsing tasks: {str(e)}")
-        return await _get_fallback_parsing_tasks(user_id)
+        logger.error(f"Ошибка при получении задач парсинга: {str(e)}")
+        # Возвращаем пустой список вместо заглушки
+        return []
 
 
-async def _get_fallback_parsing_tasks(user_id: int) -> List[Dict[str, Any]]:
-    """Fallback данные если parsing-service недоступен"""
-    logger.info(f"Возвращаем fallback данные для пользователя {user_id}")
-    return [
-        {
-            "id": "fallback_001",
-            "platform": "telegram",
-            "status": "completed",
-            "result_count": 156,
-            "created_at": "2025-01-30T10:30:00Z",
-            "completed_at": "2025-01-30T10:45:00Z",
-            "link": "https://t.me/rflive", 
-            "task_type": "channel_members",
-            "title": "RFLive Test Channel",
-            "description": "Тестовые результаты парсинга (fallback)"
-        }
-    ]
+@router.get("/{task_id}/preview", response_model=Dict[str, Any])
+async def preview_parsing_task_data(
+    task_id: str,
+    limit: int = 10,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Предварительный просмотр данных из задачи парсинга
+    """
+    try:
+        logger.info(f"Предварительный просмотр данных задачи {task_id} для пользователя {user_id}")
+        
+        # Получаем JWT токен
+        token = await get_jwt_token_for_parsing_service()
+        
+        # Запрос к parsing-service за данными конкретной задачи
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.PARSING_SERVICE_URL}/api/v1/results/{task_id}",
+                headers={"Authorization": f"Bearer {token}"},
+                params={
+                    "user_id": user_id,
+                    "limit": limit,
+                    "offset": 0
+                }
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                results = data.get("results", [])
+                
+                # Преобразуем в формат для предварительного просмотра
+                preview_data = {
+                    "task_id": task_id,
+                    "total_available": data.get("total", 0),
+                    "preview_count": len(results),
+                    "sample_contacts": []
+                }
+                
+                for result in results:
+                    platform_data = result.get("platform_specific_data", {})
+                    contact = {
+                        "username": result.get("username"),
+                        "display_name": result.get("display_name"),
+                        "phone": result.get("author_phone"),
+                        "platform_id": result.get("platform_id"),
+                        "first_name": platform_data.get("first_name"),
+                        "last_name": platform_data.get("last_name"),
+                        "chat_title": platform_data.get("chat_title")
+                    }
+                    preview_data["sample_contacts"].append(contact)
+                
+                return preview_data
+                
+            else:
+                logger.error(f"Ошибка получения данных задачи {task_id}: {response.status_code}")
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Не удалось получить данные задачи парсинга: {response.text}"
+                )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ошибка при предварительном просмотре задачи {task_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка получения данных: {str(e)}"
+        )
 
 
 @router.get("/{task_id}")

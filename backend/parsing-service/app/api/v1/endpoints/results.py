@@ -1,9 +1,9 @@
-"""Parse results API endpoints."""
+"""Parse results API endpoints with user filtering."""
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, join
+from sqlalchemy import select, func
 from typing import List, Optional
 import json
 import csv
@@ -28,7 +28,7 @@ async def list_results(
     # Build base query with JOIN to ParseTask
     query = select(ParseResult).join(ParseTask, ParseResult.task_id == ParseTask.id)
     count_query = select(func.count(ParseResult.id)).select_from(
-        join(ParseResult, ParseTask, ParseResult.task_id == ParseTask.id)
+        ParseResult.__table__.join(ParseTask.__table__, ParseResult.task_id == ParseTask.id)
     )
     
     # Apply user filter
@@ -130,7 +130,7 @@ async def get_result(
     limit: int = 1000,
     offset: int = 0
 ):
-    """Get parsing results for specific task."""
+    """Get parsing results for specific task with user verification."""
     
     # Build query with user verification
     query = select(ParseResult).join(ParseTask, ParseResult.task_id == ParseTask.id)
@@ -196,7 +196,7 @@ async def export_result(
     format: str = "json",
     db: AsyncSession = Depends(get_db)
 ):
-    """Export parsing result in specified format."""
+    """Export parsing result in specified format with user verification."""
     
     # Get all results for the task with user verification
     query = select(ParseResult).join(ParseTask, ParseResult.task_id == ParseTask.id)
@@ -286,7 +286,7 @@ def _format_result(result: ParseResult) -> dict:
         "id": str(result.id),
         "task_id": str(result.task_id),
         "platform": result.platform.value if hasattr(result.platform, 'value') else str(result.platform),
-        "platform_id": result.author_id or result.content_id,  # Use author_id for user results
+        "platform_id": result.author_id or result.content_id,
         "username": result.author_username,
         "display_name": result.author_name or result.content_text[:50] if result.content_text else "Unknown",
         "author_phone": result.author_phone,
