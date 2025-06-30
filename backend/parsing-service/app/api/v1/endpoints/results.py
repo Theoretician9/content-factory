@@ -67,10 +67,18 @@ async def list_results(
 
 @router.get("/grouped")
 async def list_results_grouped_by_task(
-    user_id: Optional[int] = Query(None, description="Filter by user ID"),
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """List parsing results grouped by tasks for user."""
+    
+    # ✅ JWT АВТОРИЗАЦИЯ: Получаем user_id из JWT токена  
+    try:
+        user_id = await get_user_id_from_request(request)
+        print(f"🔐 JWT Authorization successful for grouped endpoint: user_id={user_id}")
+    except Exception as auth_error:
+        print(f"❌ JWT Authorization failed for grouped endpoint: {auth_error}")
+        raise HTTPException(status_code=401, detail=f"Authorization failed: {str(auth_error)}")
     
     # Query to get task summaries with result counts
     query = select(
@@ -89,9 +97,8 @@ async def list_results_grouped_by_task(
         ParseTask.platform, ParseTask.status, ParseTask.created_at, ParseTask.config
     )
     
-    # Apply user filter
-    if user_id is not None:
-        query = query.where(ParseTask.user_id == user_id)
+    # Apply user filter from JWT token
+    query = query.where(ParseTask.user_id == user_id)
     
     # Order by creation date
     query = query.order_by(ParseTask.created_at.desc())
@@ -118,7 +125,8 @@ async def list_results_grouped_by_task(
     
     return {
         "tasks": formatted_tasks,
-        "total_tasks": len(formatted_tasks)
+        "total_tasks": len(formatted_tasks),
+        "user_id": user_id  # Для отладки
     }
 
 @router.get("/{task_id}")
