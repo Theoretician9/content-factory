@@ -371,6 +371,13 @@ async def process_pending_tasks():
     try:
         from app.core.account_manager import account_manager
         
+        # ✅ ДИАГНОСТИКА: Проверяем общее состояние
+        total_tasks = len(created_tasks)
+        pending_tasks_all = [task for task in created_tasks if task["status"] == "pending"]
+        running_tasks = [task for task in created_tasks if task["status"] == "running"]
+        
+        logger.debug(f"🔍 Всего задач: {total_tasks}, pending: {len(pending_tasks_all)}, running: {len(running_tasks)}")
+        
         # Sync accounts first
         await account_manager.sync_accounts_from_integration_service()
         
@@ -378,14 +385,15 @@ async def process_pending_tasks():
         available_accounts = await account_manager.get_available_accounts()
         
         if not available_accounts:
-            logger.warning("⚠️ AccountManager: Нет доступных аккаунтов для запуска задач")
+            if pending_tasks_all:  # Логируем только если есть pending задачи
+                logger.warning(f"⚠️ AccountManager: Нет доступных аккаунтов для запуска {len(pending_tasks_all)} pending задач")
             return
         
         # Get pending tasks for Telegram
         pending_tasks = [task for task in created_tasks if task["status"] == "pending" and task["platform"] == "telegram"]
         
         if not pending_tasks:
-            logger.debug("📝 Нет pending задач для обработки")
+            logger.debug("📝 Нет pending Telegram задач для обработки")
             return
         
         # ✅ PRIORITY MAPPING для правильной сортировки

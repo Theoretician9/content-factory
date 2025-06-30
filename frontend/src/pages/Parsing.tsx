@@ -156,7 +156,7 @@ const Parsing = () => {
     activeTasks.forEach(task => {
       if (!activeTasksSSE.has(task.id)) {
         const eventSource = new EventSource(
-          `/api/parsing/api/v1/tasks/${task.id}/progress-stream`
+          `/api/parsing/v1/tasks/${task.id}/progress-stream`
         );
 
         eventSource.onmessage = (event) => {
