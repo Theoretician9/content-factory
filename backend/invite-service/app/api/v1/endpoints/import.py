@@ -284,9 +284,7 @@ async def import_targets_from_parsing(
                     logger.error(f"Error processing parsing result {i}: {e}")
             
             # Обновляем счетчик целей в задаче (добавляем к существующему)
-            current_count_query = select(InviteTarget).where(InviteTarget.task_id == task_id)
-            current_count_result = db.execute(current_count_query)
-            current_targets = current_count_result.scalars().all()
+            current_targets = db.query(InviteTarget).filter(InviteTarget.task_id == task_id).all()
             
             # 🔍 ДИАГНОСТИКА: подсчет целей при импорте из парсинга
             old_count = task.target_count
