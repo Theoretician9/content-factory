@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy import select
 from typing import Dict, List, Optional, Any
 import csv
@@ -23,19 +23,17 @@ async def import_targets_from_file(
     task_id: int,
     file: UploadFile = File(...),
     source_name: str = Form("file_upload"),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
     """
     Импорт целевой аудитории из CSV/JSON файла
     """
     # Проверяем доступ к задаче
-    task_query = select(InviteTask).where(
+    task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
         InviteTask.user_id == user_id
-    )
-    task_result = await db.execute(task_query)
-    task = task_result.scalar_one_or_none()
+    ).first()
     
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -111,14 +109,14 @@ async def import_targets_from_file(
         logger.info(f"🔍 DIAGNOSTIC: About to commit {len(saved_targets)} targets to database")
         
         # Сначала коммитим новые цели
-        await db.commit()
+        db.commit()
         
         # 🔍 ДИАГНОСТИКА: состояние после коммита
         logger.info(f"🔍 DIAGNOSTIC: Committed {len(saved_targets)} targets successfully")
         
         # Затем обновляем счетчик целей в задаче (получаем реальный count из базы)
         count_query = select(InviteTarget).where(InviteTarget.task_id == task_id)
-        count_result = await db.execute(count_query)
+        count_result = db.execute(count_query)
         all_targets = count_result.scalars().all()
         
         # 🔍 ДИАГНОСТИКА: подсчет целей
@@ -133,7 +131,7 @@ async def import_targets_from_file(
         # 🔍 ДИАГНОСТИКА: обновление задачи
         logger.info(f"🔍 DIAGNOSTIC: Updating task.target_count from {old_count} to {new_count}")
         
-        await db.commit()
+        db.commit()
         
         # 🔍 ДИАГНОСТИКА: финальная проверка
         logger.info(f"🔍 DIAGNOSTIC: File import completed successfully")
@@ -155,7 +153,7 @@ async def import_targets_from_file(
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="File encoding not supported. Use UTF-8")
     except Exception as e:
-        await db.rollback()
+        db.rollback()
         logger.error(f"Error importing file {file.filename}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
 
@@ -163,7 +161,7 @@ async def import_targets_from_file(
 async def import_targets_from_parsing(
     task_id: int,
     request_data: dict,
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
     """
@@ -178,12 +176,10 @@ async def import_targets_from_parsing(
         raise HTTPException(status_code=400, detail="parsing_task_id is required")
     
     # Проверяем доступ к задаче
-    task_query = select(InviteTask).where(
+    task = db.query(InviteTask).filter(
         InviteTask.id == task_id,
         InviteTask.user_id == user_id
-    )
-    task_result = await db.execute(task_query)
-    task = task_result.scalar_one_or_none()
+    ).first()
     
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -289,7 +285,7 @@ async def import_targets_from_parsing(
             
             # Обновляем счетчик целей в задаче (добавляем к существующему)
             current_count_query = select(InviteTarget).where(InviteTarget.task_id == task_id)
-            current_count_result = await db.execute(current_count_query)
+            current_count_result = db.execute(current_count_query)
             current_targets = current_count_result.scalars().all()
             
             # 🔍 ДИАГНОСТИКА: подсчет целей при импорте из парсинга
@@ -307,7 +303,7 @@ async def import_targets_from_parsing(
             task.target_count = final_count
             task.updated_at = datetime.utcnow()
             
-            await db.commit()
+            db.commit()
             
             # 🔍 ДИАГНОСТИКА: финальная проверка
             logger.info(f"🔍 DIAGNOSTIC: Parsing import completed, task.target_count: {task.target_count}")
@@ -331,7 +327,7 @@ async def import_targets_from_parsing(
     except HTTPException:
         raise
     except Exception as e:
-        await db.rollback()
+        db.rollback()
         logger.error(f"Error importing from parsing-service: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Parsing import failed: {str(e)}")
 
