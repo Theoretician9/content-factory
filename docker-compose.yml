@@ -20,7 +20,6 @@ services:
       - VAULT_TOKEN=${VAULT_TOKEN}
       - VAULT_ROLE_ID=${VAULT_ROLE_ID}
       - VAULT_SECRET_ID=${VAULT_SECRET_ID}
-      - JWT_SECRET_KEY=${}
     depends_on:
       vault:
         condition: service_healthy
@@ -147,7 +146,6 @@ services:
       - VAULT_ROLE_ID=${INVITE_VAULT_ROLE_ID}
       - VAULT_SECRET_ID=${INVITE_VAULT_SECRET_ID}
       - INTEGRATION_SERVICE_URL=http://integration-service:8000
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-for-content-factory-2024}
       - LOG_LEVEL=INFO
       - DEBUG=false
       - PYTHONPATH=/app
@@ -185,8 +183,7 @@ services:
       - VAULT_TOKEN=${VAULT_TOKEN}
       - VAULT_ROLE_ID=${PARSING_VAULT_ROLE_ID}
       - VAULT_SECRET_ID=${PARSING_VAULT_SECRET_ID}
-      - INTEGRATION_SERVICE_URL=http://integration-service:8000
-      - JWT_SECRET_KEY=${}
+      - INTEGRATION_SERVICE_URL=http://integration-service:8000}
       - LOG_LEVEL=INFO
       - DEBUG=false
       - PYTHONPATH=/app
@@ -248,7 +245,6 @@ services:
       - VAULT_ROLE_ID=${PARSING_VAULT_ROLE_ID}
       - VAULT_SECRET_ID=${PARSING_VAULT_SECRET_ID}
       - INTEGRATION_SERVICE_URL=http://integration-service:8000
-      - JWT_SECRET_KEY=${}
       - LOG_LEVEL=INFO
       - DEBUG=false
       - PYTHONPATH=/app
