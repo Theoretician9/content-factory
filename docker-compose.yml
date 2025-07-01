@@ -291,7 +291,6 @@ services:
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=user
       - RABBITMQ_PASSWORD=password
-      - JWT_SECRET_KEY=${}
       - LOG_LEVEL=INFO
       - DEBUG=false
       - PYTHONPATH=/app
