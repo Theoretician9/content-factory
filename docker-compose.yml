@@ -20,7 +20,7 @@ services:
       - VAULT_TOKEN=${VAULT_TOKEN}
       - VAULT_ROLE_ID=${VAULT_ROLE_ID}
       - VAULT_SECRET_ID=${VAULT_SECRET_ID}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-for-content-factory-2024}
+      - JWT_SECRET_KEY=${}
     depends_on:
       vault:
         condition: service_healthy
@@ -164,6 +164,7 @@ services:
         condition: service_started
     networks:
       - backend
+      - app-network
     restart: unless-stopped
 
   # Parsing Service
@@ -185,7 +186,7 @@ services:
       - VAULT_ROLE_ID=${PARSING_VAULT_ROLE_ID}
       - VAULT_SECRET_ID=${PARSING_VAULT_SECRET_ID}
       - INTEGRATION_SERVICE_URL=http://integration-service:8000
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-for-content-factory-2024}
+      - JWT_SECRET_KEY=${}
       - LOG_LEVEL=INFO
       - DEBUG=false
       - PYTHONPATH=/app
@@ -247,7 +248,7 @@ services:
       - VAULT_ROLE_ID=${PARSING_VAULT_ROLE_ID}
       - VAULT_SECRET_ID=${PARSING_VAULT_SECRET_ID}
       - INTEGRATION_SERVICE_URL=http://integration-service:8000
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-for-content-factory-2024}
+      - JWT_SECRET_KEY=${}
       - LOG_LEVEL=INFO
       - DEBUG=false
       - PYTHONPATH=/app
@@ -290,7 +291,7 @@ services:
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=user
       - RABBITMQ_PASSWORD=password
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-for-content-factory-2024}
+      - JWT_SECRET_KEY=${}
       - LOG_LEVEL=INFO
       - DEBUG=false
       - PYTHONPATH=/app
