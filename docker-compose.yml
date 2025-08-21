@@ -183,7 +183,7 @@ services:
       - VAULT_TOKEN=${VAULT_TOKEN}
       - VAULT_ROLE_ID=${PARSING_VAULT_ROLE_ID}
       - VAULT_SECRET_ID=${PARSING_VAULT_SECRET_ID}
-      - INTEGRATION_SERVICE_URL=http://integration-service:8000}
+      - INTEGRATION_SERVICE_URL=http://integration-service:8000
       - LOG_LEVEL=INFO
       - DEBUG=false
       - PYTHONPATH=/app
