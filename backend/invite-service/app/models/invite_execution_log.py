@@ -44,8 +44,16 @@ class InviteExecutionLog(BaseModel):
     target_id = Column(Integer, ForeignKey("invite_targets.id"), nullable=True, index=True)
     
     # Информация о действии
-    action_type = Column(Enum(ActionType), nullable=False, index=True)
-    level = Column(Enum(LogLevel), default=LogLevel.INFO, nullable=False)
+    action_type = Column(
+        Enum(ActionType, values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        index=True
+    )
+    level = Column(
+        Enum(LogLevel, values_callable=lambda obj: [e.value for e in obj]),
+        default=LogLevel.INFO,
+        nullable=False
+    )
     
     # Сообщение и детали
     message = Column(Text, nullable=False, comment="Сообщение лога")

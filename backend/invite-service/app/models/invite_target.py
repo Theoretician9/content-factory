@@ -42,7 +42,12 @@ class InviteTarget(BaseModel):
     is_premium = Column(Boolean, default=False, comment="Премиум аккаунт")
     
     # Статус приглашения
-    status = Column(Enum(TargetStatus), default=TargetStatus.PENDING, nullable=False, index=True)
+    status = Column(
+        Enum(TargetStatus, values_callable=lambda obj: [e.value for e in obj]),
+        default=TargetStatus.PENDING,
+        nullable=False,
+        index=True
+    )
     
     # Информация о приглашении
     invite_sent_at = Column(DateTime, nullable=True, comment="Время отправки приглашения")

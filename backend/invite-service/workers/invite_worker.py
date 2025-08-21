@@ -42,8 +42,8 @@ def execute_invite_task(self, task_id: int):
             return f"Задача {task_id} не может быть выполнена со статусом {task.status}"
         
         try:
-            # Обновление статуса на RUNNING
-            task.status = TaskStatus.RUNNING
+            # Обновление статуса на RUNNING (строковое значение enum)
+            task.status = TaskStatus.RUNNING.value
             task.start_time = datetime.utcnow()
             task.updated_at = datetime.utcnow()
             db.commit()
@@ -74,7 +74,7 @@ def execute_invite_task(self, task_id: int):
             logger.error(f"Ошибка выполнения задачи {task_id}: {str(e)}")
             
             # Обновление статуса на FAILED
-            task.status = TaskStatus.FAILED
+            task.status = TaskStatus.FAILED.value
             task.error_message = str(e)
             task.end_time = datetime.utcnow()
             task.updated_at = datetime.utcnow()
@@ -110,7 +110,7 @@ async def _execute_task_async(task: InviteTask, adapter, db: Session) -> str:
         
         if not targets:
             logger.warning(f"Нет целей для обработки в задаче {task.id}")
-            task.status = TaskStatus.COMPLETED
+            task.status = TaskStatus.COMPLETED.value
             task.end_time = datetime.utcnow()
             db.commit()
             return f"Задача {task.id} завершена: нет целей для обработки"
