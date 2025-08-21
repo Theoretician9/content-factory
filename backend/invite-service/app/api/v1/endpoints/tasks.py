@@ -470,8 +470,8 @@ async def execute_invite_task(
         # Запуск асинхронной задачи через Celery
         result = celery_execute_task.delay(task_id)
         
-        # Обновление статуса задачи
-        task.status = TaskStatus.RUNNING
+        # Обновление статуса задачи (используем значение enum в БД)
+        task.status = TaskStatus.RUNNING.value
         task.start_time = datetime.utcnow()
         task.updated_at = datetime.utcnow()
         db.commit()
@@ -511,15 +511,15 @@ async def pause_invite_task(
             detail=f"Задача с ID {task_id} не найдена"
         )
     
-    if task.status != TaskStatus.RUNNING:
+    if str(task.status) != TaskStatus.RUNNING.value and task.status != TaskStatus.RUNNING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Задача не может быть приостановлена со статусом {task.status}"
         )
     
     try:
-        # Обновление статуса
-        task.status = TaskStatus.PAUSED
+        # Обновление статуса (значение enum)
+        task.status = TaskStatus.PAUSED.value
         task.updated_at = datetime.utcnow()
         db.commit()
         
