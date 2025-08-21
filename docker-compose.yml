@@ -146,6 +146,9 @@ services:
       - VAULT_ROLE_ID=${INVITE_VAULT_ROLE_ID}
       - VAULT_SECRET_ID=${INVITE_VAULT_SECRET_ID}
       - INTEGRATION_SERVICE_URL=http://integration-service:8000
+      - REDIS_URL=redis://redis:6379/5
+      - CELERY_BROKER_URL=amqp://user:password@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/5
       - LOG_LEVEL=INFO
       - DEBUG=false
       - PYTHONPATH=/app
@@ -160,6 +163,41 @@ services:
         condition: service_started
       integration-service:
         condition: service_started
+    networks:
+      - backend
+      - app-network
+    restart: unless-stopped
+
+  # Invite Worker - Celery
+  invite-worker:
+    build: ./backend/invite-service
+    command: python -m celery -A workers.celery_app:celery_app worker --loglevel=info --queues=invite-high,invite-normal,invite-low --concurrency=2 --hostname=invite-worker@%h
+    environment:
+      - POSTGRES_SERVER=invite-postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=invite_user
+      - POSTGRES_PASSWORD=invite_password
+      - POSTGRES_DB=invite_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_URL=redis://redis:6379/5
+      - VAULT_ADDR=http://vault:8201
+      - VAULT_TOKEN=${VAULT_TOKEN}
+      - VAULT_ROLE_ID=${INVITE_VAULT_ROLE_ID}
+      - VAULT_SECRET_ID=${INVITE_VAULT_SECRET_ID}
+      - INTEGRATION_SERVICE_URL=http://integration-service:8000
+      - CELERY_BROKER_URL=amqp://user:password@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/5
+      - LOG_LEVEL=INFO
+      - DEBUG=false
+      - PYTHONPATH=/app
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      invite-postgres:
+        condition: service_healthy
     networks:
       - backend
       - app-network
