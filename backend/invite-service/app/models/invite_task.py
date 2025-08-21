@@ -37,8 +37,17 @@ class InviteTask(BaseModel):
     description = Column(Text, nullable=True, comment="Описание задачи")
     
     # Статус и приоритет
-    status = Column(Enum(TaskStatus), default=TaskStatus.PENDING, nullable=False, index=True)
-    priority = Column(Enum(TaskPriority), default=TaskPriority.NORMAL, nullable=False)
+    status = Column(
+        Enum(TaskStatus, values_callable=lambda obj: [e.value for e in obj]),
+        default=TaskStatus.PENDING,
+        nullable=False,
+        index=True
+    )
+    priority = Column(
+        Enum(TaskPriority, values_callable=lambda obj: [e.value for e in obj]),
+        default=TaskPriority.NORMAL,
+        nullable=False
+    )
     
     # Платформа и тип задачи
     platform = Column(String(50), nullable=False, index=True, comment="Платформа (telegram, instagram, whatsapp)")
