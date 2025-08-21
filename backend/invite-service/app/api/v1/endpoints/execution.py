@@ -62,8 +62,8 @@ async def execute_invite_task(
         # Запуск асинхронной задачи через Celery
         result = celery_execute_task.delay(task_id)
 
-        # Обновление статуса задачи
-        task.status = TaskStatus.RUNNING
+        # Обновление статуса задачи (сохраняем строковое значение для совместимости с БД)
+        task.status = TaskStatus.RUNNING.value
         task.start_time = datetime.utcnow()
         task.updated_at = datetime.utcnow()
         db.commit()
@@ -103,15 +103,15 @@ async def pause_invite_task(
             detail=f"Задача с ID {task_id} не найдена"
         )
 
-    if task.status != TaskStatus.RUNNING:
+    if str(task.status) != TaskStatus.RUNNING.value and task.status != TaskStatus.RUNNING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Задача не может быть приостановлена со статусом {task.status}"
         )
 
     try:
-        # Обновление статуса
-        task.status = TaskStatus.PAUSED
+        # Обновляем статус, сохраняя строковое значение
+        task.status = TaskStatus.PAUSED.value
         task.updated_at = datetime.utcnow()
         db.commit()
 
@@ -163,8 +163,8 @@ async def resume_invite_task(
         # Перезапуск задачи
         result = celery_execute_task.delay(task_id)
 
-        # Обновление статуса
-        task.status = TaskStatus.RUNNING
+        # Обновляем статус, сохраняя строковое значение
+        task.status = TaskStatus.RUNNING.value
         task.updated_at = datetime.utcnow()
         db.commit()
 
@@ -202,15 +202,18 @@ async def cancel_invite_task(
             detail=f"Задача с ID {task_id} не найдена"
         )
 
-    if task.status not in [TaskStatus.RUNNING, TaskStatus.PAUSED, TaskStatus.PENDING]:
+    if (
+        str(task.status) not in [TaskStatus.RUNNING.value, TaskStatus.PAUSED.value, TaskStatus.PENDING.value]
+        and task.status not in [TaskStatus.RUNNING, TaskStatus.PAUSED, TaskStatus.PENDING]
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Задача не может быть отменена со статусом {task.status}"
         )
 
     try:
-        # Обновление статуса
-        task.status = TaskStatus.CANCELLED
+        # Обновляем статус, сохраняя строковое значение
+        task.status = TaskStatus.CANCELLED.value
         task.end_time = datetime.utcnow()
         task.updated_at = datetime.utcnow()
         db.commit()
