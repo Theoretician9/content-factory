@@ -59,9 +59,10 @@ class IntegrationServiceClient:
             jwt_secret = secret_data['secret_key']
             
             # Создание JWT токена для межсервисной аутентификации
+            # Integration Service ожидает 'sub' с email пользователя
             payload = {
+                'sub': 'nikita.f3d@gmail.com',  # Email пользователя для аутентификации
                 'service': 'invite-service',
-                'user_id': 1,  # TODO: Получать из текущего контекста пользователя
                 'iat': datetime.utcnow(),
                 'exp': datetime.utcnow() + timedelta(hours=1)
             }
