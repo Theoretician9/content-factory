@@ -2,13 +2,12 @@
 Модель задач приглашений
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, ForeignKey, Index, JSON
 from sqlalchemy.dialects.postgresql import ENUM
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from app.core.database import BaseModel
 import enum
-
-from .base import BaseModel
-
 
 class TaskStatus(str, enum.Enum):
     """Статусы задач приглашений"""
