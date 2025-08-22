@@ -237,7 +237,7 @@ class IntegrationServiceClient:
             logger.error(f"Ошибка отправки Telegram сообщения через аккаунт {account_id}: {str(e)}")
             raise
     
-    async def get_account_limits(self, account_id: int) -> Dict[str, Any]:
+    async def get_account_limits(self, account_id: str) -> Dict[str, Any]:
         """Получение лимитов Telegram аккаунта"""
         
         try:

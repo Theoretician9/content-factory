@@ -37,7 +37,7 @@ def get_telegram_service() -> TelegramService:
 
 @router.post("/accounts/{account_id}/invite", response_model=TelegramInviteResponse)
 async def send_telegram_invite(
-    account_id: int,
+    account_id: UUID,
     invite_data: TelegramInviteRequest,
     request: Request,
     session: AsyncSession = Depends(get_async_session),
@@ -216,7 +216,7 @@ async def send_telegram_invite(
 
 @router.post("/accounts/{account_id}/message", response_model=TelegramMessageResponse)
 async def send_telegram_message(
-    account_id: int,
+    account_id: UUID,
     message_data: TelegramMessageRequest,
     request: Request,
     session: AsyncSession = Depends(get_async_session),
@@ -313,7 +313,7 @@ async def get_user_telegram_accounts(
 
 @router.get("/accounts/{account_id}/limits", response_model=TelegramAccountLimitsResponse)
 async def get_account_limits(
-    account_id: int,
+    account_id: UUID,
     request: Request,
     session: AsyncSession = Depends(get_async_session),
     telegram_service: TelegramService = Depends(get_telegram_service)
