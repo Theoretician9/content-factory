@@ -188,7 +188,7 @@ class InviteServiceDiagnostics:
             
             parsing_targets = db.query(InviteTarget).filter(
                 InviteTarget.task_id == task_id,
-                InviteTarget.source == "parsing_import"
+                InviteTarget.source == "PARSING_IMPORT"
             ).all()
             
             total_targets = db.query(InviteTarget).filter(
