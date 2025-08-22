@@ -2,8 +2,9 @@
 Модель задач приглашений
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, Enum, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import ENUM
 import enum
 
 from .base import BaseModel
@@ -25,6 +26,20 @@ class TaskPriority(str, enum.Enum):
     NORMAL = "normal"
     HIGH = "high"
     URGENT = "urgent"
+
+
+# PostgreSQL enum типы
+task_status_enum = ENUM(
+    'pending', 'running', 'completed', 'failed', 'cancelled', 'paused',
+    name='taskstatus',
+    create_type=False
+)
+
+task_priority_enum = ENUM(
+    'low', 'normal', 'high', 'urgent',
+    name='taskpriority', 
+    create_type=False
+)
 
 
 class InviteTask(BaseModel):
