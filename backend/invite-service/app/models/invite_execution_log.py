@@ -2,8 +2,9 @@
 Модель логов выполнения приглашений
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, Enum, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import ENUM
 import enum
 
 from .base import BaseModel
@@ -31,6 +32,28 @@ class ActionType(str, enum.Enum):
     ACCOUNT_SWITCHED = "account_switched"
     RATE_LIMIT_HIT = "rate_limit_hit"
     ERROR_OCCURRED = "error_occurred"
+
+
+class InviteResultStatus(str, enum.Enum):
+    """Статусы результатов приглашений"""
+    SUCCESS = "success"
+    FAILED = "failed"
+    RATE_LIMITED = "rate_limited"
+    FLOOD_WAIT = "flood_wait"
+    ACCOUNT_BANNED = "account_banned"
+    TARGET_NOT_FOUND = "target_not_found"
+    PRIVACY_RESTRICTED = "privacy_restricted"
+    PEER_FLOOD = "peer_flood"
+    USER_NOT_MUTUAL_CONTACT = "user_not_mutual_contact"
+
+
+# PostgreSQL enum тип
+invite_result_status_enum = ENUM(
+    'success', 'failed', 'rate_limited', 'flood_wait', 'account_banned',
+    'target_not_found', 'privacy_restricted', 'peer_flood', 'user_not_mutual_contact',
+    name='inviteresultstatus',
+    create_type=False
+)
 
 
 class InviteExecutionLog(BaseModel):
