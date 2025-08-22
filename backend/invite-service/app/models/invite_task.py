@@ -6,7 +6,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, Foreign
 from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from app.core.database import BaseModel
+from app.core.database import Base
 import enum
 
 class TaskStatus(str, enum.Enum):
