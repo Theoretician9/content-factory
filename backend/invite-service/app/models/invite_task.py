@@ -11,31 +11,31 @@ import enum
 
 class TaskStatus(str, enum.Enum):
     """Статусы задач приглашений"""
-    PENDING = "pending"          # Ожидает выполнения
-    RUNNING = "running"          # Выполняется
-    COMPLETED = "completed"      # Завершена
-    FAILED = "failed"           # Ошибка
-    CANCELLED = "cancelled"     # Отменена
-    PAUSED = "paused"          # Приостановлена
+    PENDING = "PENDING"          # Ожидает выполнения
+    IN_PROGRESS = "IN_PROGRESS"  # Выполняется
+    COMPLETED = "COMPLETED"      # Завершена
+    FAILED = "FAILED"           # Ошибка
+    CANCELLED = "CANCELLED"     # Отменена
+    PAUSED = "PAUSED"          # Приостановлена
 
 
 class TaskPriority(str, enum.Enum):
     """Приоритеты задач"""
-    LOW = "low"
-    NORMAL = "normal"
-    HIGH = "high"
-    URGENT = "urgent"
+    LOW = "LOW"
+    NORMAL = "NORMAL"
+    HIGH = "HIGH"
+    URGENT = "URGENT"
 
 
 # PostgreSQL enum типы
 task_status_enum = ENUM(
-    'pending', 'running', 'completed', 'failed', 'cancelled', 'paused',
+    'PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'CANCELLED', 'PAUSED',
     name='taskstatus',
     create_type=False
 )
 
 task_priority_enum = ENUM(
-    'low', 'normal', 'high', 'urgent',
+    'LOW', 'NORMAL', 'HIGH', 'URGENT',
     name='taskpriority', 
     create_type=False
 )
