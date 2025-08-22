@@ -53,14 +53,14 @@ class InviteTask(BaseModel):
     
     # Статус и приоритет
     status = Column(
-        Enum(TaskStatus, values_callable=lambda obj: [e.value for e in obj]),
-        default=TaskStatus.PENDING,
+        task_status_enum,
+        default=TaskStatus.PENDING.value,
         nullable=False,
         index=True
     )
     priority = Column(
-        Enum(TaskPriority, values_callable=lambda obj: [e.value for e in obj]),
-        default=TaskPriority.NORMAL,
+        task_priority_enum,
+        default=TaskPriority.NORMAL.value,
         nullable=False
     )
     
