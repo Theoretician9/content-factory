@@ -169,7 +169,7 @@ async def import_targets_from_parsing(
     """
     # ✅ ИСПРАВЛЕНО: извлекаем параметры из body
     parsing_task_id = request_data.get("parsing_task_id")
-    source_name = request_data.get("source_name", "parsing_import")
+    source_name = request_data.get("source_name", "PARSING_IMPORT")
     limit = request_data.get("limit")
     
     if not parsing_task_id:
@@ -274,7 +274,7 @@ async def import_targets_from_parsing(
                         phone_number=cleaned_data["phone_number"],
                         user_id_platform=cleaned_data["user_id_platform"],
                         full_name=cleaned_data["full_name"],
-                        source="parsing_import",
+                        source="PARSING_IMPORT",
                         extra_data={
                             "parsing_task_id": parsing_task_id,
                             "parsing_result_id": result.get('id'),
