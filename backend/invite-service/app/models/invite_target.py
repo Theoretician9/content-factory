@@ -2,7 +2,7 @@
 Модель целей приглашений (контакты/пользователи для приглашения)
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey, Boolean, func
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import ENUM
 import enum
@@ -49,6 +49,10 @@ class InviteTarget(Base):
     
     # Первичный ключ
     id = Column(Integer, primary_key=True, index=True, comment="Уникальный идентификатор цели")
+    
+    # Временные метки
+    created_at = Column(DateTime, server_default=func.now(), default=func.now(), nullable=False, comment="Время создания")
+    updated_at = Column(DateTime, server_default=func.now(), default=func.now(), onupdate=func.now(), nullable=False, comment="Время последнего обновления")
     
     # Связь с задачей
     task_id = Column(Integer, ForeignKey("invite_tasks.id"), nullable=False, index=True)
