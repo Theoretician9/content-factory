@@ -5,6 +5,7 @@ Pydantic схемы для Telegram приглашений
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from enum import Enum
+from uuid import UUID
 from pydantic import BaseModel, Field, validator
 
 
