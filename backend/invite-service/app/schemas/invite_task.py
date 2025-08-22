@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.invite_task import TaskStatus, TaskPriority
 
@@ -155,6 +155,13 @@ class InviteTaskCreate(BaseModel):
     # Дополнительные настройки
     settings: Optional[TaskSettingsSchema] = Field(None, description="Дополнительные настройки задачи")
     
+    @field_validator('priority', mode='before')
+    @classmethod
+    def validate_priority(cls, v):
+        if isinstance(v, str):
+            return v.upper()
+        return v
+    
     class Config:
         json_encoders = {
             datetime: lambda v: v.isoformat()
@@ -174,7 +181,14 @@ class InviteTaskUpdate(BaseModel):
     scheduled_start: Optional[datetime] = None
     settings: Optional[TaskSettingsSchema] = None
     
+    @field_validator('priority', 'status', mode='before')
+    @classmethod
+    def validate_enums(cls, v):
+        if isinstance(v, str):
+            return v.upper()
+        return v
+    
     class Config:
         json_encoders = {
             datetime: lambda v: v.isoformat()
-        } 
+        }
