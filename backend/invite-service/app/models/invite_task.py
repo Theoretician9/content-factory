@@ -79,8 +79,8 @@ class InviteTask(Base):
     max_invites_per_account = Column(Integer, default=50, comment="Максимум приглашений с одного аккаунта")
     
     # Временные рамки
-    created_at = Column(DateTime, server_default=func.now(), nullable=False, comment="Время создания задачи")
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False, comment="Время последнего обновления")
+    created_at = Column(DateTime, server_default=func.now(), default=func.now(), nullable=False, comment="Время создания задачи")
+    updated_at = Column(DateTime, server_default=func.now(), default=func.now(), onupdate=func.now(), nullable=False, comment="Время последнего обновления")
     start_time = Column(DateTime, nullable=True, comment="Время начала выполнения задачи")
     end_time = Column(DateTime, nullable=True, comment="Время окончания выполнения задачи")
     scheduled_start = Column(DateTime, nullable=True, comment="Запланированное время начала")
