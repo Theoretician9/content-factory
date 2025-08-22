@@ -38,7 +38,7 @@ def create_enum_types():
                 """
                 DO $$ BEGIN
                     CREATE TYPE taskstatus AS ENUM (
-                        'pending', 'running', 'completed', 'failed', 'cancelled', 'paused'
+                        'PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'CANCELLED', 'PAUSED'
                     );
                 EXCEPTION
                     WHEN duplicate_object THEN null;
@@ -47,7 +47,7 @@ def create_enum_types():
                 """
                 DO $$ BEGIN
                     CREATE TYPE taskpriority AS ENUM (
-                        'low', 'normal', 'high', 'urgent'
+                        'LOW', 'NORMAL', 'HIGH', 'URGENT'
                     );
                 EXCEPTION
                     WHEN duplicate_object THEN null;
@@ -56,7 +56,7 @@ def create_enum_types():
                 """
                 DO $$ BEGIN
                     CREATE TYPE targetstatus AS ENUM (
-                        'pending', 'invited', 'failed', 'skipped'
+                        'PENDING', 'INVITED', 'ACCEPTED', 'REJECTED', 'FAILED', 'BLOCKED', 'INVALID'
                     );
                 EXCEPTION
                     WHEN duplicate_object THEN null;
@@ -65,7 +65,7 @@ def create_enum_types():
                 """
                 DO $$ BEGIN
                     CREATE TYPE targetsource AS ENUM (
-                        'manual', 'csv_import', 'parsing_import', 'api_import'
+                        'MANUAL', 'CSV_IMPORT', 'PARSING_IMPORT', 'API_IMPORT'
                     );
                 EXCEPTION
                     WHEN duplicate_object THEN null;
@@ -74,8 +74,8 @@ def create_enum_types():
                 """
                 DO $$ BEGIN
                     CREATE TYPE inviteresultstatus AS ENUM (
-                        'success', 'failed', 'rate_limited', 'flood_wait', 'account_banned',
-                        'target_not_found', 'privacy_restricted', 'peer_flood', 'user_not_mutual_contact'
+                        'SUCCESS', 'FAILED', 'RATE_LIMITED', 'FLOOD_WAIT', 'ACCOUNT_BANNED',
+                        'TARGET_NOT_FOUND', 'PRIVACY_RESTRICTED', 'PEER_FLOOD', 'USER_NOT_MUTUAL_CONTACT'
                     );
                 EXCEPTION
                     WHEN duplicate_object THEN null;

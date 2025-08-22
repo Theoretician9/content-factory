@@ -36,21 +36,21 @@ class ActionType(str, enum.Enum):
 
 class InviteResultStatus(str, enum.Enum):
     """Статусы результатов приглашений"""
-    SUCCESS = "success"
-    FAILED = "failed"
-    RATE_LIMITED = "rate_limited"
-    FLOOD_WAIT = "flood_wait"
-    ACCOUNT_BANNED = "account_banned"
-    TARGET_NOT_FOUND = "target_not_found"
-    PRIVACY_RESTRICTED = "privacy_restricted"
-    PEER_FLOOD = "peer_flood"
-    USER_NOT_MUTUAL_CONTACT = "user_not_mutual_contact"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    RATE_LIMITED = "RATE_LIMITED"
+    FLOOD_WAIT = "FLOOD_WAIT"
+    ACCOUNT_BANNED = "ACCOUNT_BANNED"
+    TARGET_NOT_FOUND = "TARGET_NOT_FOUND"
+    PRIVACY_RESTRICTED = "PRIVACY_RESTRICTED"
+    PEER_FLOOD = "PEER_FLOOD"
+    USER_NOT_MUTUAL_CONTACT = "USER_NOT_MUTUAL_CONTACT"
 
 
 # PostgreSQL enum тип
 invite_result_status_enum = ENUM(
-    'success', 'failed', 'rate_limited', 'flood_wait', 'account_banned',
-    'target_not_found', 'privacy_restricted', 'peer_flood', 'user_not_mutual_contact',
+    'SUCCESS', 'FAILED', 'RATE_LIMITED', 'FLOOD_WAIT', 'ACCOUNT_BANNED',
+    'TARGET_NOT_FOUND', 'PRIVACY_RESTRICTED', 'PEER_FLOOD', 'USER_NOT_MUTUAL_CONTACT',
     name='inviteresultstatus',
     create_type=False
 )
