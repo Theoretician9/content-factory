@@ -205,7 +205,7 @@ class IntegrationServiceClient:
         try:
             response = await self._make_request(
                 method="POST",
-                endpoint=f"/api/v1/integrations/telegram/invites/accounts/{account_id}/invite",
+                endpoint=f"/api/v1/telegram/accounts/{account_id}/invite",
                 json_data=invite_data
             )
             
@@ -226,7 +226,7 @@ class IntegrationServiceClient:
         try:
             response = await self._make_request(
                 method="POST",
-                endpoint=f"/api/v1/integrations/telegram/invites/accounts/{account_id}/message",
+                endpoint=f"/api/v1/telegram/accounts/{account_id}/message",
                 json_data=message_data
             )
             
@@ -243,7 +243,7 @@ class IntegrationServiceClient:
         try:
             response = await self._make_request(
                 method="GET",
-                endpoint=f"/api/v1/integrations/telegram/invites/accounts/{account_id}/limits"
+                endpoint=f"/api/v1/telegram/accounts/{account_id}/limits"
             )
             
             logger.debug(f"Получены лимиты для аккаунта {account_id}")
