@@ -184,7 +184,7 @@ class IntegrationServiceClient:
         try:
             response = await self._make_request(
                 method="GET",
-                endpoint=f"/api/v1/integrations/{platform}/invites/accounts",
+                endpoint=f"/api/v1/{platform}/internal/active-accounts",
                 params={"user_id": user_id}
             )
             
