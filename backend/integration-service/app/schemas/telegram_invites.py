@@ -108,7 +108,7 @@ class TelegramMessageResponse(BaseModel):
 
 class TelegramAccountLimitsResponse(BaseModel):
     """Схема ответа с лимитами Telegram аккаунта"""
-    account_id: int = Field(..., description="ID аккаунта")
+    account_id: UUID = Field(..., description="ID аккаунта")
     limits: Dict[str, Any] = Field(..., description="Лимиты аккаунта")
     current_usage: Dict[str, int] = Field(..., description="Текущее использование")
     restrictions: List[str] = Field(default_factory=list, description="Активные ограничения")
