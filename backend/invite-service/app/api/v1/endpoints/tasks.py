@@ -511,7 +511,7 @@ async def pause_invite_task(
             detail=f"Задача с ID {task_id} не найдена"
         )
     
-    if str(task.status) != TaskStatus.RUNNING.value and task.status != TaskStatus.RUNNING:
+    if str(task.status) != TaskStatus.IN_PROGRESS.value and task.status != TaskStatus.IN_PROGRESS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Задача не может быть приостановлена со статусом {task.status}"
