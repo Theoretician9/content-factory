@@ -42,8 +42,8 @@ def execute_invite_task(self, task_id: int):
             return f"Задача {task_id} не может быть выполнена со статусом {task.status}"
         
         try:
-            # Обновление статуса на RUNNING (строковое значение enum)
-            task.status = TaskStatus.RUNNING.value
+            # Обновление статуса на IN_PROGRESS (строковое значение enum)
+            task.status = TaskStatus.IN_PROGRESS.value
             task.start_time = datetime.utcnow()
             task.updated_at = datetime.utcnow()
             db.commit()

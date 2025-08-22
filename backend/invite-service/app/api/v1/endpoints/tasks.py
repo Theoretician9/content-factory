@@ -471,7 +471,7 @@ async def execute_invite_task(
         result = celery_execute_task.delay(task_id)
         
         # Обновление статуса задачи (используем значение enum в БД)
-        task.status = TaskStatus.RUNNING.value
+        task.status = TaskStatus.IN_PROGRESS.value
         task.start_time = datetime.utcnow()
         task.updated_at = datetime.utcnow()
         db.commit()
