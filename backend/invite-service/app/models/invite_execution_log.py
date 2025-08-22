@@ -56,7 +56,7 @@ invite_result_status_enum = ENUM(
 )
 
 
-class InviteExecutionLog(BaseModel):
+class InviteExecutionLog(Base):
     """Модель лога выполнения приглашений"""
     __tablename__ = "invite_execution_logs"
     
