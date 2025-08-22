@@ -7,7 +7,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import ENUM
 import enum
 
-from .base import BaseModel
+from app.core.database import Base
 
 
 class TargetStatus(str, enum.Enum):
@@ -40,7 +40,7 @@ target_source_enum = ENUM(
 )
 
 
-class InviteTarget(BaseModel):
+class InviteTarget(Base):
     """Модель цели приглашения (контакт для приглашения)"""
     __tablename__ = "invite_targets"
     

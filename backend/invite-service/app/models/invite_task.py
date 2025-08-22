@@ -41,7 +41,7 @@ task_priority_enum = ENUM(
 )
 
 
-class InviteTask(BaseModel):
+class InviteTask(Base):
     """Модель задачи массового приглашения"""
     __tablename__ = "invite_tasks"
     

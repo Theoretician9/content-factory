@@ -7,7 +7,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import ENUM
 import enum
 
-from .base import BaseModel
+from app.core.database import Base
 
 
 class LogLevel(str, enum.Enum):
