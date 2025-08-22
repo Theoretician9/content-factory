@@ -197,7 +197,7 @@ class IntegrationServiceClient:
     
     async def send_telegram_invite(
         self,
-        account_id: int,
+        account_id: str,
         invite_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Отправка Telegram приглашения через Integration Service"""
@@ -218,7 +218,7 @@ class IntegrationServiceClient:
     
     async def send_telegram_message(
         self,
-        account_id: int,
+        account_id: str,
         message_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Отправка Telegram сообщения через Integration Service"""
