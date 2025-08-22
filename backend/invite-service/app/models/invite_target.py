@@ -44,6 +44,9 @@ class InviteTarget(Base):
     """Модель цели приглашения (контакт для приглашения)"""
     __tablename__ = "invite_targets"
     
+    # Первичный ключ
+    id = Column(Integer, primary_key=True, index=True, comment="Уникальный идентификатор цели")
+    
     # Связь с задачей
     task_id = Column(Integer, ForeignKey("invite_tasks.id"), nullable=False, index=True)
     

@@ -60,6 +60,9 @@ class InviteExecutionLog(Base):
     """Модель лога выполнения приглашений"""
     __tablename__ = "invite_execution_logs"
     
+    # Первичный ключ
+    id = Column(Integer, primary_key=True, index=True, comment="Уникальный идентификатор лога")
+    
     # Связь с задачей
     task_id = Column(Integer, ForeignKey("invite_tasks.id"), nullable=False, index=True)
     

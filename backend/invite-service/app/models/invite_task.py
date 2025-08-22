@@ -45,6 +45,9 @@ class InviteTask(Base):
     """Модель задачи массового приглашения"""
     __tablename__ = "invite_tasks"
     
+    # Первичный ключ
+    id = Column(Integer, primary_key=True, index=True, comment="Уникальный идентификатор задачи")
+    
     # Основная информация
     user_id = Column(Integer, nullable=False, index=True, comment="ID пользователя-владельца задачи")
     name = Column(String(255), nullable=False, comment="Название задачи")
