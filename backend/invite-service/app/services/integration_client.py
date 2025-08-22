@@ -205,7 +205,7 @@ class IntegrationServiceClient:
         try:
             response = await self._make_request(
                 method="POST",
-                endpoint=f"/api/v1/telegram/accounts/{account_id}/invite",
+                endpoint=f"/api/v1/telegram/invites/accounts/{account_id}/invite",
                 json_data=invite_data
             )
             
@@ -226,7 +226,7 @@ class IntegrationServiceClient:
         try:
             response = await self._make_request(
                 method="POST",
-                endpoint=f"/api/v1/telegram/accounts/{account_id}/message",
+                endpoint=f"/api/v1/telegram/invites/accounts/{account_id}/message",
                 json_data=message_data
             )
             
