@@ -68,7 +68,13 @@ def create_enum_types():
                         'MANUAL', 'CSV_IMPORT', 'PARSING_IMPORT', 'API_IMPORT'
                     );
                 EXCEPTION
-                    WHEN duplicate_object THEN null;
+                    WHEN duplicate_object THEN 
+                        -- Если тип уже существует, добавляем недостающие значения
+                        BEGIN
+                            ALTER TYPE targetsource ADD VALUE IF NOT EXISTS 'PARSING_IMPORT';
+                        EXCEPTION
+                            WHEN others THEN null;
+                        END;
                 END $$;
                 """,
                 """
