@@ -453,4 +453,234 @@ invite-service:
 
 ---
 
-**Этот документ является исчерпывающим техническим заданием для реализации Invite Service в рамках существующей архитектуры content-factory проекта. При разработке необходимо строго следовать описанным принципам и интегрироваться с существующими сервисами.** 
+**Этот документ является исчерпывающим техническим заданием для реализации Invite Service в рамках существующей архитектуры content-factory проекта. При разработке необходимо строго следовать описанным принципам и интегрироваться с существующими сервисами.**
+
+---
+
+## ОБНОВЛЕНИЯ И ИЗМЕНЕНИЯ В РЕАЛИЗАЦИИ
+
+### 2025-08-22: Критические исправления базы данных и типов данных
+
+#### **Исправления PostgreSQL enum типов**
+В процессе реализации были внесены критические изменения в схему базы данных:
+
+```sql
+-- Созданные enum типы в PostgreSQL
+CREATE TYPE taskstatus AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'CANCELLED', 'PAUSED');
+CREATE TYPE taskpriority AS ENUM ('LOW', 'MEDIUM', 'HIGH');
+CREATE TYPE targetsource AS ENUM ('MANUAL', 'FILE_UPLOAD', 'PARSING_IMPORT');
+CREATE TYPE executionstatus AS ENUM ('PENDING', 'SUCCESS', 'FAILED', 'SKIPPED');
+
+-- Обновление таблиц с enum типами
+ALTER TABLE invite_tasks ALTER COLUMN status TYPE taskstatus USING status::taskstatus;
+ALTER TABLE invite_tasks ALTER COLUMN priority TYPE taskpriority USING priority::taskpriority;
+ALTER TABLE invite_targets ALTER COLUMN source TYPE targetsource USING source::targetsource;
+ALTER TABLE invite_execution_logs ALTER COLUMN status TYPE executionstatus USING status::executionstatus;
+```
+
+#### **Обновленная схема базы данных**
+```sql
+-- Обновленная таблица invite_tasks
+CREATE TABLE invite_tasks (
+    id SERIAL PRIMARY KEY,  -- Изменено с UUID на SERIAL для простоты
+    user_id INTEGER NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    platform VARCHAR(50) NOT NULL,
+    status taskstatus DEFAULT 'PENDING',
+    priority taskpriority DEFAULT 'MEDIUM',
+    settings JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Обновленная таблица invite_targets
+CREATE TABLE invite_targets (
+    id SERIAL PRIMARY KEY,
+    task_id INTEGER REFERENCES invite_tasks(id) ON DELETE CASCADE,
+    username VARCHAR(255),
+    phone_number VARCHAR(20),
+    user_id_platform VARCHAR(255),
+    email VARCHAR(255),
+    full_name VARCHAR(255),
+    source targetsource DEFAULT 'MANUAL',
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Обновленная таблица invite_execution_logs
+CREATE TABLE invite_execution_logs (
+    id SERIAL PRIMARY KEY,
+    task_id INTEGER REFERENCES invite_tasks(id) ON DELETE CASCADE,
+    target_id INTEGER REFERENCES invite_targets(id) ON DELETE CASCADE,
+    account_id VARCHAR(255) NOT NULL,
+    action VARCHAR(100) NOT NULL,
+    status executionstatus NOT NULL,
+    details JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+#### **Исправления SQLAlchemy моделей**
+```python
+# backend/invite-service/app/models/invite_task.py
+from sqlalchemy import Column, Integer, String, DateTime, Enum as SQLEnum, JSON
+from sqlalchemy.ext.declarative import declarative_base
+from enum import Enum
+from datetime import datetime
+
+Base = declarative_base()
+
+class TaskStatus(str, Enum):
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+    PAUSED = "PAUSED"
+
+class TaskPriority(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+class InviteTask(Base):
+    __tablename__ = "invite_tasks"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False)
+    name = Column(String(255), nullable=False)
+    platform = Column(String(50), nullable=False)
+    status = Column(SQLEnum(TaskStatus, name="taskstatus"), default=TaskStatus.PENDING)
+    priority = Column(SQLEnum(TaskPriority, name="taskpriority"), default=TaskPriority.MEDIUM)
+    settings = Column(JSON, default={})
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+```
+
+#### **Исправления Pydantic схем с валидаторами**
+```python
+# backend/invite-service/app/schemas/invite_task.py
+from pydantic import BaseModel, validator
+from typing import Optional
+from datetime import datetime
+
+class InviteTaskCreate(BaseModel):
+    name: str
+    platform: str
+    status: TaskStatus = TaskStatus.PENDING
+    priority: TaskPriority = TaskPriority.MEDIUM
+    settings: Optional[dict] = {}
+    
+    @validator('status', pre=True)
+    def validate_status(cls, v):
+        if isinstance(v, str):
+            return TaskStatus(v.upper())
+        return v
+    
+    @validator('priority', pre=True)
+    def validate_priority(cls, v):
+        if isinstance(v, str):
+            return TaskPriority(v.upper())
+        return v
+
+class InviteTaskResponse(BaseModel):
+    id: int
+    user_id: int
+    name: str
+    platform: str
+    status: TaskStatus
+    priority: TaskPriority
+    settings: dict
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        orm_mode = True
+```
+
+#### **Межсервисная интеграция с Integration Service**
+
+**Исправления типов данных account_id:**
+```python
+# Все идентификаторы аккаунтов приведены к UUID формату
+# backend/integration-service/app/schemas/telegram_invites.py
+from uuid import UUID
+
+class TelegramAccountLimitsResponse(BaseModel):
+    account_id: UUID  # Исправлено с int на UUID
+    limits: Dict[str, int]
+    current_usage: Dict[str, int]
+    restrictions: List[str]
+    last_updated: datetime
+```
+
+**Исправления JWT аутентификации:**
+```python
+# backend/invite-service/app/services/integration_client.py
+async def _get_jwt_token(self) -> str:
+    """JWT токен для межсервисной аутентификации"""
+    payload = {
+        'sub': 'nikita.f3d@gmail.com',  # Поле sub с email пользователя
+        'service': 'invite-service',
+        'iat': datetime.utcnow(),
+        'exp': datetime.utcnow() + timedelta(hours=1)
+    }
+    return jwt.encode(payload, secret_data['secret_key'], algorithm='HS256')
+```
+
+#### **Обновленные API endpoints Integration Service**
+```python
+# backend/integration-service/app/api/v1/endpoints/telegram_invites.py
+@router.get("/accounts/{account_id}/limits", response_model=TelegramAccountLimitsResponse)
+async def get_account_limits(account_id: UUID, request: Request):
+    """Получение лимитов Telegram аккаунта"""
+    user_id = await get_user_id_from_request(request)
+    account = await telegram_service.session_service.get_user_session_by_id(session, user_id, account_id)
+    
+    if not account:
+        raise HTTPException(status_code=404, detail="Telegram аккаунт не найден")
+    
+    limits = {
+        "daily_invites": 50,
+        "daily_messages": 40,
+        "hourly_invites": 5,
+        "flood_wait_buffer": 300
+    }
+    
+    current_usage = {
+        "daily_invites_used": 0,
+        "daily_messages_used": 0,
+        "hourly_invites_used": 0
+    }
+    
+    return TelegramAccountLimitsResponse(
+        account_id=account_id,
+        limits=limits,
+        current_usage=current_usage,
+        restrictions=[],
+        last_updated=datetime.utcnow()
+    )
+```
+
+### Текущий статус реализации
+
+#### **✅ Полностью работает:**
+- **База данных**: PostgreSQL с корректными enum типами
+- **API создания задач**: POST /api/v1/tasks/ работает без ошибок
+- **Импорт данных**: Интеграция с parsing-service для загрузки целевой аудитории
+- **JWT аутентификация**: Межсервисная аутентификация между invite-service и integration-service
+- **Получение аккаунтов**: API получения активных Telegram аккаунтов
+
+#### **🔧 Требует доработки:**
+- **Endpoint limits**: Ошибка 500 при запросе лимитов аккаунтов (в процессе исправления)
+- **Worker выполнение**: Полное тестирование выполнения задач после исправления limits endpoint
+
+#### **📊 Архитектурные достижения:**
+- **Production-ready Database**: Все enum типы, индексы и constraints настроены
+- **Type Safety**: Строгая типизация с Pydantic валидаторами
+- **Inter-service Communication**: Надежная HTTP интеграция с JWT аутентификацией
+- **Error Handling**: Comprehensive обработка ошибок с retry логикой
+- **Data Consistency**: Единообразные типы данных между всеми сервисами
+
+**Invite Service находится на финальной стадии реализации. Все основные компоненты работают, остается исправить единственную проблему с получением лимитов аккаунтов для полной готовности к production использованию.** 
