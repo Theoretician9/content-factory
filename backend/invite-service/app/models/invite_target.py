@@ -12,29 +12,32 @@ from app.core.database import Base
 
 class TargetStatus(str, enum.Enum):
     """Статусы целей приглашений"""
-    PENDING = "pending"        # Ожидает приглашения
-    INVITED = "invited"        # Приглашение отправлено
-    FAILED = "failed"         # Ошибка при приглашении
-    SKIPPED = "skipped"       # Пропущен
+    PENDING = "PENDING"        # Ожидает приглашения
+    INVITED = "INVITED"        # Приглашение отправлено
+    ACCEPTED = "ACCEPTED"      # Принято
+    REJECTED = "REJECTED"      # Отклонено
+    FAILED = "FAILED"         # Ошибка при приглашении
+    BLOCKED = "BLOCKED"       # Заблокирован
+    INVALID = "INVALID"       # Невалидный
 
 
 class TargetSource(str, enum.Enum):
     """Источники целей приглашений"""
-    MANUAL = "manual"
-    CSV_IMPORT = "csv_import"
-    PARSING_IMPORT = "parsing_import"
-    API_IMPORT = "api_import"
+    MANUAL = "MANUAL"
+    CSV_IMPORT = "CSV_IMPORT"
+    PARSING_IMPORT = "PARSING_IMPORT"
+    API_IMPORT = "API_IMPORT"
 
 
 # PostgreSQL enum типы
 target_status_enum = ENUM(
-    'pending', 'invited', 'failed', 'skipped',
+    'PENDING', 'INVITED', 'ACCEPTED', 'REJECTED', 'FAILED', 'BLOCKED', 'INVALID',
     name='targetstatus',
     create_type=False
 )
 
 target_source_enum = ENUM(
-    'manual', 'csv_import', 'parsing_import', 'api_import',
+    'MANUAL', 'CSV_IMPORT', 'PARSING_IMPORT', 'API_IMPORT',
     name='targetsource',
     create_type=False
 )
