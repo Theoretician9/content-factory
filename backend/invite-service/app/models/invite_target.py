@@ -2,8 +2,9 @@
 Модель целей приглашений (контакты/пользователи для приглашения)
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, Enum, JSON, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import ENUM
 import enum
 
 from .base import BaseModel
@@ -13,11 +14,30 @@ class TargetStatus(str, enum.Enum):
     """Статусы целей приглашений"""
     PENDING = "pending"        # Ожидает приглашения
     INVITED = "invited"        # Приглашение отправлено
-    ACCEPTED = "accepted"      # Приглашение принято
-    REJECTED = "rejected"      # Приглашение отклонено
     FAILED = "failed"         # Ошибка при приглашении
-    BLOCKED = "blocked"       # Заблокирован
-    INVALID = "invalid"       # Неверные данные контакта
+    SKIPPED = "skipped"       # Пропущен
+
+
+class TargetSource(str, enum.Enum):
+    """Источники целей приглашений"""
+    MANUAL = "manual"
+    CSV_IMPORT = "csv_import"
+    PARSING_IMPORT = "parsing_import"
+    API_IMPORT = "api_import"
+
+
+# PostgreSQL enum типы
+target_status_enum = ENUM(
+    'pending', 'invited', 'failed', 'skipped',
+    name='targetstatus',
+    create_type=False
+)
+
+target_source_enum = ENUM(
+    'manual', 'csv_import', 'parsing_import', 'api_import',
+    name='targetsource',
+    create_type=False
+)
 
 
 class InviteTarget(BaseModel):
@@ -43,8 +63,8 @@ class InviteTarget(BaseModel):
     
     # Статус приглашения
     status = Column(
-        Enum(TargetStatus, values_callable=lambda obj: [e.value for e in obj]),
-        default=TargetStatus.PENDING,
+        target_status_enum,
+        default=TargetStatus.PENDING.value,
         nullable=False,
         index=True
     )
@@ -64,7 +84,12 @@ class InviteTarget(BaseModel):
     sent_from_account_id = Column(Integer, nullable=True, comment="ID аккаунта, с которого отправлено")
     
     # Дополнительные метаданные
-    source = Column(String(100), nullable=True, comment="Источник контакта (parsing, manual, import)")
+    source = Column(
+        target_source_enum,
+        default=TargetSource.MANUAL.value,
+        nullable=True,
+        comment="Источник контакта"
+    )
     extra_data = Column(JSON, nullable=True, comment="Дополнительные метаданные")
     
     # Связи
