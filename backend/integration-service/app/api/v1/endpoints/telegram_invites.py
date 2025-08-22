@@ -10,6 +10,7 @@ from telethon.tl.functions.channels import InviteToChannelRequest
 from telethon.tl.functions.messages import AddChatUserRequest
 from typing import Dict, Any, Optional
 from datetime import datetime
+from uuid import UUID
 import asyncio
 import logging
 
