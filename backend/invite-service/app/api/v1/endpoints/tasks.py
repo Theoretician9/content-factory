@@ -447,11 +447,11 @@ async def execute_invite_task(
             detail=f"Задача с ID {task_id} не найдена"
         )
     
-    # Проверка статуса задачи
-    if task.status not in [TaskStatus.PENDING, TaskStatus.PAUSED]:
+    # Проверка статуса задачи - разрешаем перезапуск FAILED задач
+    if task.status not in [TaskStatus.PENDING, TaskStatus.PAUSED, TaskStatus.FAILED]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Задача не может быть запущена со статусом {task.status}"
+            detail=f"Ошибка запуска задачи: {task.status}"
         )
     
     # Проверка наличия целевой аудитории
