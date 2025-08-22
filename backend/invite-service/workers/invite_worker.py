@@ -37,7 +37,7 @@ def execute_invite_task(self, task_id: int):
             logger.error(f"Задача {task_id} не найдена")
             raise Exception(f"Задача {task_id} не найдена")
         
-        if task.status not in [TaskStatus.PENDING, TaskStatus.PAUSED, TaskStatus.FAILED]:
+        if task.status not in [TaskStatus.PENDING, TaskStatus.PAUSED, TaskStatus.FAILED, TaskStatus.IN_PROGRESS]:
             logger.warning(f"Задача {task_id} имеет некорректный статус для выполнения: {task.status}")
             return f"Задача {task_id} не может быть выполнена со статусом {task.status}"
         
