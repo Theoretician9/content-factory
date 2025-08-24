@@ -45,19 +45,25 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
         }
     
     async def initialize_accounts(self, user_id: int) -> List[PlatformAccount]:
-        """Получение Telegram аккаунтов пользователя из Integration Service"""
+        """Получение Telegram аккаунтов пользователя через Account Manager"""
         
         try:
-            # Получение аккаунтов через Integration Service API
+            logger.info(f"🔍 Инициализация Telegram аккаунтов для пользователя {user_id} через Account Manager")
+            
+            # Получаем базовую информацию о доступных аккаунтах
             accounts_data = await self.integration_client.get_user_accounts(
                 user_id=user_id,
                 platform="telegram"
             )
             
+            if not accounts_data:
+                logger.warning(f"⚠️ Нет доступных Telegram аккаунтов для пользователя {user_id}")
+                return []
+            
             platform_accounts = []
             
             for acc_data in accounts_data:
-                # Преобразование в PlatformAccount
+                # Преобразование в PlatformAccount с лимитами Account Manager
                 account = PlatformAccount(
                     account_id=acc_data["id"],
                     username=acc_data.get("username"),
@@ -65,9 +71,9 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                     status=AccountStatus.ACTIVE if acc_data.get("status") == "active" else AccountStatus.INACTIVE,
                     platform="telegram",
                     
-                    # Лимиты из настроек или по умолчанию
-                    daily_invite_limit=acc_data.get("daily_limits", {}).get("invites", self.default_limits["daily_invite_limit"]),
-                    daily_message_limit=acc_data.get("daily_limits", {}).get("messages", self.default_limits["daily_message_limit"]),
+                    # Лимиты соответствуют Account Manager
+                    daily_invite_limit=self.default_limits["daily_invite_limit"],
+                    daily_message_limit=self.default_limits["daily_message_limit"],
                     hourly_invite_limit=self.default_limits["hourly_invite_limit"],
                     
                     # Дополнительные данные
@@ -75,27 +81,29 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                     extra_data={
                         "first_name": acc_data.get("first_name"),
                         "last_name": acc_data.get("last_name"),
-                        "created_at": acc_data.get("created_at")
+                        "created_at": acc_data.get("created_at"),
+                        "user_id": user_id  # Для Account Manager
                     }
                 )
                 
-                # Проверка текущих rate limits
-                rate_status = await self.check_rate_limits(account)
-                if rate_status.flood_wait_until:
-                    account.flood_wait_until = rate_status.flood_wait_until
-                    account.status = AccountStatus.FLOOD_WAIT
+                # Проверяем здоровье аккаунта через Account Manager
+                health_status = await self.account_manager.get_account_health(str(account.account_id))
+                if health_status:
+                    if not health_status.get("is_healthy", True):
+                        account.status = AccountStatus.INACTIVE
+                        logger.warning(f"⚠️ Аккаунт {account.account_id} нездоров: {health_status.get('issues', [])}")
                 
                 platform_accounts.append(account)
             
             # Фильтрация только активных аккаунтов
             active_accounts = [acc for acc in platform_accounts if acc.status == AccountStatus.ACTIVE]
             
-            logger.info(f"Инициализированы Telegram аккаунты для пользователя {user_id}: {len(active_accounts)} активных из {len(platform_accounts)}")
+            logger.info(f"✅ Инициализированы Telegram аккаунты для пользователя {user_id}: {len(active_accounts)} активных из {len(platform_accounts)}")
             
             return active_accounts
             
         except Exception as e:
-            logger.error(f"Ошибка инициализации Telegram аккаунтов для пользователя {user_id}: {str(e)}")
+            logger.error(f"❌ Ошибка инициализации Telegram аккаунтов для пользователя {user_id}: {str(e)}")
             raise
     
     async def send_invite(
