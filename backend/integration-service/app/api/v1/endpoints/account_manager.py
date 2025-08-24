@@ -21,7 +21,7 @@ from ....services.rate_limiting_service import RateLimitingService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/account-manager", tags=["Account Manager"])
+router = APIRouter(tags=["Account Manager"])
 
 # Pydantic schemas
 class AccountAllocationRequest(BaseModel):
