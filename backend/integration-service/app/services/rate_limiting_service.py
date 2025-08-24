@@ -91,7 +91,7 @@ class RateLimitingService:
             if not account:
                 return False, {"error": "Account not found"}
             
-            if not account.is_available():
+            if not account.is_available:
                 return False, {"error": "Account not available"}
             
             limits = self.telegram_limits.get(action_type, {})
