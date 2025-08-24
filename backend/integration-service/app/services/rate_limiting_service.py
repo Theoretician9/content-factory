@@ -53,7 +53,7 @@ class RateLimitingService:
                 'burst_limit': 5,          # Максимум 5 сообщений подряд
                 'burst_cooldown': 180      # 3 минуты после burst
             },
-            ActionType.CONTACT_ADD: {
+            ActionType.ADD_CONTACT: {
                 'daily_limit': 15,         # 15 контактов в день
                 'hourly_limit': 3,         # 3 контакта в час
                 'cooldown_seconds': 300,   # 5 минут между добавлениями
@@ -385,7 +385,7 @@ class RateLimitingService:
             }
             
             # Проверяем каждый тип действия
-            for action_type in [ActionType.INVITE, ActionType.MESSAGE, ActionType.CONTACT_ADD]:
+            for action_type in [ActionType.INVITE, ActionType.MESSAGE, ActionType.ADD_CONTACT]:
                 limits = self.telegram_limits[action_type]
                 
                 # Дневные лимиты
