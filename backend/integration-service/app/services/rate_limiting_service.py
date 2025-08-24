@@ -377,7 +377,7 @@ class RateLimitingService:
             now = datetime.utcnow()
             status = {
                 "account_id": str(account_id),
-                "is_available": account.is_available(),
+                "is_available": account.is_available,
                 "daily_limits": {},
                 "hourly_limits": {},
                 "cooldowns": {},
