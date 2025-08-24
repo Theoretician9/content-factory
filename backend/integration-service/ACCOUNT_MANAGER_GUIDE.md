@@ -1,24 +1,26 @@
-# Account Manager Implementation - Complete Guide
+# Account Manager Implementation - Complete Production Guide
 
 ## Обзор
 
-Account Manager - это централизованная система управления Telegram аккаунтами для всех сервисов проекта. Система обеспечивает:
+Account Manager - это централизованная система управления Telegram аккаунтами для всех сервисов проекта Content Factory. Система обеспечивает:
 
-- 🎯 **Централизованное распределение аккаунтов** между сервисами
+- 🎯 **Централизованное распределение аккаунтов** между сервисами (Invite, Parsing, Messaging)
 - 🛡️ **Строгое соблюдение лимитов** Telegram API (30 приглашений/день, 30 сообщений/день, 15 контактов/день)
+- 🔄 **Per-channel limits**: Максимум 200 приглашений на канал с одного аккаунта (автосмена аккаунтов)
 - ⚡ **Автоматическое восстановление** после флуд-ожиданий и банов
 - 🔒 **Distributed locking** для предотвращения конфликтов
 - 📊 **Мониторинг и логирование** всех операций
+- 🛠️ **Production-ready** с полным error handling
 
 ## Архитектура системы
 
 ### Основные компоненты
 
-1. **AccountManagerService** - Центральный сервис для выделения и освобождения аккаунтов
-2. **FloodBanManager** - Управление флуд-ожиданиями и автоматическое восстановление
-3. **RateLimitingService** - Контроль лимитов Telegram API
-4. **Background Workers** - Фоновые задачи для maintenance и мониторинга
-5. **API Endpoints** - REST API для взаимодействия с другими сервисами
+1. **AccountManagerService** - Центральный сервис для выделения и освобождения аккаунтов с оптимальным выбором
+2. **RateLimitingService** - Контроль лимитов Telegram API с burst логикой и cooldown
+3. **FloodBanManager** - Управление флуд-ожиданиями и автоматическое восстановление
+4. **Background Workers** - Фоновые задачи для maintenance и мониторинга (Celery)
+5. **API Endpoints** - 12 REST API endpoints для взаимодействия с другими сервисами
 
 ### База данных
 
@@ -26,7 +28,7 @@ Account Manager - это централизованная система упр�
 
 ```sql
 -- Account Manager поля
-status account_status DEFAULT 'active',
+status VARCHAR(20) DEFAULT 'active',
 locked BOOLEAN DEFAULT FALSE,
 locked_by VARCHAR(100),
 locked_until TIMESTAMPTZ,
@@ -41,7 +43,6 @@ per_channel_invites JSONB DEFAULT '{}',
 error_count INTEGER DEFAULT 0,
 flood_wait_until TIMESTAMPTZ,
 blocked_until TIMESTAMPTZ,
-last_limit_reset TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 last_used_at TIMESTAMPTZ
 ```
 
@@ -49,10 +50,97 @@ last_used_at TIMESTAMPTZ
 
 Account Manager использует отдельные Redis базы данных:
 
-- **DB+1**: Distributed locks для аккаунтов
+- **DB+1**: Distributed locks для аккаунтов (`account_lock:{account_id}`)
 - **DB+2**: Очереди восстановления и flood/ban management
 - **DB+3**: Rate limiting данные (hourly limits, cooldowns, burst tracking)
 - **DB+4**: Celery broker и backend для workers
+
+## Telegram API Limits - Business Rules
+
+### Основные лимиты (соответствуют требованиям)
+
+```python
+# Конфигурация лимитов в RateLimitingService
+telegram_limits = {
+    ActionType.INVITE: {
+        'daily_limit': 30,         # 30 приглашений в день
+        'hourly_limit': 2,         # 2 приглашения в час (равномерность)
+        'per_channel_daily': 15,   # 15 приглашений в день на канал
+        'cooldown_seconds': 900,   # 15 минут между приглашениями
+        'burst_limit': 3,          # Максимум 3 приглашения подряд
+        'burst_cooldown': 900      # 15 минут после burst
+    },
+    ActionType.MESSAGE: {
+        'daily_limit': 30,         # 30 сообщений в день
+        'hourly_limit': 10,        # 10 сообщений в час
+        'cooldown_seconds': 60,    # 1 минута между сообщениями
+        'burst_limit': 5,          # Максимум 5 сообщений подряд
+        'burst_cooldown': 180      # 3 минуты после burst
+    },
+    ActionType.ADD_CONTACT: {
+        'daily_limit': 15,         # 15 контактов в день
+        'hourly_limit': 3,         # 3 контакта в час
+        'cooldown_seconds': 300,   # 5 минут между добавлениями
+        'burst_limit': 2,          # Максимум 2 контакта подряд
+        'burst_cooldown': 600      # 10 минут после burst
+    }
+}
+```
+
+### Per-Channel Logic (200 максимум на канал)
+
+**ВАЖНО**: 200 максимум на канал с ОДНОГО аккаунта. Для 1000 приглашений в канал нужно 5 аккаунтов:
+
+```python
+# Структура per_channel_invites в PostgreSQL:
+{
+  "channel_123": {
+    "today": 5,     // приглашений сегодня в этот канал
+    "total": 150    // всего приглашений в этот канал с этого аккаунта
+  },
+  "channel_456": {
+    "today": 3,
+    "total": 50
+  }
+}
+
+# Автоматическая смена аккаунта:
+@property
+def max_per_channel_total(self) -> int:
+    """Максимум инвайтов на один канал (всего)"""
+    return 200
+
+def can_send_invite(self, channel_id: str = None) -> bool:
+    # Проверка лимита по каналу
+    if channel_id:
+        channel_total = self.per_channel_invites.get(channel_id, {}).get('total', 0)
+        if channel_total >= self.max_per_channel_total:  # >= 200
+            return False  # Account Manager выделит следующий аккаунт
+    return True
+```
+
+### Error Handling & Recovery
+
+```python
+# Обработка ошибок Telegram API
+class ErrorType(str, Enum):
+    FLOOD_WAIT = "flood_wait"          # Автоматическое ожидание + 1 минута буфер
+    PEER_FLOOD = "peer_flood"          # 24 часа блокировки
+    PHONE_NUMBER_BANNED = "phone_number_banned"  # Permanent disable
+    USER_DEACTIVATED = "user_deactivated"        # Permanent disable
+    AUTH_KEY_ERROR = "auth_key_error"             # Permanent disable
+
+# Логика обработки в handle_account_error:
+if error_type == ErrorType.FLOOD_WAIT:
+    # Извлекаем секунды из "FloodWaitError: 300"
+    seconds = extract_seconds_from_message(error_message)
+    recovery_time = now + timedelta(seconds=seconds + 60)  # +1 минута буфер
+    new_status = AccountStatus.FLOOD_WAIT
+    
+elif error_type == ErrorType.PEER_FLOOD:
+    recovery_time = now + timedelta(hours=24)  # 24 часа
+    new_status = AccountStatus.BLOCKED
+```
 
 ## API Endpoints
 
