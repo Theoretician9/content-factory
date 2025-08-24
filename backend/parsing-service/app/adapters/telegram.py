@@ -52,50 +52,55 @@ class TelegramAdapter(BasePlatformAdapter):
         return "Telegram"
     
     async def authenticate(self, account_id: str, credentials: Dict[str, Any]) -> bool:
-        """Authenticate with Telegram using credentials from integration-service."""
+        """Authenticate with Telegram using Account Manager for account allocation."""
         try:
-            # Получаем все данные от integration-service (НЕ из Vault!)
-            session_id = credentials.get('session_id')
-            self.api_id = credentials.get('api_id')
-            self.api_hash = credentials.get('api_hash')  
-            session_data = credentials.get('session_data')
+            # Если уже используем Account Manager - освобождаем предыдущий аккаунт
+            if self.allocated_account:
+                await self._release_current_account()
             
-            if not session_id:
-                self.logger.error("No session_id provided by integration-service")
+            # Выделяем аккаунт через Account Manager
+            user_id = credentials.get('user_id', 1)  # Получаем user_id из credentials
+            self.allocated_account = await self.account_manager.allocate_account(
+                user_id=user_id,
+                purpose="parsing",
+                timeout_minutes=120  # 2 часа для парсинга
+            )
+            
+            if not self.allocated_account:
+                self.logger.error("❌ No available accounts from Account Manager")
                 return False
-                
+            
+            self.current_account_id = self.allocated_account['account_id']
+            self.logger.info(f"✅ Account allocated by Account Manager: {self.current_account_id}")
+            
+            # Используем данные из Account Manager allocation
+            session_data = self.allocated_account['session_data']
+            
+            # API credentials должны быть в allocation или получаем из Vault
+            self.api_id = credentials.get('api_id') or os.getenv('TELEGRAM_API_ID')
+            self.api_hash = credentials.get('api_hash') or os.getenv('TELEGRAM_API_HASH')
+            
             if not self.api_id or not self.api_hash:
-                self.logger.error("No API credentials provided by integration-service")
-                return False
-                
-            if not session_data:
-                self.logger.error(f"No session data provided for session {session_id}")
+                self.logger.error("❌ No API credentials available")
+                await self._release_current_account()
                 return False
             
-            self.logger.info(f"🔐 Using API credentials from integration-service: api_id={self.api_id}")
+            self.logger.info(f"🔐 Using API credentials: api_id={self.api_id}")
             
-            # Получаем StringSession из данных integration-service  
+            # Получаем StringSession из данных Account Manager
             session_string = None
             
             if isinstance(session_data, dict):
-                # Session_data из БД - это JSON объект с ключом "encrypted_session"
                 if 'encrypted_session' in session_data:
-                    # Декодируем base64 → получаем StringSession как строку
-                    encrypted_session = session_data['encrypted_session']
                     try:
                         import base64
-                        session_bytes = base64.b64decode(encrypted_session)
+                        session_bytes = base64.b64decode(session_data['encrypted_session'])
                         session_string = session_bytes.decode('utf-8')
-                        self.logger.info(f"✅ Decoded StringSession from base64: {len(session_string)} chars")
+                        self.logger.info(f"✅ Decoded StringSession from Account Manager: {len(session_string)} chars")
                     except Exception as decode_error:
                         self.logger.error(f"❌ Failed to decode base64 session: {decode_error}")
-                        session_string = encrypted_session
-                else:
-                    # Если JSON содержит другие данные сессии
-                    self.logger.warning(f"⚠️ Unexpected session_data format: {list(session_data.keys())}")
-                    session_string = None
+                        session_string = session_data['encrypted_session']
             elif isinstance(session_data, str):
-                # Если данные в base64 или уже строка
                 try:
                     import base64
                     session_bytes = base64.b64decode(session_data)
@@ -104,12 +109,11 @@ class TelegramAdapter(BasePlatformAdapter):
                     session_string = session_data
             
             if not session_string:
-                self.logger.error("❌ Could not extract StringSession from session_data")
+                self.logger.error("❌ Could not extract StringSession from Account Manager data")
+                await self._release_current_account()
                 return False
             
-            self.logger.info(f"📱 Using StringSession directly (length: {len(session_string)})")
-            
-            # Initialize Telegram client with StringSession (НЕ файл!)
+            # Initialize Telegram client with StringSession
             from telethon.sessions import StringSession
             self.client = TelegramClient(
                 session=StringSession(session_string),
@@ -123,16 +127,80 @@ class TelegramAdapter(BasePlatformAdapter):
             await self.client.connect()
             
             if not await self.client.is_user_authorized():
-                self.logger.error("Session is not authorized")
+                self.logger.error("❌ Session is not authorized")
+                await self._release_current_account()
                 return False
             
             me = await self.client.get_me()
-            self.logger.info(f"✅ Telegram authenticated for user {me.first_name} ({me.id}) using integration-service credentials")
+            self.logger.info(f"✅ Telegram authenticated via Account Manager for user {me.first_name} ({me.id})")
             return True
             
+        except (FloodWaitError, PeerFloodError, AuthKeyError) as e:
+            # Обрабатываем ошибки через Account Manager
+            await self._handle_telegram_error(e)
+            return False
         except Exception as e:
             self.logger.error(f"❌ Authentication failed: {e}")
+            await self._release_current_account()
             return False
+    
+    async def _handle_telegram_error(self, error: Exception):
+        """Обработка ошибок Telegram через Account Manager"""
+        if not self.current_account_id:
+            return
+        
+        error_type = "unknown"
+        error_message = str(error)
+        
+        if isinstance(error, FloodWaitError):
+            error_type = "flood_wait"
+            error_message = f"FloodWaitError: {error.seconds}"
+        elif isinstance(error, PeerFloodError):
+            error_type = "peer_flood"
+        elif isinstance(error, AuthKeyError):
+            error_type = "auth_key_error"
+        
+        self.logger.warning(f"⚠️ Handling Telegram error via Account Manager: {error_type}")
+        
+        await self.account_manager.handle_error(
+            account_id=self.current_account_id,
+            error_type=error_type,
+            error_message=error_message,
+            context={"service": "parsing-service", "operation": "parsing"}
+        )
+    
+    async def _release_current_account(self):
+        """Освобождение текущего аккаунта через Account Manager"""
+        if not self.allocated_account or not self.current_account_id:
+            return
+        
+        try:
+            # Формируем статистику использования для парсинга
+            usage_stats = {
+                "invites_sent": 0,  # Парсинг не отправляет приглашения
+                "messages_sent": 0,  # Парсинг не отправляет сообщения
+                "contacts_added": 0,  # Парсинг не добавляет контакты
+                "channels_used": [],  # Можно добавить список парсенных каналов
+                "success": True,  # Успешность операции
+                "error_type": None,
+                "error_message": None
+            }
+            
+            await self.account_manager.release_account(
+                account_id=self.current_account_id,
+                usage_stats=usage_stats
+            )
+            
+            self.logger.info(f"✅ Account {self.current_account_id} released to Account Manager")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error releasing account to Account Manager: {e}")
+        
+        finally:
+            self.allocated_account = None
+            self.current_account_id = None
+            if self.client:
+                await self.client.disconnect()
     
     async def validate_targets(self, targets: List[str]) -> Dict[str, bool]:
         """Validate if Telegram targets exist and are accessible."""
