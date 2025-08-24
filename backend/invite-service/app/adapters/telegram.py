@@ -1,5 +1,6 @@
 """
 Telegram Platform Adapter для приглашений через Integration Service
+Интегрирован с Account Manager для централизованного управления аккаунтами
 """
 
 import asyncio
@@ -17,23 +18,30 @@ from .base import (
     AccountStatus
 )
 from app.services.integration_client import IntegrationServiceClient
+from app.clients.account_manager_client import AccountManagerClient
 
 logger = logging.getLogger(__name__)
 
 
 class TelegramInviteAdapter(InvitePlatformAdapter):
-    """Адаптер для приглашений в Telegram через Integration Service"""
+    """Адаптер для приглашений в Telegram через Integration Service
+    Интегрирован с Account Manager для централизованного управления аккаунтами
+    """
     
     def __init__(self):
         super().__init__("telegram")
         self.integration_client = IntegrationServiceClient()
+        self.account_manager = AccountManagerClient()
+        self.allocated_accounts = {}  # Кэш выделенных аккаунтов
         
-        # Стандартные лимиты Telegram
+        # Стандартные лимиты Telegram (соответствуют Account Manager)
         self.default_limits = {
-            "daily_invite_limit": 50,
-            "daily_message_limit": 40,
-            "hourly_invite_limit": 5,
-            "flood_wait_buffer": 300  # 5 минут буфер после flood wait
+            "daily_invite_limit": 30,      # Соответствует Account Manager
+            "daily_message_limit": 30,     # Соответствует Account Manager
+            "hourly_invite_limit": 2,      # Соответствует Account Manager
+            "per_channel_daily_limit": 15, # Соответствует Account Manager
+            "max_per_channel_total": 200,  # Максимум на канал с одного аккаунта
+            "flood_wait_buffer": 300       # 5 минут буфер после flood wait
         }
     
     async def initialize_accounts(self, user_id: int) -> List[PlatformAccount]:
