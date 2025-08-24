@@ -158,6 +158,29 @@ Content-Type: application/json
   "preferred_account_id": "uuid-optional",
   "timeout_minutes": 30
 }
+
+# Response: TelegramAccountAllocation
+{
+  "account_id": "550e8400-e29b-41d4-a716-446655440000",
+  "user_id": 123,
+  "phone": "+1234567890",
+  "session_data": "base64-encoded-session",
+  "allocated_at": "2025-08-24T12:00:00Z",
+  "allocated_by": "invite-service",
+  "purpose": "invite_campaign",
+  "expires_at": "2025-08-24T12:30:00Z",
+  "limits": {
+    "daily_invite_limit": 30,
+    "daily_message_limit": 30,
+    "per_channel_invite_limit": 15,
+    "max_per_channel_total": 200
+  },
+  "current_usage": {
+    "invites_today": 5,
+    "messages_today": 0,
+    "contacts_today": 2
+  }
+}
 ```
 
 #### Освобождение аккаунта
@@ -171,8 +194,10 @@ Content-Type: application/json
     "invites_sent": 5,
     "messages_sent": 0,
     "contacts_added": 0,
+    "channels_used": ["channel_id_1", "channel_id_2"],
     "success": true,
-    "channels_used": ["channel_id_1"]
+    "error_type": null,
+    "error_message": null
   }
 }
 ```
@@ -186,7 +211,8 @@ Content-Type: application/json
   "error_type": "flood_wait",
   "error_message": "FloodWaitError: 300",
   "context": {
-    "service": "invite-service"
+    "service": "invite-service",
+    "channel_id": "test_channel"
   }
 }
 ```
@@ -196,21 +222,64 @@ Content-Type: application/json
 #### Проверка здоровья аккаунта
 ```http
 GET /api/v1/account-manager/health/{account_id}
+
+# Response: AccountHealthStatus
+{
+  "account_id": "550e8400-e29b-41d4-a716-446655440000",
+  "is_healthy": true,
+  "status": "active",
+  "issues": ["Account is healthy"],
+  "recovery_eta": null,
+  "last_check": "2025-08-24T12:00:00Z",
+  "metadata": {
+    "used_invites_today": 5,
+    "used_messages_today": 0,
+    "error_count": 0,
+    "last_used_at": "2025-08-24T11:45:00Z"
+  }
+}
 ```
 
 #### Статус лимитов
 ```http
 GET /api/v1/account-manager/rate-limit/status/{account_id}
+
+# Response с подробной информацией о лимитах
+{
+  "account_id": "uuid",
+  "daily_limits": {
+    "invite": {"used": 5, "limit": 30, "remaining": 25},
+    "message": {"used": 0, "limit": 30, "remaining": 30}
+  },
+  "per_channel_limits": {
+    "channel_123": {
+      "used_today": 3,
+      "limit": 15,
+      "remaining": 12,
+      "total_sent": 150
+    }
+  }
+}
 ```
 
 #### Статистика восстановления
 ```http
 GET /api/v1/account-manager/stats/recovery
+
+# Response: подробная статистика восстановления аккаунтов
+{
+  "total_accounts": 50,
+  "healthy_accounts": 45,
+  "accounts_in_recovery": 3,
+  "permanently_disabled": 2,
+  "recovery_queue_size": 3,
+  "next_recovery_time": "2025-08-24T12:05:00Z"
+}
 ```
 
 ### Rate Limiting API
 
-#### Проверка лимитов
+#### Проверка лимитов перед действием
 ```http
 POST /api/v1/account-manager/rate-limit/check/{account_id}
 Content-Type: application/json
@@ -219,9 +288,22 @@ Content-Type: application/json
   "action_type": "invite",
   "target_channel_id": "channel_123"
 }
+
+# Response:
+{
+  "allowed": true,
+  "checks": {
+    "daily": {"used": 5, "limit": 30, "remaining": 25},
+    "hourly": {"used": 1, "limit": 2, "remaining": 1},
+    "per_channel": {"used": 3, "limit": 15, "remaining": 12},
+    "cooldown": {"in_cooldown": false, "next_available": null},
+    "burst": {"count": 0, "limit": 3, "available": true}
+  },
+  "reason": null
+}
 ```
 
-#### Запись действия
+#### Запись выполненного действия
 ```http
 POST /api/v1/account-manager/rate-limit/record/{account_id}
 Content-Type: application/json
@@ -233,7 +315,7 @@ Content-Type: application/json
 }
 ```
 
-## Background Workers
+## Background Workers (Celery)
 
 ### Периодические задачи
 
@@ -243,13 +325,13 @@ Content-Type: application/json
 
 2. **Сброс дневных лимитов** (в полночь UTC)
    - Обнуляет `used_invites_today`, `used_messages_today`, `contacts_today`
-   - Очищает `per_channel_invites`
+   - Очищает `per_channel_invites` (today counters)
 
 3. **Мониторинг здоровья** (каждые 15 минут)
    - Проверяет проблемные аккаунты
    - Автоматически планирует восстановление
 
-4. **Очистка устаревших данных** (каждые 30 минут - 1 час)
+4. **Очистка устаревших данных** (каждые 30 минут)
    - Удаляет истекшие блокировки
    - Очищает старые rate limiting данные
 
@@ -261,32 +343,311 @@ Content-Type: application/json
 
 ```bash
 # Worker для обработки задач
-python -m celery -A app.workers.account_manager_workers:celery_app worker \
+docker exec integration-service python -m celery -A app.workers.account_manager_workers:celery_app worker \
   --loglevel=info \
   --queues=account_manager_high,account_manager_normal,account_manager_low \
   --concurrency=2
 
 # Beat scheduler для периодических задач
-python -m celery -A app.workers.account_manager_workers:celery_app beat \
+docker exec integration-service python -m celery -A app.workers.account_manager_workers:celery_app beat \
   --loglevel=info
+
+# Мониторинг задач (Flower)
+docker exec integration-service python -m celery -A app.workers.account_manager_workers:celery_app flower
 ```
 
 ## Интеграция с сервисами
 
-### Invite Service
+### Invite Service Integration
 
 ```python
-# Пример использования в Invite Service
+# backend/invite-service/app/clients/account_manager_client.py
 import httpx
+from typing import Optional
+from ..models.account_manager import TelegramAccountAllocation, AccountUsageStats
 
 class AccountManagerClient:
     def __init__(self):
-        self.base_url = "http://integration-service:8000/api/v1/account-manager"
+        self.base_url = "http://integration-service:8001/api/v1/account-manager"
+        self.timeout = 30.0
     
-    async def allocate_account(self, user_id: int, purpose: str = "invite_campaign"):
-        async with httpx.AsyncClient() as client:
-            response = await client.post(f"{self.base_url}/allocate", json={
-                "user_id": user_id,
+    async def allocate_account(
+        self, 
+        user_id: int, 
+        purpose: str = "invite_campaign",
+        timeout_minutes: int = 30
+    ) -> Optional[TelegramAccountAllocation]:
+        """Выделить аккаунт для приглашений"""
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(
+                f"{self.base_url}/allocate",
+                json={
+                    "user_id": user_id,
+                    "purpose": purpose,
+                    "service_name": "invite-service",
+                    "timeout_minutes": timeout_minutes
+                }
+            )
+            
+            if response.status_code == 200:
+                return TelegramAccountAllocation(**response.json())
+            elif response.status_code == 404:
+                return None  # Нет доступных аккаунтов
+            else:
+                response.raise_for_status()
+    
+    async def release_account(
+        self,
+        account_id: str,
+        usage_stats: AccountUsageStats
+    ) -> bool:
+        """Освободить аккаунт после использования"""
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(
+                f"{self.base_url}/release/{account_id}",
+                json={
+                    "service_name": "invite-service",
+                    "usage_stats": usage_stats.dict()
+                }
+            )
+            return response.status_code == 200
+    
+    async def handle_error(
+        self,
+        account_id: str,
+        error_type: str,
+        error_message: str,
+        context: dict = None
+    ) -> bool:
+        """Обработать ошибку аккаунта"""
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(
+                f"{self.base_url}/handle-error/{account_id}",
+                json={
+                    "error_type": error_type,
+                    "error_message": error_message,
+                    "context": context or {}
+                }
+            )
+            return response.status_code == 200
+
+# Пример использования в Invite Service
+class InviteService:
+    def __init__(self):
+        self.account_manager = AccountManagerClient()
+    
+    async def send_invites(self, user_id: int, targets: List[str], channel_id: str):
+        # 1. Выделить аккаунт
+        allocation = await self.account_manager.allocate_account(user_id)
+        if not allocation:
+            raise Exception("No available accounts")
+        
+        invites_sent = 0
+        success = True
+        error_type = None
+        error_message = None
+        
+        try:
+            # 2. Использовать аккаунт для приглашений
+            for target in targets:
+                try:
+                    await self.send_single_invite(allocation, target, channel_id)
+                    invites_sent += 1
+                except FloodWaitError as e:
+                    error_type = "flood_wait"
+                    error_message = str(e)
+                    success = False
+                    break
+                except PeerFloodError as e:
+                    error_type = "peer_flood"
+                    error_message = str(e)
+                    success = False
+                    break
+        
+        finally:
+            # 3. Освободить аккаунт
+            usage_stats = AccountUsageStats(
+                invites_sent=invites_sent,
+                channels_used=[channel_id],
+                success=success,
+                error_type=error_type,
+                error_message=error_message
+            )
+            
+            await self.account_manager.release_account(
+                allocation.account_id, 
+                usage_stats
+            )
+            
+            # 4. Обработать ошибку если нужно
+            if not success and error_type:
+                await self.account_manager.handle_error(
+                    allocation.account_id,
+                    error_type,
+                    error_message,
+                    {"channel_id": channel_id, "service": "invite-service"}
+                )
+```
+
+## Testing & Verification
+
+### API Testing
+
+```bash
+# Тестирование выделения аккаунта
+curl -X POST http://localhost:8001/api/v1/account-manager/allocate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": 1, 
+    "purpose": "invite_campaign", 
+    "service_name": "test-service"
+  }'
+
+# Тестирование проверки лимитов
+curl -X POST http://localhost:8001/api/v1/account-manager/rate-limit/check/{account_id} \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action_type": "invite", 
+    "target_channel_id": "test_channel"
+  }'
+
+# Тестирование проверки здоровья
+curl -X GET http://localhost:8001/api/v1/account-manager/health/{account_id}
+
+# Тестирование статистики восстановления
+curl -X GET http://localhost:8001/api/v1/account-manager/stats/recovery
+```
+
+### Database Verification
+
+```sql
+-- Проверка аккаунтов и их статусов
+SELECT id, phone, status, locked, used_invites_today, used_messages_today, 
+       per_channel_invites, error_count, last_used_at
+FROM telegram_sessions 
+WHERE is_active = true;
+
+-- Проверка аккаунтов в восстановлении
+SELECT id, phone, status, flood_wait_until, blocked_until, error_count
+FROM telegram_sessions 
+WHERE status IN ('flood_wait', 'blocked') 
+   OR flood_wait_until > NOW() 
+   OR blocked_until > NOW();
+
+-- Статистика использования лимитов
+SELECT 
+    AVG(used_invites_today) as avg_invites,
+    AVG(used_messages_today) as avg_messages,
+    COUNT(*) as total_accounts,
+    COUNT(CASE WHEN status = 'active' THEN 1 END) as active_accounts,
+    COUNT(CASE WHEN locked = true THEN 1 END) as locked_accounts
+FROM telegram_sessions 
+WHERE is_active = true;
+```
+
+## Production Deployment
+
+### Health Checks
+
+```python
+# app/api/v1/endpoints/health.py
+@router.get("/account-manager")
+async def account_manager_health():
+    """Health check для Account Manager"""
+    try:
+        # Проверка подключения к Redis
+        redis_status = "healthy" if redis_client.ping() else "unhealthy"
+        
+        # Проверка базы данных
+        async with get_async_session() as session:
+            result = await session.execute("SELECT COUNT(*) FROM telegram_sessions WHERE is_active = true")
+            active_accounts = result.scalar()
+        
+        # Проверка очереди восстановления
+        recovery_queue_size = redis_client.zcard("account_recovery_queue")
+        
+        return {
+            "status": "healthy",
+            "components": {
+                "redis": redis_status,
+                "database": "healthy",
+                "active_accounts": active_accounts,
+                "recovery_queue_size": recovery_queue_size
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+```
+
+### Мониторинг метрик
+
+```python
+# Prometheus metrics для Account Manager
+from prometheus_client import Counter, Histogram, Gauge
+
+account_allocations_total = Counter(
+    'account_manager_allocations_total',
+    'Total account allocations',
+    ['service', 'purpose', 'status']
+)
+
+account_allocation_duration = Histogram(
+    'account_manager_allocation_duration_seconds',
+    'Account allocation duration'
+)
+
+active_accounts_gauge = Gauge(
+    'account_manager_active_accounts',
+    'Number of active accounts'
+)
+
+recovery_queue_size = Gauge(
+    'account_manager_recovery_queue_size',
+    'Size of account recovery queue'
+)
+
+# В коде сервисов:
+account_allocations_total.labels(
+    service='invite-service',
+    purpose='invite_campaign', 
+    status='success'
+).inc()
+
+with account_allocation_duration.time():
+    allocation = await account_manager.allocate_account(...)
+```
+
+## Status Summary
+
+**✅ ПОЛНОСТЬЮ РЕАЛИЗОВАНО И РАБОТАЕТ:**
+- [x] Database schema с Account Manager полями
+- [x] Core services (AccountManager, RateLimit, FloodBan)
+- [x] 12 REST API endpoints с полной функциональностью
+- [x] Data models и type definitions
+- [x] Redis integration для distributed locking
+- [x] Rate limiting с соблюдением Telegram API лимитов
+- [x] Per-channel limits с автосменой аккаунтов
+- [x] Error handling (FloodWait, PeerFlood, Auth errors)
+- [x] Health monitoring и статистика
+- [x] Comprehensive logging всех операций
+- [x] Business rules verification
+
+**⚠️ ОПЦИОНАЛЬНЫЕ РАСШИРЕНИЯ (не блокируют production):**
+- [ ] Background Workers (Celery) для автоматического сброса лимитов
+- [ ] Integration с Invite Service (HTTP client)
+- [ ] Grafana дашборды для мониторинга аккаунтов
+- [ ] Automated testing suite
+
+**🎯 СЛЕДУЮЩИЕ ШАГИ:**
+1. Интеграция Account Manager с Invite Service
+2. Запуск Background Workers для maintenance
+3. Настройка мониторинга в Grafana
+4. Production deployment и нагрузочное тестирование
                 "purpose": purpose,
                 "service_name": "invite-service"
             })
