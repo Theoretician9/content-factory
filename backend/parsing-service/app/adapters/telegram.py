@@ -1,5 +1,6 @@
 """
 Telegram platform adapter for parsing channels and groups with Telethon.
+Integrated with Account Manager for centralized account management.
 """
 
 import asyncio
@@ -27,18 +28,24 @@ from .base import BasePlatformAdapter
 from ..core.config import Platform
 from ..models.parse_task import ParseTask
 from ..models.parse_result import ParseResult
+from ..clients.account_manager_client import AccountManagerClient
 
 logger = logging.getLogger(__name__)
 
 
 class TelegramAdapter(BasePlatformAdapter):
-    """Telegram platform adapter for parsing channels and groups with Telethon."""
+    """Telegram platform adapter for parsing channels and groups with Telethon.
+    Integrated with Account Manager for centralized account management.
+    """
     
     def __init__(self):
         super().__init__(Platform.TELEGRAM)
         self.client = None
         self.api_id = None
         self.api_hash = None
+        self.account_manager = AccountManagerClient()
+        self.current_account_id = None
+        self.allocated_account = None
         
     @property
     def platform_name(self) -> str:
