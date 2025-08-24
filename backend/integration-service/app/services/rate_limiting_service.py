@@ -40,9 +40,9 @@ class RateLimitingService:
         self.telegram_limits = {
             ActionType.INVITE: {
                 'daily_limit': 30,         # 30 приглашений в день
-                'hourly_limit': 5,         # 5 приглашений в час
+                'hourly_limit': 2,         # 2 приглашения в час (равномерность)
                 'per_channel_daily': 15,   # 15 приглашений в день на канал
-                'cooldown_seconds': 120,   # 2 минуты между приглашениями
+                'cooldown_seconds': 900,   # 15 минут между приглашениями
                 'burst_limit': 3,          # Максимум 3 приглашения подряд
                 'burst_cooldown': 300      # 5 минут после burst
             },
