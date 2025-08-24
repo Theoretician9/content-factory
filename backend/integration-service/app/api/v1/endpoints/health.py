@@ -71,6 +71,69 @@ async def detailed_health_check(
         }
         health_status["status"] = "degraded"
     
+    # Проверка Redis (для Account Manager)
+    try:
+        settings = get_settings()
+        redis_client = redis.Redis(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            db=settings.REDIS_DB,
+            decode_responses=True
+        )
+        redis_client.ping()
+        health_status["components"]["redis"] = {
+            "status": "healthy",
+            "type": "Redis"
+        }
+    except Exception as e:
+        logger.error(f"Redis health check failed: {e}")
+        health_status["components"]["redis"] = {
+            "status": "unhealthy",
+            "error": str(e),
+            "type": "Redis"
+        }
+        health_status["status"] = "degraded"
+    
+    # Проверка Account Manager
+    try:
+        flood_ban_manager = FloodBanManager()
+        account_stats = await flood_ban_manager.get_account_recovery_stats(session)
+        
+        # Определяем статус на основе здоровых аккаунтов
+        total_accounts = account_stats.get("total_active", 0)
+        healthy_accounts = account_stats.get("healthy_accounts", 0)
+        health_percentage = (healthy_accounts / total_accounts * 100) if total_accounts > 0 else 100
+        
+        account_manager_status = "healthy"
+        if health_percentage < 50:
+            account_manager_status = "unhealthy"
+            health_status["status"] = "degraded"
+        elif health_percentage < 80:
+            account_manager_status = "degraded"
+            if health_status["status"] == "healthy":
+                health_status["status"] = "degraded"
+        
+        health_status["components"]["account_manager"] = {
+            "status": account_manager_status,
+            "type": "Account Manager",
+            "stats": {
+                "total_accounts": total_accounts,
+                "healthy_accounts": healthy_accounts,
+                "health_percentage": round(health_percentage, 1),
+                "flood_wait_active": account_stats.get("flood_wait_active", 0),
+                "blocked_active": account_stats.get("blocked_active", 0),
+                "recovery_queue_size": account_stats.get("recovery_queue_size", 0)
+            }
+        }
+    except Exception as e:
+        logger.error(f"Account Manager health check failed: {e}")
+        health_status["components"]["account_manager"] = {
+            "status": "unhealthy",
+            "error": str(e),
+            "type": "Account Manager"
+        }
+        health_status["status"] = "degraded"
+    
     # Если хотя бы один компонент нездоров, возвращаем 503
     if health_status["status"] != "healthy":
         raise HTTPException(
