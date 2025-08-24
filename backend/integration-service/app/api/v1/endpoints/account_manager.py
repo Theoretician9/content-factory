@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
-from ...core.database import get_async_session
+from ...database import get_async_session
 from ...models.account_manager_types import (
     AccountPurpose, ActionType, ErrorType, TelegramAccountAllocation,
     AccountUsageStats, AccountHealthStatus, FloodWaitInfo
