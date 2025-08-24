@@ -46,13 +46,14 @@ class ErrorType(str, Enum):
 @dataclass
 class AccountLimits:
     """Лимиты аккаунта"""
-    daily_invites: int = 30
-    daily_messages: int = 30
-    daily_contacts: int = 15
-    per_channel_invites_daily: int = 15
-    per_channel_invites_total: int = 200
-    invite_pause_minutes: int = 10
-    message_pause_minutes: int = 2
+    daily_invite_limit: int = 30
+    daily_message_limit: int = 30
+    contacts_daily_limit: int = 15
+    per_channel_invite_limit: int = 15
+    hourly_invite_limit: int = 5
+    hourly_message_limit: int = 10
+    invite_cooldown_minutes: int = 2
+    message_cooldown_minutes: int = 1
 
 @dataclass
 class AccountUsageStats:
@@ -98,10 +99,10 @@ class AccountErrorResult:
 class FloodWaitInfo:
     """Информация о FloodWait"""
     account_id: UUID
-    seconds: int
-    until: datetime
-    method: str
-    context: Dict[str, Any]
+    wait_until: datetime
+    seconds_remaining: int
+    reason: str
+    can_retry_at: datetime
 
 @dataclass
 class AccountHealthStatus:
@@ -109,11 +110,11 @@ class AccountHealthStatus:
     account_id: UUID
     is_healthy: bool
     status: AccountStatus
-    is_locked: bool
-    flood_wait_until: Optional[datetime]
-    blocked_until: Optional[datetime]
-    error_count: int
-    last_error: Optional[str]
-    limits_used: Dict[str, int]
-    limits_available: Dict[str, int]
-    recommendations: List[str]
+    issues: List[str]
+    recovery_eta: Optional[datetime]
+    last_check: datetime
+    metadata: Optional[Dict[str, Any]] = None
+    
+    def __post_init__(self):
+        if self.metadata is None:
+            self.metadata = {}
