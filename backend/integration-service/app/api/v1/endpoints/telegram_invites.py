@@ -285,7 +285,6 @@ async def send_telegram_invite(
             message_id=result.id if hasattr(result, 'id') else None,
             sent_at=end_time,
             execution_time=execution_time,
-            account_id=allocation.account_id,
             message="Приглашение успешно отправлено"
         )
         
