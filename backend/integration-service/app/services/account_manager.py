@@ -394,11 +394,14 @@ class AccountManagerService:
         """
         now = datetime.now(timezone.utc)
         
+        logger.info(f"🔍 ДИАГНОСТИКА: Поиск аккаунтов для user_id={user_id}, purpose={purpose}")
+        logger.info(f"🔍 ДИАГНОСТИКА: Текущее время (UTC): {now}")
+        
         # Базовые условия для доступности аккаунта (НЕ проверяем locked поля в БД!)
         conditions = [
             TelegramSession.user_id == user_id,
             TelegramSession.is_active == True,
-            TelegramSession.status == AccountStatus.ACTIVE,
+            TelegramSession.status == AccountStatus.ACTIVE.value,  # Сравниваем с .value
             or_(
                 TelegramSession.flood_wait_until.is_(None),
                 TelegramSession.flood_wait_until <= now
@@ -425,22 +428,36 @@ class AccountManagerService:
         result = await session.execute(query)
         accounts = result.scalars().all()
         
+        logger.info(f"🔍 ДИАГНОСТИКА: Найдено {len(accounts)} аккаунтов после SQL фильтрации")
+        
         # Дополнительная фильтрация по лимитам в зависимости от цели
         filtered_accounts = []
-        for account in accounts:
+        for i, account in enumerate(accounts):
+            logger.info(f"🔍 ДИАГНОСТИКА: Аккаунт {i+1}: id={account.id}, status='{account.status}', is_active={account.is_active}")
+            logger.info(f"🔍 ДИАГНОСТИКА: flood_wait_until={account.flood_wait_until}, blocked_until={account.blocked_until}")
+            
             # ПРОВЕРЯЕМ REDIS LOCKS - главное отличие от старой логики!
             lock_key = f"account_lock:{account.id}"
-            if self.redis_client.exists(lock_key):
+            redis_locked = self.redis_client.exists(lock_key)
+            logger.info(f"🔍 ДИАГНОСТИКА: Redis lock для {account.id}: {redis_locked}")
+            
+            if redis_locked:
                 logger.debug(f"🔒 Account {account.id} is locked in Redis, skipping")
                 continue
             
             if purpose == AccountPurpose.INVITE_CAMPAIGN and account.can_send_invite():
                 filtered_accounts.append(account)
+                logger.info(f"✅ ДИАГНОСТИКА: Аккаунт {account.id} подходит для INVITE_CAMPAIGN")
             elif purpose == AccountPurpose.MESSAGE_CAMPAIGN and account.can_send_message():
                 filtered_accounts.append(account)
+                logger.info(f"✅ ДИАГНОСТИКА: Аккаунт {account.id} подходит для MESSAGE_CAMPAIGN")
             elif purpose in [AccountPurpose.PARSING, AccountPurpose.GENERAL]:
                 filtered_accounts.append(account)
+                logger.info(f"✅ ДИАГНОСТИКА: Аккаунт {account.id} подходит для {purpose}")
+            else:
+                logger.warning(f"❌ ДИАГНОСТИКА: Аккаунт {account.id} НЕ подходит для {purpose}")
         
+        logger.info(f"🔍 ДИАГНОСТИКА: Итого отфильтровано {len(filtered_accounts)} доступных аккаунтов")
         return filtered_accounts
     
     async def _select_optimal_account(
