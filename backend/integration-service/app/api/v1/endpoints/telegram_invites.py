@@ -316,9 +316,9 @@ async def send_telegram_message(
     user_id = await get_user_id_from_request(request)
     
     # Проверка доступа к аккаунту
-    account = await telegram_service.session_service.get_user_session_by_id(session, user_id, account_id)
+    account = await telegram_service.session_service.get_by_id(session, account_id)
     
-    if not account:
+    if not account or account.user_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Telegram аккаунт не найден"
@@ -411,34 +411,45 @@ async def get_account_limits(
     # Изоляция пользователей
     user_id = await get_user_id_from_request(request)
     
-    account = await telegram_service.session_service.get_user_session_by_id(session, user_id, account_id)
+    # Получаем аккаунт и проверяем принадлежность пользователю
+    account = await telegram_service.session_service.get_by_id(session, account_id)
     
-    if not account:
+    if not account or account.user_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Telegram аккаунт не найден"
         )
     
-    # Базовые лимиты Telegram
+    # Базовые лимиты Telegram из базы данных
     limits = {
-        "daily_invites": 50,      # Приглашений в день
-        "daily_messages": 40,     # Сообщений в день
+        "daily_invites": 30,      # Приглашений в день
+        "daily_messages": 30,     # Сообщений в день
+        "contacts_daily": 15,     # Контактов в день
+        "per_channel_daily": 15,  # На канал в день
         "hourly_invites": 5,      # Приглашений в час
-        "flood_wait_active": False,
+        "flood_wait_active": account.flood_wait_until is not None and account.flood_wait_until > datetime.utcnow(),
         "account_restrictions": []
     }
     
-    # TODO: Интеграция с Redis для получения текущих счетчиков
-    # TODO: Проверка активных flood wait ограничений
+    # Текущее использование из базы данных
+    current_usage = {
+        "daily_invites_used": account.used_invites_today or 0,
+        "daily_messages_used": account.used_messages_today or 0,
+        "contacts_used": account.contacts_today or 0,
+        "hourly_invites_used": 0  # TODO: из Redis
+    }
+    
+    # Проверяем активные ограничения
+    restrictions = []
+    if account.blocked_until and account.blocked_until > datetime.utcnow():
+        restrictions.append(f"Blocked until {account.blocked_until.isoformat()}")
+    if account.flood_wait_until and account.flood_wait_until > datetime.utcnow():
+        restrictions.append(f"Flood wait until {account.flood_wait_until.isoformat()}")
     
     return TelegramAccountLimitsResponse(
         account_id=account_id,
         limits=limits,
-        current_usage={
-            "daily_invites_used": 0,
-            "daily_messages_used": 0,
-            "hourly_invites_used": 0
-        },
-        restrictions=[],
-        last_updated=datetime.utcnow()
+        current_usage=current_usage,
+        restrictions=restrictions,
+        last_updated=account.updated_at or datetime.utcnow()
     ) 
