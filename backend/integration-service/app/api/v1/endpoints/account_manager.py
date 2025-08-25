@@ -485,6 +485,56 @@ async def get_recovery_stats(
         logger.error(f"❌ Error getting recovery stats: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting recovery stats: {str(e)}")
 
+@router.post("/release-all")
+async def release_all_accounts(
+    request: ReleaseAllRequest,
+    session: AsyncSession = Depends(get_async_session),
+    account_manager: AccountManagerService = Depends(get_account_manager)
+):
+    """
+    Освободить все аккаунты, заблокированные сервисом
+    """
+    try:
+        logger.info(f"🔓 Bulk release request for all accounts locked by {request.service_name}")
+        
+        # Получаем все Redis locks для данного сервиса
+        lock_pattern = f"account_lock:*"
+        all_locks = account_manager.redis_client.keys(lock_pattern)
+        
+        released_count = 0
+        errors = []
+        
+        for lock_key in all_locks:
+            lock_value = account_manager.redis_client.get(lock_key)
+            
+            if lock_value and lock_value.startswith(f"{request.service_name}:"):
+                try:
+                    # Освобождаем lock
+                    account_manager.redis_client.delete(lock_key)
+                    released_count += 1
+                    
+                    # Логируем освобождение
+                    account_id = lock_key.decode('utf-8').split(':')[1] if isinstance(lock_key, bytes) else lock_key.split(':')[1]
+                    logger.debug(f"🔓 Released lock for account {account_id}")
+                    
+                except Exception as e:
+                    account_id = lock_key.decode('utf-8') if isinstance(lock_key, bytes) else str(lock_key)
+                    error_msg = f"Failed to release {account_id}: {str(e)}"
+                    errors.append(error_msg)
+                    logger.error(f"❌ {error_msg}")
+        
+        return {
+            "success": True,
+            "message": f"Released {released_count} accounts locked by {request.service_name}",
+            "released_count": released_count,
+            "errors": errors if errors else None,
+            "released_at": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error releasing all accounts for {request.service_name}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error releasing accounts: {str(e)}")
+
 @router.post("/maintenance/reset-daily-limits")
 async def reset_daily_limits(
     session: AsyncSession = Depends(get_async_session),
