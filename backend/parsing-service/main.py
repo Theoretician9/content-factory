@@ -619,34 +619,40 @@ async def execute_real_parsing_with_account_manager(task, allocation):
         
         logger.error(f"❌ AccountManager: Task {task['id']} failed on account {assigned_account_id}: {e}")
         
-        # Handle FloodWait errors specifically
+        # Handle errors through Account Manager
+        error_type = "unknown"
         if "FloodWaitError" in str(e) or "flood" in str(e).lower():
-            import re
-            # Extract seconds from error message
-            match = re.search(r'(\d+)', str(e))
-            seconds = int(match.group(1)) if match else 300  # Default 5 min
-            
-            await account_manager.handle_flood_wait(
-                account_id=assigned_account_id,
-                seconds=seconds,
-                error_message=str(e)
-            )
-        else:
-            # Free the account for other types of errors
-            await account_manager.free_account_from_task(task["id"])
+            error_type = "flood_wait"
+        elif "PeerFloodError" in str(e):
+            error_type = "peer_flood"
+        elif "AuthKeyError" in str(e):
+            error_type = "auth_key_error"
+        
+        await account_manager.handle_error(
+            account_id=assigned_account_id,
+            error_type=error_type,
+            error_message=str(e),
+            context={"service": "parsing-service", "task_id": task["id"]}
+        )
 
 # Legacy function kept for compatibility
 async def execute_real_parsing(task):
     """Legacy function - redirects to new Account Manager version."""
     logger.info(f"🔄 Legacy execute_real_parsing called for task {task['id']}, using AccountManager version")
     
-    # Try to assign account and use new function
-    from app.core.account_manager import account_manager
-    assigned_account_id = await account_manager.assign_task_to_account(task["id"])
+    # Try to allocate account using new Account Manager
+    from app.clients.account_manager_client import AccountManagerClient
+    account_manager = AccountManagerClient()
     
-    if assigned_account_id:
-        task["assigned_account_id"] = assigned_account_id
-        await execute_real_parsing_with_account_manager(task, assigned_account_id)
+    allocation = await account_manager.allocate_account(
+        user_id=task.get("user_id", 1),
+        purpose="parsing",
+        timeout_minutes=120
+    )
+    
+    if allocation:
+        task["allocated_account"] = allocation
+        await execute_real_parsing_with_account_manager(task, allocation)
     else:
         logger.error(f"❌ No accounts available for legacy task {task['id']}")
         task["status"] = "failed"
