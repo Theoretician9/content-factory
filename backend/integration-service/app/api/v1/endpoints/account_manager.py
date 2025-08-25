@@ -66,6 +66,11 @@ class RateLimitRecordRequest(BaseModel):
     target_channel_id: Optional[str] = Field(None, description="ID целевого канала")
     success: bool = Field(True, description="Успешность действия")
 
+class ReleaseAllRequest(BaseModel):
+    """Запрос на освобождение всех аккаунтов сервиса"""
+    service_name: str = Field(..., description="Имя сервиса")
+    force: bool = Field(False, description="Принудительное освобождение")
+
 # Dependency injection
 async def get_account_manager() -> AccountManagerService:
     return AccountManagerService()
