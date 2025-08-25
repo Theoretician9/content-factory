@@ -183,11 +183,8 @@ class AccountManagerService:
                 logger.error(f"❌ Account {account_id} not found")
                 return False
             
-            # 2. Обновить лимиты based on usage_stats
+            # 2. Обновить статистику использования (НЕ трогаем locked поля!)
             new_values = {
-                'locked': False,
-                'locked_by': None,
-                'locked_until': None,
                 'last_used_at': datetime.utcnow()
             }
             
@@ -397,11 +394,10 @@ class AccountManagerService:
         """
         now = datetime.utcnow()
         
-        # Базовые условия для доступности аккаунта
+        # Базовые условия для доступности аккаунта (НЕ проверяем locked поля в БД!)
         conditions = [
             TelegramSession.user_id == user_id,
             TelegramSession.is_active == True,
-            TelegramSession.locked == False,
             TelegramSession.status == AccountStatus.ACTIVE,
             or_(
                 TelegramSession.flood_wait_until.is_(None),
