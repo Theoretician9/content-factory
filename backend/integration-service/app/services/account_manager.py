@@ -428,6 +428,12 @@ class AccountManagerService:
         # Дополнительная фильтрация по лимитам в зависимости от цели
         filtered_accounts = []
         for account in accounts:
+            # ПРОВЕРЯЕМ REDIS LOCKS - главное отличие от старой логики!
+            lock_key = f"account_lock:{account.id}"
+            if self.redis_client.exists(lock_key):
+                logger.debug(f"🔒 Account {account.id} is locked in Redis, skipping")
+                continue
+            
             if purpose == AccountPurpose.INVITE_CAMPAIGN and account.can_send_invite():
                 filtered_accounts.append(account)
             elif purpose == AccountPurpose.MESSAGE_CAMPAIGN and account.can_send_message():
