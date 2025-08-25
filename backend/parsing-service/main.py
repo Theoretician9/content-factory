@@ -1516,6 +1516,62 @@ async def estimate_parsing_time(request_data: dict):
             "data": {}
         }
 
+@app.delete("/admin/clear-all-tasks", tags=["Admin"])
+async def clear_all_tasks():
+    """Clear all parsing tasks (both in-memory and database) and release accounts."""
+    global created_tasks
+    try:
+        from app.clients.account_manager_client import AccountManagerClient
+        from app.database import AsyncSessionLocal
+        from app.models.parse_task import ParseTask
+        from sqlalchemy import select, delete
+        
+        account_manager = AccountManagerClient()
+        
+        # Clear in-memory tasks
+        in_memory_count = len(created_tasks)
+        created_tasks.clear()
+        logger.info(f"🗑️ Cleared {in_memory_count} in-memory tasks")
+        
+        # Clear database tasks
+        async with AsyncSessionLocal() as db_session:
+            # Get count before deletion
+            db_count_result = await db_session.execute(select(ParseTask))
+            db_tasks = db_count_result.fetchall()
+            db_count = len(db_tasks)
+            
+            # Delete all tasks from database
+            if db_count > 0:
+                await db_session.execute(delete(ParseTask))
+                await db_session.commit()
+                logger.info(f"🗑️ Cleared {db_count} database tasks")
+        
+        # Release all locked accounts
+        try:
+            release_result = await account_manager.release_all_accounts()
+            logger.info(f"🔓 Released accounts: {release_result}")
+        except Exception as release_error:
+            logger.warning(f"⚠️ Failed to release accounts: {release_error}")
+            release_result = {"error": str(release_error)}
+        
+        return {
+            "success": True,
+            "message": "All parsing tasks cleared and accounts released",
+            "details": {
+                "in_memory_tasks_cleared": in_memory_count,
+                "database_tasks_cleared": db_count,
+                "account_release_result": release_result
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error clearing all tasks: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to clear all tasks"
+        }
+
 @app.get("/metrics", tags=["Monitoring"])
 async def get_metrics():
     """Get Prometheus-style metrics for monitoring."""
