@@ -301,53 +301,6 @@ async def send_telegram_invite(
             logger.info(f"✅ Account {allocation.account_id} released successfully")
         except Exception as release_error:
             logger.error(f"❌ Failed to release account {allocation.account_id}: {release_error}")
-        
-        except FloodWaitError as e:
-            # Telegram FloodWait ошибка
-            logger.warning(f"FloodWait для аккаунта {account_id}: {e.seconds}s")
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail={
-                    "error": "flood_wait",
-                    "seconds": e.seconds,
-                    "message": f"Превышен лимит запросов. Ожидание {e.seconds} секунд."
-                }
-            )
-        
-        except PeerFloodError as e:
-            # Слишком много запросов к пользователям
-            logger.warning(f"PeerFlood для аккаунта {account_id}")
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail={
-                    "error": "peer_flood",
-                    "message": "Слишком много запросов к пользователям. Аккаунт временно заблокирован."
-                }
-            )
-        
-        except UserNotMutualContactError as e:
-            # Пользователь не в контактах
-            logger.info(f"User not mutual contact: {invite_data.target_username or invite_data.target_phone}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "error": "not_mutual_contact",
-                    "message": "Пользователь должен быть в ваших контактах"
-                }
-            )
-        
-        except Exception as e:
-            # Обработка ошибок приватности и других общих ошибок
-            error_msg = str(e).lower()
-            if "privacy" in error_msg or "restricted" in error_msg:
-                logger.info(f"Privacy restricted для {invite_data.target_username or invite_data.target_phone}")
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail={
-                        "error": "privacy_restricted",
-                        "message": "Настройки приватности пользователя запрещают приглашения"
-                    }
-                )
             else:
                 # Общие ошибки
                 logger.error(f"Telegram invite error: {str(e)}")
