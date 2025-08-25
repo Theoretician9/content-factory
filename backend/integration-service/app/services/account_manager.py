@@ -96,14 +96,12 @@ class AccountManagerService:
                 logger.warning(f"❌ Failed to acquire lock for account {selected_account.id}")
                 return None
             
-            # 4. Обновить статус в базе данных
+            # 4. НЕ обновляем поля locked в базе данных - только Redis locks!
+            # Обновляем только информацию о последнем использовании
             await session.execute(
                 update(TelegramSession)
                 .where(TelegramSession.id == selected_account.id)
                 .values(
-                    locked=True,
-                    locked_by=service_name,
-                    locked_until=expires_at,
                     last_used_at=datetime.utcnow()
                 )
             )

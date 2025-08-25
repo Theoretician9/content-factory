@@ -184,6 +184,123 @@ async def send_telegram_invite(
             
             # Успех!
             usage_stats.success = True
+            
+        except FloodWaitError as e:
+            # Telegram FloodWait ошибка
+            logger.warning(f"FloodWait для аккаунта {allocation.account_id}: {e.seconds}s")
+            usage_stats.error_type = ErrorType.FLOOD_WAIT
+            usage_stats.error_message = f"FloodWait {e.seconds}s"
+            
+            # Освободить аккаунт и обработать ошибку в Account Manager
+            await account_manager.handle_account_error(
+                session=session,
+                account_id=allocation.account_id,
+                error_type=ErrorType.FLOOD_WAIT,
+                error_message=f"FloodWait {e.seconds}s",
+                context={"service": "integration-service", "action": "invite"}
+            )
+            
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail={
+                    "error": "flood_wait",
+                    "seconds": e.seconds,
+                    "message": f"Превышен лимит запросов. Ожидание {e.seconds} секунд."
+                }
+            )
+        
+        except PeerFloodError as e:
+            # Слишком много запросов к пользователям
+            logger.warning(f"PeerFlood для аккаунта {allocation.account_id}")
+            usage_stats.error_type = ErrorType.PEER_FLOOD
+            usage_stats.error_message = "PeerFlood - too many user requests"
+            
+            # Освободить аккаунт и обработать ошибку в Account Manager
+            await account_manager.handle_account_error(
+                session=session,
+                account_id=allocation.account_id,
+                error_type=ErrorType.PEER_FLOOD,
+                error_message="Too many requests to users",
+                context={"service": "integration-service", "action": "invite"}
+            )
+            
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail={
+                    "error": "peer_flood",
+                    "message": "Слишком много запросов к пользователям. Аккаунт временно заблокирован."
+                }
+            )
+        
+        except UserNotMutualContactError as e:
+            # Пользователь не в контактах
+            logger.info(f"User not mutual contact: {invite_data.target_username or invite_data.target_phone}")
+            usage_stats.error_type = ErrorType.USER_RESTRICTED
+            usage_stats.error_message = "User not in contacts"
+            
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "not_mutual_contact",
+                    "message": "Пользователь должен быть в ваших контактах"
+                }
+            )
+        
+        except Exception as e:
+            # Обработка ошибок приватности и других общих ошибок
+            error_msg = str(e).lower()
+            
+            if "privacy" in error_msg or "restricted" in error_msg:
+                logger.info(f"Privacy restricted для {invite_data.target_username or invite_data.target_phone}")
+                usage_stats.error_type = ErrorType.USER_RESTRICTED
+                usage_stats.error_message = "Privacy restrictions"
+                
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "privacy_restricted",
+                        "message": "Настройки приватности пользователя запрещают приглашения"
+                    }
+                )
+            else:
+                # Общие ошибки
+                logger.error(f"Telegram invite error: {str(e)}")
+                usage_stats.error_type = ErrorType.API_ERROR
+                usage_stats.error_message = str(e)
+                
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "error": "invite_failed",
+                        "message": str(e)
+                    }
+                )
+        
+        # Успешный результат
+        end_time = datetime.utcnow()
+        execution_time = (end_time - start_time).total_seconds()
+        
+        return TelegramInviteResponse(
+            status="success",
+            message_id=result.id if hasattr(result, 'id') else None,
+            sent_at=end_time,
+            execution_time=execution_time,
+            account_id=allocation.account_id,
+            message="Приглашение успешно отправлено"
+        )
+        
+    finally:
+        # 4. ВСЕГДА освобождать аккаунт в Account Manager
+        try:
+            await account_manager.release_account(
+                session=session,
+                account_id=allocation.account_id,
+                service_name="integration-service",
+                usage_stats=usage_stats
+            )
+            logger.info(f"✅ Account {allocation.account_id} released successfully")
+        except Exception as release_error:
+            logger.error(f"❌ Failed to release account {allocation.account_id}: {release_error}")
         
         except FloodWaitError as e:
             # Telegram FloodWait ошибка
