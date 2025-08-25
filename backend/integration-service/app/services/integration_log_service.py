@@ -38,6 +38,27 @@ class IntegrationLogService(BaseCRUDService[IntegrationLog]):
         
         return await self.create(session, log_data)
     
+    async def log_integration_action(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        integration_type: str,
+        action: str,
+        status: str,
+        details: Optional[Dict[str, Any]] = None,
+        error_message: Optional[str] = None
+    ) -> IntegrationLog:
+        """Alias for log_action for Account Manager compatibility"""
+        return await self.log_action(
+            session=session,
+            user_id=user_id,
+            integration_type=integration_type,
+            action=action,
+            status=status,
+            details=details,
+            error_message=error_message
+        )
+    
     async def get_user_logs(
         self,
         session: AsyncSession,
