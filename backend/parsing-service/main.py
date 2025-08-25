@@ -1540,6 +1540,15 @@ async def clear_all_tasks():
             db_tasks = db_count_result.fetchall()
             db_count = len(db_tasks)
             
+            # Delete parse_results first to avoid foreign key constraint
+            from app.models.parse_result import ParseResult
+            results_count_result = await db_session.execute(select(ParseResult))
+            results_count = len(results_count_result.fetchall())
+            
+            if results_count > 0:
+                await db_session.execute(delete(ParseResult))
+                logger.info(f"🗑️ Cleared {results_count} parse results")
+            
             # Delete all tasks from database
             if db_count > 0:
                 await db_session.execute(delete(ParseTask))
@@ -1560,6 +1569,7 @@ async def clear_all_tasks():
             "details": {
                 "in_memory_tasks_cleared": in_memory_count,
                 "database_tasks_cleared": db_count,
+                "parse_results_cleared": results_count,
                 "account_release_result": release_result
             }
         }
