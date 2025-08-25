@@ -628,8 +628,8 @@ async def proxy_parsing_service(request: Request, path: str):
     elif path.startswith("v1/"):
         # API v1 endpoints
         target_url = f"{SERVICE_URLS['parsing']}/{path}"
-    elif path in ["tasks", "results", "stats", "status"] or path.startswith(("tasks/", "results/", "stats/", "status/")):
-        # Прямые endpoints без v1 префикса (включая вложенные пути)
+    elif path in ["tasks", "results", "stats", "status", "admin"] or path.startswith(("tasks/", "results/", "stats/", "status/", "admin/")):
+        # Прямые endpoints без v1 префикса (включая вложенные пути и admin endpoints)
         target_url = f"{SERVICE_URLS['parsing']}/{path}"
     else:
         # Остальные endpoints направляем в v1
@@ -696,8 +696,11 @@ async def proxy_invite_service(request: Request, path: str):
     """
     Проксирование всех запросов к Invite Service
     """
-    # Подготовка URL - все запросы направляем в /api/v1/
-    target_url = f"{SERVICE_URLS['invite']}/api/v1/{path}"
+    # Подготовка URL - admin endpoints направляем напрямую, остальные в /api/v1/
+    if path.startswith("admin/"):
+        target_url = f"{SERVICE_URLS['invite']}/{path}"
+    else:
+        target_url = f"{SERVICE_URLS['invite']}/api/v1/{path}"
     
     # Копирование headers (включая Authorization)
     headers = {}
