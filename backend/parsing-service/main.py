@@ -467,12 +467,15 @@ async def process_pending_tasks():
     except Exception as e:
         logger.error(f"❌ Ошибка обработки задач через AccountManager: {e}")
 
-async def execute_real_parsing_with_account_manager(task, assigned_account_id: str):
+async def execute_real_parsing_with_account_manager(task, allocation):
     """Execute REAL parsing with Account Manager and Parsing Speed support."""
     try:
         from app.services.real_parser import perform_real_parsing_with_progress  
-        from app.core.account_manager import account_manager
+        from app.clients.account_manager_client import AccountManagerClient
         from app.core.parsing_speed import parse_speed_from_string, get_speed_config
+        
+        account_manager = AccountManagerClient()
+        assigned_account_id = allocation['account_id']
         
         logger.info(f"🚀 AccountManager: Starting REAL parsing for task {task['id']} on account {assigned_account_id}: {task['link']}")
         
@@ -590,8 +593,21 @@ async def execute_real_parsing_with_account_manager(task, assigned_account_id: s
         
         logger.info(f"✅ AccountManager: Task {task['id']} completed on account {assigned_account_id}: {num_results} users")
         
-        # Free the account
-        await account_manager.free_account_from_task(task["id"])
+        # Release the account through Account Manager
+        usage_stats = {
+            "invites_sent": 0,  # Parsing doesn't send invites
+            "messages_sent": 0,  # Parsing doesn't send messages
+            "contacts_added": 0,  # Parsing doesn't add contacts
+            "channels_used": [task['link']],  # Track parsed channel
+            "success": True,
+            "error_type": None,
+            "error_message": None
+        }
+        
+        await account_manager.release_account(
+            account_id=assigned_account_id,
+            usage_stats=usage_stats
+        )
         
         # Process next pending tasks
         await process_pending_tasks()
