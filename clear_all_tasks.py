@@ -38,7 +38,7 @@ async def clear_invite_service_tasks():
         logger.info("🧹 Clearing invite service tasks...")
         
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.delete("http://localhost:8003/admin/clear-all-tasks")
+            response = await client.delete("https://content-factory.xyz/api/invite/admin/clear-all-tasks")
             
             if response.status_code == 200:
                 result = response.json()
@@ -60,7 +60,7 @@ async def check_account_manager_status():
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             # Check account status
-            response = await client.get("http://localhost:8000/api/v1/account-manager/status")
+            response = await client.get("https://content-factory.xyz/api/integrations/account-manager/status")
             
             if response.status_code == 200:
                 result = response.json()
