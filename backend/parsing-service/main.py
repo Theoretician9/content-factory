@@ -351,15 +351,36 @@ created_tasks = []
 async def check_telegram_accounts():
     """Check available Telegram accounts using Account Manager."""
     try:
-        from app.core.account_manager import account_manager
+        from app.clients.account_manager_client import AccountManagerClient
         
-        # Sync accounts from integration-service first
-        await account_manager.sync_accounts_from_integration_service()
+        account_manager = AccountManagerClient()
         
-        # Get available accounts
-        available_accounts = await account_manager.get_available_accounts()
-        logger.info(f"🔧 AccountManager: {len(available_accounts)} доступных аккаунтов")
-        return len(available_accounts) > 0
+        # Пробуем выделить аккаунт для проверки доступности
+        test_allocation = await account_manager.allocate_account(
+            user_id=1,
+            purpose="health_check",
+            timeout_minutes=1
+        )
+        
+        if test_allocation:
+            # Освобождаем тестовый аккаунт
+            await account_manager.release_account(
+                account_id=test_allocation['account_id'],
+                usage_stats={
+                    "invites_sent": 0,
+                    "messages_sent": 0,
+                    "contacts_added": 0,
+                    "channels_used": [],
+                    "success": True,
+                    "error_type": None,
+                    "error_message": None
+                }
+            )
+            logger.info(f"🔧 AccountManager: Аккаунты доступны через centralized Account Manager")
+            return True
+        else:
+            logger.warning(f"🔧 AccountManager: Нет доступных аккаунтов")
+            return False
         
     except Exception as e:
         logger.error(f"❌ Ошибка проверки аккаунтов через AccountManager: {e}")
