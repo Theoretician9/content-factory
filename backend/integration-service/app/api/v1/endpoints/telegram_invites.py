@@ -301,41 +301,6 @@ async def send_telegram_invite(
             logger.info(f"✅ Account {allocation.account_id} released successfully")
         except Exception as release_error:
             logger.error(f"❌ Failed to release account {allocation.account_id}: {release_error}")
-            else:
-                # Общие ошибки
-                logger.error(f"Telegram invite error: {str(e)}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail={
-                        "error": "invite_failed",
-                        "message": str(e)
-                    }
-                )
-        
-        # Успешный результат
-        end_time = datetime.utcnow()
-        execution_time = (end_time - start_time).total_seconds()
-        
-        return TelegramInviteResponse(
-            status="success",
-            message_id=result.id if hasattr(result, 'id') else None,
-            sent_at=end_time,
-            execution_time=execution_time,
-            target_username=invite_data.target_username,
-            target_phone=invite_data.target_phone,
-            invite_type=invite_data.invite_type
-        )
-    
-    except HTTPException:
-        # Перебрасываем HTTP исключения как есть
-        raise
-    
-    except Exception as e:
-        logger.error(f"Unexpected error in send_telegram_invite: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Внутренняя ошибка: {str(e)}"
-        )
 
 
 @router.post("/accounts/{account_id}/message", response_model=TelegramMessageResponse)
