@@ -246,7 +246,7 @@ async def get_available_accounts(
                 "account_id": str(account.id),
                 "phone": account.phone,
                 "status": account.status,
-                "is_available": account.is_available(),
+                "is_available": account.is_available,
                 "used_invites_today": account.used_invites_today,
                 "used_messages_today": account.used_messages_today,
                 "contacts_today": account.contacts_today,
