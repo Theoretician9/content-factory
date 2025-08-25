@@ -464,6 +464,50 @@ async def get_rate_limit_status(
         logger.error(f"❌ Error getting rate limit status for {account_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting rate limit status: {str(e)}")
 
+@router.get("/status")
+async def get_account_manager_status(
+    session: AsyncSession = Depends(get_async_session),
+    account_manager: AccountManagerService = Depends(get_account_manager)
+):
+    """
+    Получить общий статус Account Manager и статистику аккаунтов
+    """
+    try:
+        # Получаем статистику Redis locks
+        lock_pattern = f"account_lock:*"
+        all_locks = account_manager.redis_client.keys(lock_pattern)
+        
+        locked_accounts = {}
+        total_locked = 0
+        
+        for lock_key in all_locks:
+            lock_value = account_manager.redis_client.get(lock_key)
+            if lock_value:
+                service_name = lock_value.split(':')[0] if ':' in lock_value else 'unknown'
+                if service_name not in locked_accounts:
+                    locked_accounts[service_name] = 0
+                locked_accounts[service_name] += 1
+                total_locked += 1
+        
+        return {
+            "success": True,
+            "status": "operational",
+            "total_accounts": "unknown",  # Можно добавить запрос к базе данных если нужно
+            "locked_accounts": total_locked,
+            "locked_by_service": locked_accounts,
+            "redis_connected": True,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting Account Manager status: {e}")
+        return {
+            "success": False,
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
 @router.get("/stats/recovery")
 async def get_recovery_stats(
     session: AsyncSession = Depends(get_async_session),
