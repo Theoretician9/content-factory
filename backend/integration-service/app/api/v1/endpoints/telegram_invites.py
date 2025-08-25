@@ -1,9 +1,11 @@
 """
 API endpoints для Telegram приглашений через Integration Service
+Теперь использует Account Manager для распределения аккаунтов
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from telethon.errors import FloodWaitError, PeerFloodError, UserNotMutualContactError
 # Убрал PrivacyRestrictedError - не существует в этой версии telethon
 from telethon.tl.functions.channels import InviteToChannelRequest
@@ -17,6 +19,7 @@ import logging
 # ИСПРАВЛЕННЫЕ ИМПОРТЫ в соответствии с реальной структурой
 from ....database import get_async_session
 from ....models.telegram_sessions import TelegramSession
+from ....models.account_manager_types import AccountPurpose, ActionType, ErrorType, AccountUsageStats
 from ....core.auth import get_user_id_from_request
 from ....schemas.telegram_invites import (
     TelegramInviteRequest,
@@ -26,6 +29,7 @@ from ....schemas.telegram_invites import (
     TelegramAccountLimitsResponse
 )
 from ....services.telegram_service import TelegramService
+from ....services.account_manager import AccountManagerService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -35,31 +39,69 @@ def get_telegram_service() -> TelegramService:
     """Получение Telegram Service"""
     return TelegramService()
 
+def get_account_manager() -> AccountManagerService:
+    """Получение Account Manager Service"""
+    return AccountManagerService()
 
-@router.post("/accounts/{account_id}/invite", response_model=TelegramInviteResponse)
+
+@router.post("/invite", response_model=TelegramInviteResponse)
 async def send_telegram_invite(
-    account_id: UUID,
     invite_data: TelegramInviteRequest,
     request: Request,
     session: AsyncSession = Depends(get_async_session),
-    telegram_service: TelegramService = Depends(get_telegram_service)
+    telegram_service: TelegramService = Depends(get_telegram_service),
+    account_manager: AccountManagerService = Depends(get_account_manager)
 ):
-    """Отправка приглашения через Telegram аккаунт"""
+    """Отправка приглашения через Account Manager - правильная архитектура"""
     
     # Изоляция пользователей  
     user_id = await get_user_id_from_request(request)
     
-    # Проверка доступа к аккаунту
-    account = await telegram_service.session_service.get_user_session_by_id(session, user_id, account_id)
+    # 1. Запросить аккаунт у Account Manager
+    allocation = await account_manager.allocate_account(
+        session=session,
+        user_id=user_id,
+        purpose=AccountPurpose.INVITATION,
+        service_name="integration-service",
+        timeout_minutes=30
+    )
     
-    if not account or not account.is_active:
+    if not allocation:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Telegram аккаунт не найден или неактивен"
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "error": "no_available_accounts",
+                "message": "Нет доступных Telegram аккаунтов для отправки приглашений"
+            }
         )
     
+    # 2. Получить TelegramSession по ID
+    result = await session.execute(
+        select(TelegramSession).where(TelegramSession.id == allocation.account_id)
+    )
+    account = result.scalar_one_or_none()
+    
+    if not account:
+        # Освободить аллокацию при ошибке
+        await account_manager.release_account(
+            session=session,
+            account_id=allocation.account_id,
+            service_name="integration-service",
+            usage_stats=AccountUsageStats(success=False, error_type=ErrorType.ACCOUNT_NOT_FOUND)
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Telegram аккаунт не найден"
+        )
+    
+    usage_stats = AccountUsageStats(
+        invites_sent=0,
+        messages_sent=0,
+        success=False
+    )
+    
     try:
-        # Получение Telegram клиента
+        # 3. Получение Telegram клиента
         client = await telegram_service.get_client(account)
         
         if not client.is_connected():
@@ -90,6 +132,9 @@ async def send_telegram_invite(
                                 user_id=user.id,
                                 fwd_limit=10
                             ))
+                        
+                        usage_stats.invites_sent = 1
+                        usage_stats.channels_used = [str(invite_data.group_id)]
                     
                     elif invite_data.target_phone:
                         # Приглашение по номеру телефона
@@ -109,6 +154,9 @@ async def send_telegram_invite(
                             channel=group,
                             users=[user]
                         ))
+                        
+                        usage_stats.invites_sent = 1
+                        usage_stats.channels_used = [str(invite_data.group_id)]
                 
                 else:
                     raise Exception("group_id обязателен для group_invite")
@@ -128,9 +176,14 @@ async def send_telegram_invite(
                     entity=target_entity,
                     message=invite_data.message
                 )
+                
+                usage_stats.messages_sent = 1
             
             else:
                 raise Exception(f"Неподдерживаемый тип приглашения: {invite_data.invite_type}")
+            
+            # Успех!
+            usage_stats.success = True
         
         except FloodWaitError as e:
             # Telegram FloodWait ошибка
