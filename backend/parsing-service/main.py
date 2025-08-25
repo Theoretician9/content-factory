@@ -1417,18 +1417,20 @@ async def export_task_results(task_id: str, request: Request, format: str = "jso
 async def get_accounts_status():
     """Get status of all Telegram accounts managed by Account Manager."""
     try:
-        from app.core.account_manager import account_manager
+        # ОТКЛЮЧЕНО: Старая система Account Manager конфликтует с новой централизованной
+        # from app.core.account_manager import account_manager
+        # await account_manager.sync_accounts_from_integration_service()
+        # status = await account_manager.get_account_status()
         
-        # Sync accounts first
-        await account_manager.sync_accounts_from_integration_service()
-        
-        # Get comprehensive account status
-        status = await account_manager.get_account_status()
-        
+        # Возвращаем заглушку - реальные данные получаем из Integration Service Account Manager
         return {
             "success": True,
-            "data": status,
-            "message": "Account status retrieved successfully"
+            "data": {
+                "status_counts": {"message": "Использует централизованный Account Manager"},
+                "accounts": [],
+                "updated_at": datetime.utcnow().isoformat()
+            },
+            "message": "Redirected to centralized Account Manager in Integration Service"
         }
         
     except Exception as e:
@@ -1446,13 +1448,26 @@ async def get_accounts_status():
 async def get_task_queue():
     """Get task queue status and account assignments."""
     try:
-        from app.core.account_manager import account_manager
+        # ОТКЛЮЧЕНО: Старая система Account Manager конфликтует с новой централизованной
+        # from app.core.account_manager import account_manager
+        # queue_status = await account_manager.get_task_queue_status()
         
-        queue_status = await account_manager.get_task_queue_status()
+        # Возвращаем информацию из in-memory задач
+        total_tasks = len(created_tasks)
+        pending_tasks = [task for task in created_tasks if task["status"] == "pending"]
+        running_tasks = [task for task in created_tasks if task["status"] == "running"]
         
         return {
             "success": True,
-            "data": queue_status,
+            "data": {
+                'pending_tasks': len(pending_tasks),
+                'running_tasks': len(running_tasks),
+                'busy_accounts': 0,  # Управляется централизованным Account Manager
+                'pending_task_ids': [task["id"] for task in pending_tasks],
+                'running_assignments': {},
+                'updated_at': datetime.utcnow().isoformat(),
+                'note': 'Account management delegated to Integration Service Account Manager'
+            },
             "message": "Task queue status retrieved successfully"
         }
         
