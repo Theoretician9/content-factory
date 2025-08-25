@@ -599,6 +599,95 @@ async def release_all_accounts(
         logger.error(f"❌ Error releasing all accounts for {request.service_name}: {e}")
         raise HTTPException(status_code=500, detail=f"Error releasing accounts: {str(e)}")
 
+@router.get("/debug/redis-locks")
+async def debug_redis_locks(
+    account_manager: AccountManagerService = Depends(get_account_manager)
+):
+    """
+    Диагностический endpoint для проверки всех Redis locks
+    """
+    try:
+        lock_pattern = f"account_lock:*"
+        all_locks = account_manager.redis_client.keys(lock_pattern)
+        
+        lock_details = []
+        service_breakdown = {}
+        
+        for lock_key in all_locks:
+            lock_value = account_manager.redis_client.get(lock_key)
+            ttl = account_manager.redis_client.ttl(lock_key)
+            
+            key_str = lock_key.decode('utf-8') if isinstance(lock_key, bytes) else lock_key
+            account_id = key_str.split(':')[1] if ':' in key_str else 'unknown'
+            
+            if lock_value:
+                service_name = lock_value.split(':')[0] if ':' in lock_value else 'unknown'
+                timestamp = lock_value.split(':', 1)[1] if ':' in lock_value else 'unknown'
+                
+                if service_name not in service_breakdown:
+                    service_breakdown[service_name] = 0
+                service_breakdown[service_name] += 1
+                
+                lock_details.append({
+                    "account_id": account_id,
+                    "service_name": service_name,
+                    "locked_at": timestamp,
+                    "ttl_seconds": ttl,
+                    "key": key_str,
+                    "value": lock_value
+                })
+        
+        return {
+            "success": True,
+            "total_locks": len(all_locks),
+            "service_breakdown": service_breakdown,
+            "lock_details": lock_details,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting Redis locks debug info: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting lock info: {str(e)}")
+
+@router.post("/debug/clear-all-locks")
+async def clear_all_redis_locks(
+    account_manager: AccountManagerService = Depends(get_account_manager)
+):
+    """
+    ЭКСТРЕННЫЙ endpoint для очистки ВСЕХ Redis locks (используйте осторожно!)
+    """
+    try:
+        lock_pattern = f"account_lock:*"
+        all_locks = account_manager.redis_client.keys(lock_pattern)
+        
+        cleared_count = 0
+        cleared_locks = []
+        
+        for lock_key in all_locks:
+            lock_value = account_manager.redis_client.get(lock_key)
+            key_str = lock_key.decode('utf-8') if isinstance(lock_key, bytes) else lock_key
+            
+            cleared_locks.append({
+                "key": key_str,
+                "value": lock_value
+            })
+            
+            account_manager.redis_client.delete(lock_key)
+            cleared_count += 1
+        
+        return {
+            "success": True,
+            "message": f"Cleared ALL {cleared_count} Redis locks",
+            "cleared_count": cleared_count,
+            "cleared_locks": cleared_locks,
+            "cleared_at": datetime.utcnow().isoformat(),
+            "warning": "ALL account locks have been forcefully removed"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error clearing all Redis locks: {e}")
+        raise HTTPException(status_code=500, detail=f"Error clearing locks: {str(e)}")
+
 @router.post("/maintenance/reset-daily-limits")
 async def reset_daily_limits(
     session: AsyncSession = Depends(get_async_session),
