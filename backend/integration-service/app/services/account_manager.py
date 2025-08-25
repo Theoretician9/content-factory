@@ -5,7 +5,7 @@ Account Manager Service
 import logging
 import asyncio
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_, or_, func
@@ -73,7 +73,7 @@ class AccountManagerService:
             logger.info(f"🔍 Allocating account for user {user_id}, purpose: {purpose}, service: {service_name}")
             
             timeout_minutes = timeout_minutes or self.default_lock_timeout
-            expires_at = datetime.utcnow() + timedelta(minutes=timeout_minutes)
+            expires_at = datetime.now(timezone.utc) + timedelta(minutes=timeout_minutes)
             
             # 1. Найти доступные аккаунты
             available_accounts = await self._find_available_accounts(
@@ -102,7 +102,7 @@ class AccountManagerService:
                 update(TelegramSession)
                 .where(TelegramSession.id == selected_account.id)
                 .values(
-                    last_used_at=datetime.utcnow()
+                    last_used_at=datetime.now(timezone.utc)
                 )
             )
             await session.commit()
@@ -113,7 +113,7 @@ class AccountManagerService:
                 user_id=selected_account.user_id,
                 phone=selected_account.phone,
                 session_data=selected_account.session_data,
-                allocated_at=datetime.utcnow(),
+                allocated_at=datetime.now(timezone.utc),
                 allocated_by=service_name,
                 purpose=purpose,
                 expires_at=expires_at,
@@ -185,7 +185,7 @@ class AccountManagerService:
             
             # 2. Обновить статистику использования (НЕ трогаем locked поля!)
             new_values = {
-                'last_used_at': datetime.utcnow()
+                'last_used_at': datetime.now(timezone.utc)
             }
             
             # Обновляем счетчики использования
@@ -290,7 +290,7 @@ class AccountManagerService:
             logger.warning(f"⚠️ Handling account error: {error_type} for account {account_id}")
             
             context = context or {}
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             
             # Определяем действия на основе типа ошибки
             if error_type == ErrorType.FLOOD_WAIT:
@@ -392,7 +392,7 @@ class AccountManagerService:
         """
         Найти доступные аккаунты для пользователя
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # Базовые условия для доступности аккаунта (НЕ проверяем locked поля в БД!)
         conditions = [
@@ -474,7 +474,7 @@ class AccountManagerService:
             
             # Бонус за давность использования
             if account.last_used_at:
-                hours_since_use = (datetime.utcnow() - account.last_used_at).total_seconds() / 3600
+                hours_since_use = (datetime.now(timezone.utc) - account.last_used_at).total_seconds() / 3600
                 score += min(hours_since_use, 24)  # Максимум 24 часа
             else:
                 score += 24  # Никогда не использовался
@@ -495,7 +495,7 @@ class AccountManagerService:
         Получить distributed lock на аккаунт
         """
         lock_key = f"account_lock:{account_id}"
-        lock_value = f"{service_name}:{datetime.utcnow().isoformat()}"
+        lock_value = f"{service_name}:{datetime.now(timezone.utc).isoformat()}"
         
         # Устанавливаем lock с TTL
         result = self.redis_client.set(
