@@ -489,11 +489,31 @@ async def get_account_manager_status(
                 locked_accounts[service_name] += 1
                 total_locked += 1
         
+        # Получаем общее количество аккаунтов из базы данных
+        try:
+            from ....models.telegram_account import TelegramAccount
+            from sqlalchemy import select, func
+            
+            total_accounts_result = await session.execute(select(func.count(TelegramAccount.id)))
+            total_accounts = total_accounts_result.scalar() or 0
+            
+            active_accounts_result = await session.execute(
+                select(func.count(TelegramAccount.id)).where(TelegramAccount.is_active == True)
+            )
+            active_accounts = active_accounts_result.scalar() or 0
+            
+        except Exception as db_error:
+            logger.warning(f"⚠️ Could not get account counts from database: {db_error}")
+            total_accounts = "unknown"
+            active_accounts = "unknown"
+        
         return {
             "success": True,
             "status": "operational",
-            "total_accounts": "unknown",  # Можно добавить запрос к базе данных если нужно
+            "total_accounts": total_accounts,
+            "active_accounts": active_accounts,
             "locked_accounts": total_locked,
+            "available_accounts": active_accounts - total_locked if isinstance(active_accounts, int) and isinstance(total_locked, int) else "unknown",
             "locked_by_service": locked_accounts,
             "redis_connected": True,
             "timestamp": datetime.utcnow().isoformat()
