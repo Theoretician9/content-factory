@@ -86,12 +86,13 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                     }
                 )
                 
-                # Проверяем здоровье аккаунта через Account Manager
-                health_status = await self.account_manager.get_account_health(str(account.account_id))
-                if health_status:
-                    if not health_status.get("is_healthy", True):
-                        account.status = AccountStatus.INACTIVE
-                        logger.warning(f"⚠️ Аккаунт {account.account_id} нездоров: {health_status.get('issues', [])}")
+                # TODO: Временно отключена проверка здоровья через Account Manager
+                # т.к. endpoint /health/{account_id} может работать неправильно
+                # health_status = await self.account_manager.get_account_health(str(account.account_id))
+                # if health_status:
+                #     if not health_status.get("is_healthy", True):
+                #         account.status = AccountStatus.INACTIVE
+                #         logger.warning(f"⚠️ Аккаунт {account.account_id} нездоров: {health_status.get('issues', [])}")
                 
                 platform_accounts.append(account)
             
