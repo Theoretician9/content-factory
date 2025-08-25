@@ -98,6 +98,66 @@ async def health_check():
     """Базовый health check"""
     return {"status": "healthy", "service": "invite-service"}
 
+@app.delete("/admin/clear-all-tasks")
+async def clear_all_tasks():
+    """Clear all invite tasks (database) and release accounts."""
+    try:
+        from app.clients.account_manager_client import AccountManagerClient
+        from app.core.database import get_db_session
+        from app.models import InviteTask, InviteTarget, InviteExecutionLog
+        from sqlalchemy import select, delete
+        
+        account_manager = AccountManagerClient()
+        
+        # Clear database tasks
+        with get_db_session() as db:
+            # Get count before deletion
+            tasks_count = db.query(InviteTask).count()
+            targets_count = db.query(InviteTarget).count()
+            logs_count = db.query(InviteExecutionLog).count()
+            
+            # Delete all related data
+            if logs_count > 0:
+                db.query(InviteExecutionLog).delete()
+                logger.info(f"🗑️ Cleared {logs_count} execution logs")
+            
+            if targets_count > 0:
+                db.query(InviteTarget).delete()
+                logger.info(f"🗑️ Cleared {targets_count} invite targets")
+            
+            if tasks_count > 0:
+                db.query(InviteTask).delete()
+                logger.info(f"🗑️ Cleared {tasks_count} invite tasks")
+            
+            db.commit()
+        
+        # Release all locked accounts
+        try:
+            release_result = await account_manager.release_all_accounts()
+            logger.info(f"🔓 Released accounts: {release_result}")
+        except Exception as release_error:
+            logger.warning(f"⚠️ Failed to release accounts: {release_error}")
+            release_result = {"error": str(release_error)}
+        
+        return {
+            "success": True,
+            "message": "All invite tasks cleared and accounts released",
+            "details": {
+                "tasks_cleared": tasks_count,
+                "targets_cleared": targets_count,
+                "logs_cleared": logs_count,
+                "account_release_result": release_result
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error clearing all tasks: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to clear all tasks"
+        }
+
 
 if __name__ == "__main__":
     import uvicorn
