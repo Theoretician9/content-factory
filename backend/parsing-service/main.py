@@ -390,7 +390,9 @@ async def check_telegram_accounts():
 async def process_pending_tasks():
     """Process pending tasks using Account Manager for proper account distribution."""
     try:
-        from app.core.account_manager import account_manager
+        from app.clients.account_manager_client import AccountManagerClient
+        
+        account_manager = AccountManagerClient()
         
         # ✅ ДИАГНОСТИКА: Проверяем общее состояние
         total_tasks = len(created_tasks)
@@ -398,17 +400,6 @@ async def process_pending_tasks():
         running_tasks = [task for task in created_tasks if task["status"] == "running"]
         
         logger.debug(f"🔍 Всего задач: {total_tasks}, pending: {len(pending_tasks_all)}, running: {len(running_tasks)}")
-        
-        # Sync accounts first
-        await account_manager.sync_accounts_from_integration_service()
-        
-        # Get available accounts
-        available_accounts = await account_manager.get_available_accounts()
-        
-        if not available_accounts:
-            if pending_tasks_all:  # Логируем только если есть pending задачи
-                logger.warning(f"⚠️ AccountManager: Нет доступных аккаунтов для запуска {len(pending_tasks_all)} pending задач")
-            return
         
         # Get pending tasks for Telegram
         pending_tasks = [task for task in created_tasks if task["status"] == "pending" and task["platform"] == "telegram"]
@@ -431,7 +422,7 @@ async def process_pending_tasks():
             t.get("created_at", "")  # По возрастанию времени создания
         ))
         
-        logger.info(f"🎯 AccountManager: {len(available_accounts)} аккаунтов доступно, {len(pending_tasks)} задач в очереди")
+        logger.info(f"🎯 AccountManager: {len(pending_tasks)} задач в очереди")
         
         # Log priority distribution for debugging
         priority_counts = {}
@@ -443,26 +434,35 @@ async def process_pending_tasks():
             priority_info = ", ".join([f"{p}:{c}" for p, c in priority_counts.items()])
             logger.info(f"📊 Приоритеты в очереди: {priority_info}")
         
-        # Assign tasks to available accounts (up to number of available accounts)
-        # Теперь задачи с высоким приоритетом будут обработаны первыми
-        tasks_to_process = pending_tasks[:len(available_accounts)]
-        
-        for task in tasks_to_process:
-            # Try to assign task to an account
-            assigned_account_id = await account_manager.assign_task_to_account(task["id"])
-            
-            if assigned_account_id:
-                task["status"] = "running"
-                task["progress"] = 0
-                task["updated_at"] = datetime.utcnow().isoformat()
-                task["assigned_account_id"] = assigned_account_id  # Track account assignment
+        # Обрабатываем задачи по одной, используя Account Manager для выделения аккаунтов
+        for task in pending_tasks:
+            try:
+                # Пытаемся выделить аккаунт через Account Manager
+                allocation = await account_manager.allocate_account(
+                    user_id=task.get("user_id", 1),
+                    purpose="parsing",
+                    timeout_minutes=120  # 2 часа для парсинга
+                )
                 
-                logger.info(f"🚀 AccountManager: Запущена задача {task['id']} (приоритет: {task.get('priority', 'normal').upper()}) на аккаунте {assigned_account_id}")
-                
-                # Start parsing in background
-                asyncio.create_task(execute_real_parsing_with_account_manager(task, assigned_account_id))
-            else:
-                logger.warning(f"⚠️ AccountManager: Не удалось назначить аккаунт для задачи {task['id']}")
+                if allocation:
+                    task["status"] = "running"
+                    task["progress"] = 0
+                    task["updated_at"] = datetime.utcnow().isoformat()
+                    task["assigned_account_id"] = allocation['account_id']  # Track account assignment
+                    task["allocated_account"] = allocation  # Сохраняем полную информацию об аллокации
+                    
+                    logger.info(f"🚀 AccountManager: Запущена задача {task['id']} (приоритет: {task.get('priority', 'normal').upper()}) на аккаунте {allocation['account_id']}")
+                    
+                    # Start parsing in background
+                    asyncio.create_task(execute_real_parsing_with_account_manager(task, allocation))
+                    
+                    # Обрабатываем по одной задаче за раз, чтобы не перегружать Account Manager
+                    break
+                else:
+                    logger.warning(f"⚠️ AccountManager: Нет доступных аккаунтов для задачи {task['id']}")
+                    
+            except Exception as task_error:
+                logger.error(f"❌ Ошибка обработки задачи {task['id']}: {task_error}")
                 
     except Exception as e:
         logger.error(f"❌ Ошибка обработки задач через AccountManager: {e}")
