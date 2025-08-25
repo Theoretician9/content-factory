@@ -933,15 +933,63 @@ async def get_task(task_id: str, request: Request):
         logger.error(f"❌ JWT Authorization failed for get_task: {auth_error}")
         raise HTTPException(status_code=401, detail=f"Authorization failed: {str(auth_error)}")
     
+    # Первый поиск в in-memory списке
     task = next((t for t in created_tasks if t["id"] == task_id), None)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    if task:
+        # ✅ USER ISOLATION: Проверяем что задача принадлежит пользователю
+        if task.get("user_id") != user_id:
+            raise HTTPException(status_code=404, detail="Task not found")  # 404 вместо 403 для безопасности
+        logger.info(f"📝 Found task {task_id} in memory for user {user_id}")
+        return task
     
-    # ✅ USER ISOLATION: Проверяем что задача принадлежит пользователю
-    if task.get("user_id") != user_id:
-        raise HTTPException(status_code=404, detail="Task not found")  # 404 вместо 403 для безопасности
-    
-    return task
+    # Второй поиск в базе данных
+    try:
+        from app.database import AsyncSessionLocal
+        from app.models.parse_task import ParseTask
+        from sqlalchemy import select
+        
+        async with AsyncSessionLocal() as db_session:
+            # Поиск в базе данных
+            stmt = select(ParseTask).where(ParseTask.task_id == task_id)
+            result = await db_session.execute(stmt)
+            db_task = result.scalar_one_or_none()
+            
+            if not db_task:
+                logger.warning(f"⚠️ Task {task_id} not found in memory or database")
+                raise HTTPException(status_code=404, detail="Task not found")
+            
+            # ✅ USER ISOLATION: Проверяем что задача принадлежит пользователю
+            if db_task.user_id != user_id:
+                logger.warning(f"⚠️ Task {task_id} belongs to user {db_task.user_id}, not {user_id}")
+                raise HTTPException(status_code=404, detail="Task not found")  # 404 вместо 403 для безопасности
+            
+            # Преобразуем данные из базы в формат in-memory
+            task_from_db = {
+                "id": db_task.task_id,
+                "db_id": db_task.id,
+                "user_id": db_task.user_id,
+                "platform": db_task.platform.value if hasattr(db_task.platform, 'value') else str(db_task.platform),
+                "link": db_task.config.get('target') if db_task.config else 'Unknown',
+                "task_type": db_task.task_type,
+                "title": db_task.title,
+                "description": db_task.description,
+                "status": db_task.status.value if hasattr(db_task.status, 'value') else str(db_task.status),
+                "priority": db_task.priority.value if hasattr(db_task.priority, 'value') else str(db_task.priority),
+                "progress": db_task.progress,
+                "created_at": db_task.created_at.isoformat() if db_task.created_at else None,
+                "updated_at": db_task.updated_at.isoformat() if db_task.updated_at else None,
+                "settings": db_task.config or {},
+                "config": db_task.config or {}
+            }
+            
+            logger.info(f"📊 Found task {task_id} in database for user {user_id}")
+            return task_from_db
+            
+    except HTTPException:
+        raise
+    except Exception as db_error:
+        logger.error(f"❌ Error accessing database for task {task_id}: {db_error}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.delete("/tasks/{task_id}", tags=["Tasks API"])
 async def delete_task(task_id: str, request: Request):
