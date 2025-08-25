@@ -115,6 +115,7 @@ async def allocate_account(
                 "account_id": str(allocation.account_id),
                 "user_id": allocation.user_id,
                 "phone": allocation.phone,
+                "session_data": allocation.session_data,  # Добавляем session_data для parsing service
                 "allocated_at": allocation.allocated_at.isoformat(),
                 "allocated_by": allocation.allocated_by,
                 "purpose": allocation.purpose,
