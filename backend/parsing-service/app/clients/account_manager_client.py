@@ -169,3 +169,34 @@ class AccountManagerClient:
         except Exception as e:
             logger.error(f"❌ Error checking account health: {e}")
             return None
+    
+    async def release_all_accounts(self) -> Dict[str, Any]:
+        """
+        Освободить все аккаунты, заблокированные данным сервисом
+        
+        Returns:
+            Dict с результатами операции
+        """
+        try:
+            logger.info(f"🔓 Releasing all accounts locked by parsing-service")
+            
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    f"{self.base_url}/release-all",
+                    json={
+                        "service_name": "parsing-service",
+                        "force": True
+                    }
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    logger.info(f"✅ Released {result.get('released_count', 0)} accounts")
+                    return result
+                else:
+                    logger.error(f"❌ Failed to release all accounts: {response.status_code} - {response.text}")
+                    return {"error": f"HTTP {response.status_code}", "details": response.text}
+                    
+        except Exception as e:
+            logger.error(f"❌ Error releasing all accounts: {e}")
+            return {"error": str(e)}
