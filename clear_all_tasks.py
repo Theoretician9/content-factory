@@ -17,7 +17,7 @@ async def clear_parsing_service_tasks():
         logger.info("🧹 Clearing parsing service tasks...")
         
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.delete("http://localhost:8002/admin/clear-all-tasks")
+            response = await client.delete("https://content-factory.xyz/api/parsing/admin/clear-all-tasks")
             
             if response.status_code == 200:
                 result = response.json()
