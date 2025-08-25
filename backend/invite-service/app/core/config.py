@@ -118,4 +118,8 @@ class Settings(BaseSettings):
 
 
 # Создание экземпляра настроек
-settings = Settings() 
+settings = Settings()
+
+def get_settings() -> Settings:
+    """Получить экземпляр настроек приложения"""
+    return settings 
