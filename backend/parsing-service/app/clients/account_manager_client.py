@@ -15,7 +15,7 @@ class AccountManagerClient:
     
     def __init__(self):
         self.settings = get_settings()
-        self.base_url = "http://integration-service:8001/api/v1/account-manager"
+        self.base_url = "http://integration-service:8000/api/v1/account-manager"
         self.timeout = 30.0
         
     async def allocate_account(
