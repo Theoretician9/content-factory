@@ -50,9 +50,14 @@ class AccountManagerClient:
                 )
                 
                 if response.status_code == 200:
-                    allocation = response.json()
-                    logger.info(f"✅ Account allocated: {allocation['account_id']}, phone: {allocation['phone']}")
-                    return allocation
+                    data = response.json()
+                    if data.get('success') and 'allocation' in data:
+                        allocation = data['allocation']
+                        logger.info(f"✅ Account allocated: {allocation['account_id']}, phone: {allocation['phone']}")
+                        return allocation
+                    else:
+                        logger.error(f"❌ Unexpected response format: {data}")
+                        return None
                 elif response.status_code == 404:
                     logger.warning(f"❌ No available accounts for user {user_id}")
                     return None
