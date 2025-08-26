@@ -70,13 +70,14 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
             
             for acc_data in accounts_data:
                 # 🔍 ДИАГНОСТИКА: логируем сырые данные аккаунта
-                logger.info(f"🔍 Обработка аккаунта {acc_data.get('id')}: status='{acc_data.get('status')}', username='{acc_data.get('username')}', phone='{acc_data.get('phone')}'")
+                logger.info(f"🔍 Обработка аккаунта {acc_data.get('id')}: is_active='{acc_data.get('is_active')}', username='{acc_data.get('username')}', phone='{acc_data.get('phone')}'")
                 
                 # Преобразование в PlatformAccount с лимитами Account Manager
-                raw_status = acc_data.get("status")
-                account_status = AccountStatus.ACTIVE if raw_status == "active" else AccountStatus.INACTIVE
+                # ИСПРАВЛЕНО: используем is_active вместо status
+                is_active = acc_data.get("is_active", False)
+                account_status = AccountStatus.ACTIVE if is_active else AccountStatus.INACTIVE
                 
-                logger.info(f"🔍 Аккаунт {acc_data.get('id')}: raw_status='{raw_status}' -> account_status={account_status}")
+                logger.info(f"🔍 Аккаунт {acc_data.get('id')}: is_active='{is_active}' -> account_status={account_status}")
                 
                 account = PlatformAccount(
                     account_id=acc_data["id"],
