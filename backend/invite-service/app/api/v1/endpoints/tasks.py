@@ -8,6 +8,7 @@ from sqlalchemy import and_, or_, func, desc, asc
 from typing import List, Optional
 from datetime import datetime
 import math
+import logging
 
 from app.core.database import get_db
 from app.models import InviteTask, TaskStatus, TaskPriority, InviteTarget, TargetStatus
@@ -26,6 +27,7 @@ from app.schemas.invite_task import (
 from app.core.auth import get_current_user_id
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def apply_task_filters(query, filters: TaskFilterSchema, user_id: int):
