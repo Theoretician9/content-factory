@@ -43,9 +43,8 @@ def execute_invite_task(self, task_id: int):
             
             if task.status not in [TaskStatus.PENDING, TaskStatus.PAUSED, TaskStatus.FAILED, TaskStatus.IN_PROGRESS]:
                 logger.warning(f"⚠️ CELERY WORKER: Задача {task_id} имеет некорректный статус для выполнения: {task.status}")
-            return f"Задача {task_id} не может быть выполнена со статусом {task.status}"
-        
-        try:
+                return f"Задача {task_id} не может быть выполнена со статусом {task.status}"
+            
             # Обновление статуса на IN_PROGRESS (строковое значение enum)
             task.status = TaskStatus.IN_PROGRESS.value
             task.start_time = datetime.utcnow()
