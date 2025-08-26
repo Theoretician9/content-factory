@@ -121,74 +121,90 @@ async def check_account_admin_rights(
         try:
             # Получаем текущего пользователя (себя)
             me = await client.get_me()
+            logger.info(f"🔍 Текущий пользователь: ID={me.id}, телефон={me.phone}, username={me.username}")
             
-            # Получаем список администраторов
-            admins = await client.get_participants(group, filter=lambda p: p.participant)
+            # Проверяем собственные права в группе
+            logger.info(f"🔍 Проверяем собственные права в группе...")
             
-            my_admin_rights = None
-            is_admin = False
-            
-            # Ищем себя в списке админов
-            for participant in admins:
-                if hasattr(participant, 'user_id') and participant.user_id == me.id:
-                    if hasattr(participant, 'admin_rights') and participant.admin_rights:
-                        my_admin_rights = participant.admin_rights
-                        is_admin = True
-                        break
-                    elif hasattr(participant, 'creator') and participant.creator:
-                        # Креатор имеет все права
-                        is_admin = True
-                        my_admin_rights = type('AdminRights', (), {
-                            'invite_users': True,
-                            'add_admins': True,
-                            'ban_users': True,
-                            'delete_messages': True,
-                            'edit_messages': True,
-                            'post_messages': True,
-                            'pin_messages': True
-                        })()
-                        break
-            
-            if not is_admin:
-                logger.info(f"Аккаунт {account_id} не является администратором в группе {group_id}")
-                return {
-                    "is_admin": False,
-                    "permissions": [],
-                    "message": "Не является администратором"
-                }
-            
-            # Определяем конкретные права
-            permissions = []
-            
-            if hasattr(my_admin_rights, 'invite_users') and my_admin_rights.invite_users:
-                permissions.append('invite_users')
-            
-            if hasattr(my_admin_rights, 'add_admins') and my_admin_rights.add_admins:
-                permissions.append('add_admins')
-            
-            if hasattr(my_admin_rights, 'ban_users') and my_admin_rights.ban_users:
-                permissions.append('ban_users')
-            
-            if hasattr(my_admin_rights, 'delete_messages') and my_admin_rights.delete_messages:
-                permissions.append('delete_messages')
-            
-            if hasattr(my_admin_rights, 'post_messages') and my_admin_rights.post_messages:
-                permissions.append('post_messages')
+            try:
+                # Получаем информацию об участнике
+                from telethon.tl.functions.channels import GetParticipantRequest
+                participant_info = await client(GetParticipantRequest(
+                    channel=group,
+                    participant=me
+                ))
+                
+                logger.info(f"🔍 Информация об участнике получена: {type(participant_info.participant).__name__}")
+                
+                participant = participant_info.participant
+                
+                # Проверяем тип участника
+                from telethon.tl.types import ChannelParticipantAdmin, ChannelParticipantCreator
+                
+                my_admin_rights = None
+                is_admin = False
+                
+                if isinstance(participant, ChannelParticipantCreator):
+                    # Креатор имеет все права
+                    is_admin = True
+                    logger.info(f"✅ Пользователь является креатором группы")
+                    # Креатор имеет все права
+                    permissions = ['invite_users', 'ban_users', 'delete_messages', 'post_messages', 'add_admins']
+                    
+                elif isinstance(participant, ChannelParticipantAdmin):
+                    # Администратор
+                    is_admin = True
+                    my_admin_rights = participant.admin_rights
+                    logger.info(f"✅ Пользователь имеет admin_rights: {my_admin_rights}")
+                    
+                    # Определяем конкретные права
+                    permissions = []
+                    
+                    if hasattr(my_admin_rights, 'invite_users') and my_admin_rights.invite_users:
+                        permissions.append('invite_users')
+                    
+                    if hasattr(my_admin_rights, 'ban_users') and my_admin_rights.ban_users:
+                        permissions.append('ban_users')
+                    
+                    if hasattr(my_admin_rights, 'delete_messages') and my_admin_rights.delete_messages:
+                        permissions.append('delete_messages')
+                    
+                    if hasattr(my_admin_rights, 'post_messages') and my_admin_rights.post_messages:
+                        permissions.append('post_messages')
+                    
+                    if hasattr(my_admin_rights, 'add_admins') and my_admin_rights.add_admins:
+                        permissions.append('add_admins')
+                
+                else:
+                    # Обычный участник
+                    is_admin = False
+                    permissions = []
+                    logger.info(f"Пользователь не является администратором")
+                
+            except Exception as participant_error:
+                logger.warning(f"⚠️ Не удалось получить инфоррмацию об участнике: {str(participant_error)}")
+                
+                # Fallback: проверяем через альтернативный метод
+                logger.info(f"🔍 Fallback: проверяем через альтернативный метод...")
+                is_admin = False
+                permissions = []
             
             # Проверяем наличие требуемых прав
             has_required_permissions = all(perm in permissions for perm in required_permissions)
             
-            logger.info(f"✅ Аккаунт {account_id} - админ: {is_admin}, права: {permissions}")
+            logger.info(f"🔍 Результат проверки: is_admin={is_admin}")
             
-            # Подготавливаем сообщение для избежания обратных слэшей в f-строке
-            admin_status = "является" if is_admin else "не является"
+            if is_admin:
+                logger.info(f"✅ Аккаунт {account_id} - админ: {is_admin}, права: {permissions}")
+            else:
+                logger.info(f"Аккаунт {account_id} не является администратором в группе {group_id}")
             
             return {
                 "is_admin": is_admin,
                 "permissions": permissions,
                 "has_required_permissions": has_required_permissions,
                 "group_title": getattr(group, 'title', str(group_id)),
-                "message": f"Аккаунт {admin_status} администратором"
+                "message": f"Аккаунт {'\u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f' if is_admin else '\u043d\u0435 \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f'} администратором"
             }
             
         except Exception as e:
