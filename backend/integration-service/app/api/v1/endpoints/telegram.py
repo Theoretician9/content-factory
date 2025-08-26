@@ -335,23 +335,34 @@ async def check_account_admin_rights(
         try:
             # Получаем текущего пользователя (себя)
             me = await client.get_me()
+            logger.info(f"🔍 Текущий пользователь: ID={me.id}, телефон={getattr(me, 'phone', 'N/A')}, username={getattr(me, 'username', 'N/A')}")
             
             # Получаем список администраторов
+            logger.info(f"🔍 Получаем список администраторов группы...")
             admins = await client.get_participants(group, filter=lambda p: p.participant)
+            logger.info(f"🔍 Найдено {len(admins)} участников с participant фильтром")
             
             my_admin_rights = None
             is_admin = False
             
             # Ищем себя в списке админов
-            for participant in admins:
+            logger.info(f"🔍 Поиск себя (пользователь ID {me.id}) в списке участников...")
+            for i, participant in enumerate(admins):
+                participant_user_id = getattr(participant, 'user_id', None)
+                logger.info(f"🔍 Участник {i+1}: user_id={participant_user_id}, type={type(participant).__name__}")
+                
                 if hasattr(participant, 'user_id') and participant.user_id == me.id:
+                    logger.info(f"✅ Нашли себя в списке! Проверяем права...")
+                    
                     if hasattr(participant, 'admin_rights') and participant.admin_rights:
                         my_admin_rights = participant.admin_rights
                         is_admin = True
+                        logger.info(f"✅ Пользователь имеет admin_rights: {participant.admin_rights}")
                         break
                     elif hasattr(participant, 'creator') and participant.creator:
                         # Креатор имеет все права
                         is_admin = True
+                        logger.info(f"✅ Пользователь является создателем группы")
                         my_admin_rights = type('AdminRights', (), {
                             'invite_users': True,
                             'add_admins': True,
@@ -362,6 +373,10 @@ async def check_account_admin_rights(
                             'pin_messages': True
                         })()
                         break
+                    else:
+                        logger.info(f"⚠️ Нашли себя, но нет admin_rights и creator=False")
+            
+            logger.info(f"🔍 Результат поиска: is_admin={is_admin}")
             
             if not is_admin:
                 logger.info(f"Аккаунт {session_id} не является администратором в группе {group_id}")
