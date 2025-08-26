@@ -73,23 +73,26 @@ def execute_invite_task(self, task_id: int):
             finally:
                 loop.close()
                 
-        except Exception as e:
-            logger.error(f"Ошибка выполнения задачи {task_id}: {str(e)}")
-            
-            # Обновление статуса на FAILED
-            task.status = TaskStatus.FAILED.value
-            task.error_message = str(e)
-            task.end_time = datetime.utcnow()
-            task.updated_at = datetime.utcnow()
-            db.commit()
-            
-            # Retry если это временная ошибка
-            if self.request.retries < self.max_retries and _is_retryable_error(e):
-                countdown = 2 ** self.request.retries * 60  # Экспоненциальная задержка
-                logger.info(f"Retry задачи {task_id} через {countdown} секунд")
-                raise self.retry(countdown=countdown, exc=e)
-            
-            raise
+    except Exception as e:
+        logger.error(f"Ошибка выполнения задачи {task_id}: {str(e)}")
+        
+        # Обновление статуса на FAILED
+        with get_db_session() as db:
+            task = db.query(InviteTask).filter(InviteTask.id == task_id).first()
+            if task:
+                task.status = TaskStatus.FAILED.value
+                task.error_message = str(e)
+                task.end_time = datetime.utcnow()
+                task.updated_at = datetime.utcnow()
+                db.commit()
+        
+        # Retry если это временная ошибка
+        if self.request.retries < self.max_retries and _is_retryable_error(e):
+            countdown = 2 ** self.request.retries * 60  # Экспоненциальная задержка
+            logger.info(f"Retry задачи {task_id} через {countdown} секунд")
+            raise self.retry(countdown=countdown, exc=e)
+        
+        raise
 
 
 async def _execute_task_async(task: InviteTask, adapter, db: Session) -> str:
