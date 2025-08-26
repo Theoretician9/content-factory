@@ -44,6 +44,207 @@ def get_account_manager() -> AccountManagerService:
     return AccountManagerService()
 
 
+@router.post("/accounts/{account_id}/invite", response_model=TelegramInviteResponse)
+async def send_telegram_invite_by_account(
+    account_id: UUID,
+    invite_data: TelegramInviteRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
+    telegram_service: TelegramService = Depends(get_telegram_service)
+):
+    """Отправка приглашения через конкретный Telegram аккаунт - совместимость с Invite Service"""
+    
+    # Изоляция пользователей
+    user_id = await get_user_id_from_request(request)
+    
+    # Получаем аккаунт и проверяем принадлежность пользователю
+    result = await session.execute(
+        select(TelegramSession).where(
+            TelegramSession.id == account_id,
+            TelegramSession.user_id == user_id
+        )
+    )
+    account = result.scalar_one_or_none()
+    
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Telegram аккаунт не найден или нет доступа"
+        )
+    
+    try:
+        # Получение Telegram клиента
+        client = await telegram_service.get_client(account)
+        
+        if not client.is_connected():
+            await client.connect()
+        
+        start_time = datetime.utcnow()
+        result_data = None
+        
+        # Обработка разных типов приглашений
+        if invite_data.invite_type == "group_invite":
+            # Приглашение в группу/канал
+            if not invite_data.group_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="group_id обязателен для group_invite"
+                )
+            
+            if invite_data.target_username:
+                # Приглашение по username
+                user = await client.get_entity(invite_data.target_username)
+                group = await client.get_entity(invite_data.group_id)
+                
+                if hasattr(group, 'megagroup') and group.megagroup:
+                    # Супергруппа
+                    result_data = await client(InviteToChannelRequest(
+                        channel=group,
+                        users=[user]
+                    ))
+                else:
+                    # Обычная группа
+                    result_data = await client(AddChatUserRequest(
+                        chat_id=group.id,
+                        user_id=user.id,
+                        fwd_limit=10
+                    ))
+            
+            elif invite_data.target_phone:
+                # Приглашение по номеру телефона
+                contacts = await client.get_contacts()
+                user = None
+                
+                for contact in contacts:
+                    if hasattr(contact, 'phone') and contact.phone == invite_data.target_phone.replace('+', ''):
+                        user = contact
+                        break
+                
+                if not user:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Контакт с номером {invite_data.target_phone} не найден"
+                    )
+                
+                group = await client.get_entity(invite_data.group_id)
+                result_data = await client(InviteToChannelRequest(
+                    channel=group,
+                    users=[user]
+                ))
+            
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Необходим target_username или target_phone"
+                )
+        
+        elif invite_data.invite_type == "direct_message":
+            # Прямое сообщение
+            target_entity = invite_data.target_username or invite_data.target_phone
+            
+            if not target_entity:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Необходим target_username или target_phone для direct_message"
+                )
+            
+            if not invite_data.message:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Сообщение обязательно для direct_message"
+                )
+            
+            # Отправка сообщения
+            result_data = await client.send_message(
+                entity=target_entity,
+                message=invite_data.message
+            )
+        
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Неподдерживаемый тип приглашения: {invite_data.invite_type}"
+            )
+        
+        # Успешный результат
+        end_time = datetime.utcnow()
+        execution_time = (end_time - start_time).total_seconds()
+        
+        return TelegramInviteResponse(
+            success=True,
+            message="Приглашение отправлено успешно",
+            account_id=account_id,
+            target_username=invite_data.target_username,
+            target_phone=invite_data.target_phone,
+            execution_time=execution_time,
+            sent_at=end_time
+        )
+    
+    except FloodWaitError as e:
+        # Telegram FloodWait ошибка
+        logger.warning(f"FloodWait для аккаунта {account_id}: {e.seconds}s")
+        
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "error": "flood_wait",
+                "message": f"Необходимо подождать {e.seconds} секунд",
+                "retry_after": e.seconds
+            }
+        )
+    
+    except PeerFloodError as e:
+        # Слишком много запросов к одному пользователю
+        logger.warning(f"PeerFlood для аккаунта {account_id}")
+        
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "error": "peer_flood",
+                "message": "Слишком много запросов к пользователю. Попробуйте позже",
+                "retry_after": 86400  # 24 часа
+            }
+        )
+    
+    except UserNotMutualContactError as e:
+        # Пользователь не в контактах
+        logger.info(f"User not mutual contact для {invite_data.target_username or invite_data.target_phone}")
+        
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "user_not_mutual_contact",
+                "message": "Пользователь не в списке взаимных контактов"
+            }
+        )
+    
+    except Exception as e:
+        # Обработка других ошибок
+        error_msg = str(e).lower()
+        
+        if "privacy" in error_msg or "restricted" in error_msg:
+            logger.info(f"Privacy restricted для {invite_data.target_username or invite_data.target_phone}")
+            
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "privacy_restricted",
+                    "message": "Настройки приватности пользователя запрещают приглашения"
+                }
+            )
+        
+        # Общие ошибки
+        logger.error(f"Telegram invite error для аккаунта {account_id}: {str(e)}")
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "invite_failed",
+                "message": str(e)
+            }
+        )
+
+
 @router.post("/invite", response_model=TelegramInviteResponse)
 async def send_telegram_invite(
     invite_data: TelegramInviteRequest,
