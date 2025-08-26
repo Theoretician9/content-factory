@@ -81,6 +81,24 @@ async def check_account_admin_rights(
             detail="group_id обязателен"
         )
     
+    # Нормализация group_id для поддержки разных форматов
+    def normalize_group_id(gid: str) -> str:
+        """Нормализует group_id для использования с Telegram API"""
+        gid = gid.strip()
+        
+        # Если это уже полный URL - возвращаем как есть
+        if gid.startswith('https://') or gid.startswith('http://') or gid.startswith('t.me/'):
+            return gid
+        
+        # Если это username без @, добавляем t.me/
+        if not gid.startswith('@'):
+            return f't.me/{gid}'
+        
+        # Если это @username, возвращаем как есть
+        return gid
+    
+    normalized_group_id = normalize_group_id(group_id)
+    
     try:
         # Получение Telegram клиента
         client = await telegram_service.get_client(account)
