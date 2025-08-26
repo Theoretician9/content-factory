@@ -95,6 +95,20 @@ async def create_invite_task(
     """Создание новой задачи приглашений"""
     
     try:
+        # Логируем полученные данные для отладки
+        logger.info(f"📝 Создание задачи '{task_data.name}' для пользователя {user_id}")
+        logger.info(f"📝 Платформа: {task_data.platform}")
+        logger.info(f"📝 Настройки получены: {task_data.settings}")
+        if task_data.settings:
+            settings_dict = task_data.settings.dict()
+            logger.info(f"📝 Настройки (dict): {settings_dict}")
+            if 'group_id' in settings_dict:
+                logger.info(f"📝 group_id найден: {settings_dict['group_id']}")
+            else:
+                logger.warning(f"⚠️ group_id НЕ найден в настройках! Доступные ключи: {list(settings_dict.keys())}")
+        else:
+            logger.warning(f"⚠️ Настройки не переданы (settings=None)")
+        
         # Создание новой задачи
         task = InviteTask(
             user_id=user_id,
@@ -113,8 +127,9 @@ async def create_invite_task(
         db.commit()
         db.refresh(task)
         
-        # Логируем создание задачи
+        # Логируем создание задачи с детальными настройками
         logger.info(f"✅ Создана новая задача ID {task.id}: '{task.name}' для пользователя {user_id}")
+        logger.info(f"✅ Итоговые настройки задачи {task.id}: {task.settings}")
         
         return task
         
