@@ -162,12 +162,15 @@ async def check_account_admin_rights(
             
             logger.info(f"✅ Аккаунт {account_id} - админ: {is_admin}, права: {permissions}")
             
+            # Подготавливаем сообщение для избежания обратных слэшей в f-строке
+            admin_status = "является" if is_admin else "не является"
+            
             return {
                 "is_admin": is_admin,
                 "permissions": permissions,
                 "has_required_permissions": has_required_permissions,
                 "group_title": getattr(group, 'title', str(group_id)),
-                "message": f"Аккаунт {'\u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f' if is_admin else '\u043d\u0435 \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f'} администратором"
+                "message": f"Аккаунт {admin_status} администратором"
             }
             
         except Exception as e:
