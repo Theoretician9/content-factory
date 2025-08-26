@@ -377,15 +377,17 @@ async def _send_single_invite(
         target.updated_at = datetime.utcnow()
         
         # Логирование ошибки
+        from app.models.invite_execution_log import ActionType, LogLevel
+        
         log_entry = InviteExecutionLog(
             task_id=task.id,
             target_id=target.id,
             account_id=account.account_id if account else None,
-            action_type='send_invite',
-            status='failed',
+            action_type=ActionType.INVITE_FAILED,
+            level=LogLevel.ERROR,
             message=str(e),
-            execution_time=(datetime.utcnow() - start_time).total_seconds(),
-            created_at=datetime.utcnow()
+            execution_time_ms=int((datetime.utcnow() - start_time).total_seconds() * 1000),
+            error_message=str(e)
         )
         db.add(log_entry)
         

@@ -86,7 +86,7 @@ class InviteExecutionLog(Base):
     details = Column(JSON, nullable=True, comment="Дополнительные детали в JSON")
     
     # Контекст выполнения
-    account_id = Column(Integer, nullable=True, comment="ID аккаунта, выполнявшего действие")
+    account_id = Column(String(255), nullable=True, comment="ID аккаунта, выполнявшего действие")
     worker_id = Column(String(100), nullable=True, comment="ID воркера Celery")
     execution_time_ms = Column(Integer, nullable=True, comment="Время выполнения в миллисекундах")
     
