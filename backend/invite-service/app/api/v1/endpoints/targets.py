@@ -11,6 +11,7 @@ import math
 import io
 import csv
 import json
+import logging
 
 from app.core.database import get_db
 from app.core.auth import get_current_user_id
@@ -31,6 +32,7 @@ from app.schemas.target import (
     TargetSortBy
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
