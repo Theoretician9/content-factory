@@ -290,14 +290,21 @@ async def send_telegram_invite_by_account(
                 normalized_group_id = normalize_group_id(invite_data.group_id)
                 group = await client.get_entity(normalized_group_id)
                 
-                if hasattr(group, 'megagroup') and group.megagroup:
-                    # Супергруппа
+                # Определяем тип группы/канала для правильного запроса
+                is_channel_or_megagroup = (
+                    hasattr(group, 'megagroup') and group.megagroup or
+                    hasattr(group, 'broadcast') and group.broadcast or
+                    not hasattr(group, 'megagroup')  # По умолчанию считаем каналом
+                )
+                
+                if is_channel_or_megagroup:
+                    # Каналы и мегагруппы
                     result_data = await client(InviteToChannelRequest(
                         channel=group,
                         users=[user]
                     ))
                 else:
-                    # Обычная группа
+                    # Обычные группы
                     result_data = await client(AddChatUserRequest(
                         chat_id=group.id,
                         user_id=user.id,
