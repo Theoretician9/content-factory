@@ -56,6 +56,12 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                 platform="telegram"
             )
             
+            # 🔍 ДИАГНОСТИКА: логируем сырой ответ от integration-service
+            logger.info(f"🔍 Ответ от integration-service: {len(accounts_data) if accounts_data else 0} аккаунтов")
+            if accounts_data:
+                for i, acc in enumerate(accounts_data):
+                    logger.info(f"🔍   Сырой аккаунт {i+1}: {acc}")
+            
             if not accounts_data:
                 logger.warning(f"⚠️ Нет доступных Telegram аккаунтов для пользователя {user_id}")
                 return []
@@ -104,8 +110,21 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                 
                 platform_accounts.append(account)
             
+            # 🔍 ДИАГНОСТИКА: логируем все аккаунты перед фильтрацией
+            logger.info(f"🔍 Всего создано {len(platform_accounts)} аккаунтов PlatformAccount:")
+            for i, acc in enumerate(platform_accounts):
+                logger.info(f"🔍   Аккаунт {i+1}: id={acc.account_id}, status={acc.status}, username={acc.username}")
+            
             # Фильтрация только активных аккаунтов
             active_accounts = [acc for acc in platform_accounts if acc.status == AccountStatus.ACTIVE]
+            
+            # 🔍 ДИАГНОСТИКА: логируем результат фильтрации
+            logger.info(f"🔍 После фильтрации осталось {len(active_accounts)} активных аккаунтов:")
+            for i, acc in enumerate(active_accounts):
+                logger.info(f"🔍   Активный {i+1}: id={acc.account_id}, username={acc.username}")
+            
+            # 🔍 Проверяем статус AccountStatus.ACTIVE
+            logger.info(f"🔍 AccountStatus.ACTIVE = {AccountStatus.ACTIVE}")
             
             logger.info(f"✅ Инициализированы Telegram аккаунты для пользователя {user_id}: {len(active_accounts)} активных из {len(platform_accounts)}")
             
