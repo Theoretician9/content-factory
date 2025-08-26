@@ -109,43 +109,55 @@ def _filter_accounts_basic(accounts):
     return active_accounts
 
 
-def _check_account_admin_rights(account_id: str, group_id: str) -> bool:
-    """Проверка административных прав аккаунта в группе/канале
+async def _check_account_admin_rights_async(account_id: str, group_id: str) -> bool:
+    """Асинхронная проверка административных прав аккаунта в группе/канале
     
     Возвращает True если аккаунт является администратором с правами приглашать пользователей
     """
     try:
-        # Запрос к integration-service для проверки админских прав
-        with httpx.Client(timeout=10.0) as client:
-            response = client.post(
-                f"http://integration-service:8000/api/v1/telegram/accounts/{account_id}/check-admin",
-                json={
-                    "group_id": group_id,
-                    "required_permissions": ["invite_users"]
-                }
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                is_admin = data.get('is_admin', False)
-                has_invite_permission = 'invite_users' in data.get('permissions', [])
-                
-                logger.debug(f"Проверка админ прав для {account_id}: is_admin={is_admin}, permissions={data.get('permissions', [])}")
-                return is_admin and has_invite_permission
-            
-            elif response.status_code == 404:
-                logger.warning(f"Эндпоинт проверки админ прав не найден для аккаунта {account_id}")
-                return False
-            
-            else:
-                logger.error(f"Ошибка при проверке админ прав для {account_id}: HTTP {response.status_code}")
-                return False
-                
-    except httpx.TimeoutException:
-        logger.error(f"Таймаут при проверке админ прав для аккаунта {account_id}")
-        return False
+        # Используем аутентифицированный клиент Integration Service
+        from app.services.integration_client import IntegrationServiceClient
+        
+        integration_client = IntegrationServiceClient()
+        
+        response = await integration_client._make_request(
+            method="POST",
+            endpoint=f"/api/v1/telegram/accounts/{account_id}/check-admin",
+            json_data={
+                "group_id": group_id,
+                "required_permissions": ["invite_users"]
+            }
+        )
+        
+        is_admin = response.get('is_admin', False)
+        has_invite_permission = 'invite_users' in response.get('permissions', [])
+        
+        logger.debug(f"Проверка админ прав для {account_id}: is_admin={is_admin}, permissions={response.get('permissions', [])}")
+        return is_admin and has_invite_permission
+        
     except Exception as e:
-        logger.error(f"Исключение при проверке админ прав для {account_id}: {str(e)}")
+        logger.error(f"Ошибка при проверке админ прав для {account_id}: {str(e)}")
+        return False
+
+
+def _check_account_admin_rights(account_id: str, group_id: str) -> bool:
+    """Синхронная обертка для проверки административных прав
+    
+    Возвращает True если аккаунт является администратором с правами приглашать пользователей
+    """
+    try:
+        # Создаем новый event loop если его нет
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        # Выполняем асинхронную проверку
+        return loop.run_until_complete(_check_account_admin_rights_async(account_id, group_id))
+        
+    except Exception as e:
+        logger.error(f"Ошибка в синхронной обертке проверки админ прав для {account_id}: {str(e)}")
         return False
 
 
