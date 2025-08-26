@@ -106,7 +106,7 @@ class InviteTargetResponse(BaseModel):
     error_code: Optional[str]
     attempt_count: int
     last_attempt_at: Optional[datetime]
-    sent_from_account_id: Optional[int]
+    sent_from_account_id: Optional[str]
     
     # Временные метки
     created_at: datetime

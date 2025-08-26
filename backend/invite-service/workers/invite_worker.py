@@ -347,16 +347,20 @@ async def _send_single_invite(
         target.updated_at = datetime.utcnow()
         
         # Логирование выполнения
+        from app.models.invite_execution_log import ActionType, LogLevel
+        
         log_entry = InviteExecutionLog(
             task_id=task.id,
             target_id=target.id,
             account_id=account.account_id,
-            action_type='send_invite',
-            status=result.status.value,
-            message=result.message,
-            platform_response=result.platform_response,
-            execution_time=result.execution_time,
-            created_at=datetime.utcnow()
+            action_type=ActionType.INVITE_SENT,
+            level=LogLevel.INFO,
+            message=result.message or "Invitation sent",
+            execution_time_ms=int(result.execution_time * 1000) if result.execution_time else None,
+            details={
+                "platform_response": result.platform_response,
+                "result_status": result.status.value if hasattr(result.status, 'value') else str(result.status)
+            }
         )
         db.add(log_entry)
         

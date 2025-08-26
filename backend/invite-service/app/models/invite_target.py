@@ -91,7 +91,7 @@ class InviteTarget(Base):
     last_attempt_at = Column(DateTime, nullable=True, comment="Время последней попытки")
     
     # Аккаунт, с которого было отправлено приглашение
-    sent_from_account_id = Column(Integer, nullable=True, comment="ID аккаунта, с которого отправлено")
+    sent_from_account_id = Column(String(255), nullable=True, comment="ID аккаунта, с которого отправлено")
     
     # Дополнительные метаданные
     source = Column(
