@@ -80,6 +80,66 @@ def _filter_admin_accounts(accounts, task: InviteTask):
     return admin_accounts
 
 
+async def _filter_admin_accounts_async(accounts, task: InviteTask):
+    """Асинхронная фильтрация аккаунтов с проверкой администраторских прав
+    
+    Применяет ту же логику, что и в /check-admin-rights endpoint
+    для выбора только администраторов с правами приглашать пользователей
+    """
+    if not accounts:
+        return []
+    
+    admin_accounts = []
+    
+    # Получаем group_id из настроек задачи
+    group_id = None
+    if hasattr(task, 'settings') and task.settings:
+        group_id = task.settings.get('group_id')
+    
+    if not group_id:
+        logger.warning(f"Задача {task.id} не содержит group_id в настройках, используем базовую фильтрацию")
+        # Если нет group_id, используем старую логику (только базовые проверки)
+        return _filter_accounts_basic(accounts)
+    
+    logger.info(f"Проверяем админские права для группы {group_id} для {len(accounts)} аккаунтов")
+    
+    for account in accounts:
+        # Базовая проверка активности аккаунта
+        if not hasattr(account, 'status') or account.status != 'active':
+            logger.debug(f"Аккаунт {account.account_id} не активен: {getattr(account, 'status', 'unknown')}")
+            continue
+            
+        # Проверяем лимиты
+        daily_used = getattr(account, 'daily_used', 0)
+        daily_limit = getattr(account, 'daily_limit', 50)
+        
+        if daily_used >= daily_limit:
+            logger.warning(f"Аккаунт {account.account_id} достиг дневного лимита: {daily_used}/{daily_limit}")
+            continue
+            
+        # Проверяем флуд ограничения
+        if hasattr(account, 'flood_wait_until') and account.flood_wait_until:
+            if account.flood_wait_until > datetime.utcnow():
+                logger.warning(f"Аккаунт {account.account_id} в флуд ожидании до {account.flood_wait_until}")
+                continue
+        
+        # РЕАЛЬНАЯ ПРОВЕРКА АДМИНСКИХ ПРАВ
+        try:
+            is_admin = await _check_account_admin_rights_async(account.account_id, group_id)
+            if is_admin:
+                logger.info(f"✅ Аккаунт {account.account_id} является администратором группы {group_id} с правами приглашать")
+                admin_accounts.append(account)
+            else:
+                logger.warning(f"❌ Аккаунт {account.account_id} НЕ является администратором группы {group_id} или не имеет прав приглашать")
+        except Exception as e:
+            logger.error(f"Ошибка проверки админских прав для аккаунта {account.account_id}: {str(e)}")
+            # В случае ошибки API не добавляем аккаунт в админские
+            continue
+    
+    logger.info(f"Фильтрация аккаунтов: из {len(accounts)} доступно {len(admin_accounts)} админских аккаунтов")
+    return admin_accounts
+
+
 def _filter_accounts_basic(accounts):
     """Базовая фильтрация аккаунтов без проверки админских прав (fallback)"""
     active_accounts = []
