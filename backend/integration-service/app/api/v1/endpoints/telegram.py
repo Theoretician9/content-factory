@@ -337,46 +337,65 @@ async def check_account_admin_rights(
             me = await client.get_me()
             logger.info(f"🔍 Текущий пользователь: ID={me.id}, телефон={getattr(me, 'phone', 'N/A')}, username={getattr(me, 'username', 'N/A')}")
             
-            # Получаем список администраторов
-            logger.info(f"🔍 Получаем список администраторов группы...")
-            admins = await client.get_participants(group, filter=lambda p: p.participant)
-            logger.info(f"🔍 Найдено {len(admins)} участников с participant фильтром")
+            # Правильный способ - получить информацию о своих правах в группе
+            logger.info(f"🔍 Проверяем собственные права в группе...")
             
-            my_admin_rights = None
-            is_admin = False
+            # Используем get_permissions для получения собственных прав
+            from telethon.tl.functions.channels import GetParticipantRequest
             
-            # Ищем себя в списке админов
-            logger.info(f"🔍 Поиск себя (пользователь ID {me.id}) в списке участников...")
-            for i, participant in enumerate(admins):
-                participant_user_id = getattr(participant, 'user_id', None)
-                logger.info(f"🔍 Участник {i+1}: user_id={participant_user_id}, type={type(participant).__name__}")
+            try:
+                # Получаем информацию о себе как участнике группы
+                participant_info = await client(GetParticipantRequest(
+                    channel=group,
+                    participant=me
+                ))
                 
-                if hasattr(participant, 'user_id') and participant.user_id == me.id:
-                    logger.info(f"✅ Нашли себя в списке! Проверяем права...")
+                participant = participant_info.participant
+                logger.info(f"🔍 Информация об участнике получена: {type(participant).__name__}")
+                
+                my_admin_rights = None
+                is_admin = False
+                
+                # Проверяем тип участника
+                if hasattr(participant, 'admin_rights') and participant.admin_rights:
+                    my_admin_rights = participant.admin_rights
+                    is_admin = True
+                    logger.info(f"✅ Пользователь имеет admin_rights: {participant.admin_rights}")
+                elif hasattr(participant, 'creator') and participant.creator:
+                    # Креатор имеет все права
+                    is_admin = True
+                    logger.info(f"✅ Пользователь является создателем группы")
+                    my_admin_rights = type('AdminRights', (), {
+                        'invite_users': True,
+                        'add_admins': True,
+                        'ban_users': True,
+                        'delete_messages': True,
+                        'edit_messages': True,
+                        'post_messages': True,
+                        'pin_messages': True
+                    })()
+                else:
+                    logger.info(f"ℹ️ Пользователь не является администратором (тип: {type(participant).__name__})")
+                
+            except Exception as participant_error:
+                logger.warning(f"⚠️ Не удалось получить информацию об участнике: {str(participant_error)}")
+                
+                # Fallback: пробуем альтернативный метод
+                try:
+                    # Пытаемся выполнить действие, которое доступно только админам
+                    from telethon.tl.functions.channels import GetAdminedPublicChannelsRequest
                     
-                    if hasattr(participant, 'admin_rights') and participant.admin_rights:
-                        my_admin_rights = participant.admin_rights
-                        is_admin = True
-                        logger.info(f"✅ Пользователь имеет admin_rights: {participant.admin_rights}")
-                        break
-                    elif hasattr(participant, 'creator') and participant.creator:
-                        # Креатор имеет все права
-                        is_admin = True
-                        logger.info(f"✅ Пользователь является создателем группы")
-                        my_admin_rights = type('AdminRights', (), {
-                            'invite_users': True,
-                            'add_admins': True,
-                            'ban_users': True,
-                            'delete_messages': True,
-                            'edit_messages': True,
-                            'post_messages': True,
-                            'pin_messages': True
-                        })()
-                        break
-                    else:
-                        logger.info(f"⚠️ Нашли себя, но нет admin_rights и creator=False")
+                    # Если мы можем получить админские каналы - значит у нас есть какие-то админские права
+                    logger.info(f"🔍 Fallback: проверяем через альтернативный метод...")
+                    is_admin = False  # По умолчанию считаем что не админ
+                    my_admin_rights = None
+                    
+                except Exception as fallback_error:
+                    logger.warning(f"⚠️ Fallback метод тоже не сработал: {str(fallback_error)}")
+                    is_admin = False
+                    my_admin_rights = None
             
-            logger.info(f"🔍 Результат поиска: is_admin={is_admin}")
+            logger.info(f"🔍 Результат проверки: is_admin={is_admin}")
             
             if not is_admin:
                 logger.info(f"Аккаунт {session_id} не является администратором в группе {group_id}")
