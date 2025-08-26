@@ -31,16 +31,25 @@ def _filter_admin_accounts(accounts, task: InviteTask):
     
     admin_accounts = []
     
+    # Получаем group_id из настроек задачи
+    group_id = None
+    if hasattr(task, 'settings') and task.settings:
+        group_id = task.settings.get('group_id')
+    
+    if not group_id:
+        logger.warning(f"Задача {task.id} не содержит group_id в настройках, используем базовую фильтрацию")
+        # Если нет group_id, используем старую логику (только базовые проверки)
+        return _filter_accounts_basic(accounts)
+    
+    logger.info(f"Проверяем админские права для группы {group_id} для {len(accounts)} аккаунтов")
+    
     for account in accounts:
-        # Проверяем, является ли аккаунт администратором с правами приглашать
-        # TODO: Интеграция с реальным API для проверки админских прав
-        # Пока используем логику из адаптера, но добавляем дополнительные проверки
-        
-        # Базовая проверка активности аккаунта (как было раньше)
+        # Базовая проверка активности аккаунта
         if not hasattr(account, 'status') or account.status != 'active':
+            logger.debug(f"Аккаунт {account.account_id} не активен: {getattr(account, 'status', 'unknown')}")
             continue
             
-        # Проверяем лимиты (как было в check-admin-rights)
+        # Проверяем лимиты
         daily_used = getattr(account, 'daily_used', 0)
         daily_limit = getattr(account, 'daily_limit', 50)
         
@@ -54,18 +63,90 @@ def _filter_admin_accounts(accounts, task: InviteTask):
                 logger.warning(f"Аккаунт {account.account_id} в флуд ожидании до {account.flood_wait_until}")
                 continue
         
-        # Для реальной интеграции нужно будет добавить проверку:
-        # - is_admin = check_if_account_is_admin(account, task.group_id)
-        # - permissions = get_account_permissions(account, task.group_id)
-        # - if is_admin and "invite_users" in permissions:
-        
-        # Пока считаем все активные аккаунты потенциальными администраторами
-        # но логируем это для мониторинга
-        logger.info(f"Аккаунт {account.account_id} прошел базовые проверки (активен, лимиты OK)")
-        admin_accounts.append(account)
+        # РЕАЛЬНАЯ ПРОВЕРКА АДМИНСКИХ ПРАВ
+        try:
+            is_admin = _check_account_admin_rights(account.account_id, group_id)
+            if is_admin:
+                logger.info(f"✅ Аккаунт {account.account_id} является администратором группы {group_id} с правами приглашать")
+                admin_accounts.append(account)
+            else:
+                logger.warning(f"❌ Аккаунт {account.account_id} НЕ является администратором группы {group_id} или не имеет прав приглашать")
+        except Exception as e:
+            logger.error(f"Ошибка проверки админских прав для аккаунта {account.account_id}: {str(e)}")
+            # В случае ошибки API не добавляем аккаунт в админские
+            continue
     
     logger.info(f"Фильтрация аккаунтов: из {len(accounts)} доступно {len(admin_accounts)} админских аккаунтов")
     return admin_accounts
+
+
+def _filter_accounts_basic(accounts):
+    """Базовая фильтрация аккаунтов без проверки админских прав (fallback)"""
+    active_accounts = []
+    
+    for account in accounts:
+        # Базовая проверка активности аккаунта
+        if not hasattr(account, 'status') or account.status != 'active':
+            continue
+            
+        # Проверяем лимиты
+        daily_used = getattr(account, 'daily_used', 0)
+        daily_limit = getattr(account, 'daily_limit', 50)
+        
+        if daily_used >= daily_limit:
+            logger.warning(f"Аккаунт {account.account_id} достиг дневного лимита: {daily_used}/{daily_limit}")
+            continue
+            
+        # Проверяем флуд ограничения
+        if hasattr(account, 'flood_wait_until') and account.flood_wait_until:
+            if account.flood_wait_until > datetime.utcnow():
+                logger.warning(f"Аккаунт {account.account_id} в флуд ожидании до {account.flood_wait_until}")
+                continue
+        
+        logger.info(f"Аккаунт {account.account_id} прошел базовые проверки (активен, лимиты OK) - admin права не проверялись")
+        active_accounts.append(account)
+    
+    return active_accounts
+
+
+def _check_account_admin_rights(account_id: str, group_id: str) -> bool:
+    """Проверка административных прав аккаунта в группе/канале
+    
+    Возвращает True если аккаунт является администратором с правами приглашать пользователей
+    """
+    try:
+        # Запрос к integration-service для проверки админских прав
+        with httpx.Client(timeout=10.0) as client:
+            response = client.post(
+                f"http://integration-service:8000/api/v1/telegram/accounts/{account_id}/check-admin",
+                json={
+                    "group_id": group_id,
+                    "required_permissions": ["invite_users"]
+                }
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                is_admin = data.get('is_admin', False)
+                has_invite_permission = 'invite_users' in data.get('permissions', [])
+                
+                logger.debug(f"Проверка админ прав для {account_id}: is_admin={is_admin}, permissions={data.get('permissions', [])}")
+                return is_admin and has_invite_permission
+            
+            elif response.status_code == 404:
+                logger.warning(f"Эндпоинт проверки админ прав не найден для аккаунта {account_id}")
+                return False
+            
+            else:
+                logger.error(f"Ошибка при проверке админ прав для {account_id}: HTTP {response.status_code}")
+                return False
+                
+    except httpx.TimeoutException:
+        logger.error(f"Таймаут при проверке админ прав для аккаунта {account_id}")
+        return False
+    except Exception as e:
+        logger.error(f"Исключение при проверке админ прав для {account_id}: {str(e)}")
+        return False
 
 
 @celery_app.task(bind=True, max_retries=3)
