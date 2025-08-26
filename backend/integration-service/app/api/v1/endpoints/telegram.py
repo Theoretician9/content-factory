@@ -320,7 +320,9 @@ async def check_account_admin_rights(
         
         # Получаем информацию о группе/канале
         try:
+            logger.info(f"🔍 Попытка получить группу: {group_id}")
             group = await client.get_entity(group_id)
+            logger.info(f"✅ Группа найдена: {getattr(group, 'title', 'No title')}, ID: {getattr(group, 'id', 'No ID')}, Type: {type(group).__name__}")
         except Exception as e:
             logger.error(f"Ошибка получения группы {group_id}: {str(e)}")
             return {
