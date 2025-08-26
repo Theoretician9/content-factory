@@ -344,10 +344,30 @@ async def send_telegram_invite_by_account(
                 
                 normalized_group_id = normalize_group_id(invite_data.group_id)
                 group = await client.get_entity(normalized_group_id)
-                result_data = await client(InviteToChannelRequest(
-                    channel=group,
-                    users=[user]
-                ))
+                
+                # Определяем тип группы/канала для правильного запроса
+                # Правильная логика: каналы и супергруппы используют InviteToChannelRequest
+                # Обычные группы используют AddChatUserRequest
+                from telethon.tl.types import Channel, Chat
+                is_channel_or_megagroup = isinstance(group, Channel)
+                
+                logger.info(f"🔍 Определение типа чата (по номеру): {type(group).__name__}, is_channel_or_megagroup: {is_channel_or_megagroup}")
+                
+                if is_channel_or_megagroup:
+                    # Каналы и мегагруппы
+                    logger.info(f"📤 Используем InviteToChannelRequest для {group.title if hasattr(group, 'title') else group.id} (по номеру)")
+                    result_data = await client(InviteToChannelRequest(
+                        channel=group,
+                        users=[user]
+                    ))
+                else:
+                    # Обычные группы
+                    logger.info(f"📤 Используем AddChatUserRequest для {group.title if hasattr(group, 'title') else group.id} (по номеру)")
+                    result_data = await client(AddChatUserRequest(
+                        chat_id=group.id,
+                        user_id=user.id,
+                        fwd_limit=10
+                    ))
             
             else:
                 raise HTTPException(
