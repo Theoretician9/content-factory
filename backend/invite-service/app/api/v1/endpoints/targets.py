@@ -230,7 +230,42 @@ async def create_targets_bulk(
         end_time = datetime.utcnow()
         duration = (end_time - start_time).total_seconds()
         
-        return TargetImportResult(
+        # 🎆 АВТОМАТИЧЕСКИЙ ЗАПУСК ЗАДАЧИ ПОСЛЕ МАССОВОГО ИМПОРТА
+        celery_task_id = None
+        auto_start_status = None
+        
+        if created_count > 0 and task.status.value == "PENDING":
+            try:
+                # Импорт Celery задачи
+                from workers.invite_worker import execute_invite_task as celery_execute_task
+                
+                logger.info(f"🚀 АВТО-СТАРТ: Запуск задачи {task_id} после успешного массового создания {created_count} целей")
+                
+                # Запуск асинхронной задачи через Celery
+                result = celery_execute_task.delay(task_id)
+                celery_task_id = result.id
+                
+                # Обновление статуса задачи
+                from app.models.invite_task import TaskStatus
+                task.status = TaskStatus.IN_PROGRESS
+                task.start_time = datetime.utcnow()
+                task.updated_at = datetime.utcnow()
+                db.commit()
+                
+                auto_start_status = "started"
+                logger.info(f"✅ АВТО-СТАРТ: Задача {task_id} успешно запущена автоматически после массового создания целей, celery_id={celery_task_id}")
+                
+            except Exception as auto_start_error:
+                logger.error(f"❌ Ошибка автозапуска задачи {task_id} после массового создания целей: {str(auto_start_error)}")
+                auto_start_status = f"failed: {str(auto_start_error)}"
+                # Не прерываем выполнение, создание целей прошло успешно
+        else:
+            if created_count == 0:
+                auto_start_status = "skipped: no targets created"
+            elif task.status.value != "PENDING":
+                auto_start_status = f"skipped: task status is {task.status.value}"
+        
+        result = TargetImportResult(
             total_processed=len(bulk_data.targets),
             created_count=created_count,
             skipped_count=skipped_count,
@@ -238,6 +273,17 @@ async def create_targets_bulk(
             errors=errors,
             duration_seconds=duration
         )
+        
+        # Добавляем информацию об автозапуске
+        result_dict = result.dict()
+        result_dict["auto_start"] = {
+            "status": auto_start_status,
+            "celery_task_id": celery_task_id,
+            "task_status": task.status.value,
+            "started_at": task.start_time.isoformat() if task.start_time else None
+        }
+        
+        return result_dict
         
     except Exception as e:
         db.rollback()
