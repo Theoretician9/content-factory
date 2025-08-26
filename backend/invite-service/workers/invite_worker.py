@@ -525,9 +525,14 @@ def single_invite_operation(self, task_id: int, target_id: int, account_id: int 
             asyncio.set_event_loop(loop)
             
             try:
-                accounts = loop.run_until_complete(adapter.initialize_accounts(task.user_id))
-                if not accounts:
+                all_accounts = loop.run_until_complete(adapter.initialize_accounts(task.user_id))
+                if not all_accounts:
                     raise Exception("Нет доступных аккаунтов")
+                
+                # Применяем фильтрацию по админским правам
+                accounts = _filter_admin_accounts(all_accounts, task)
+                if not accounts:
+                    raise Exception(f"Ни один аккаунт не прошел проверку на админские права. Из {len(all_accounts)} аккаунтов ни один не является администратором")
                 
                 # Выбор аккаунта
                 account = None
