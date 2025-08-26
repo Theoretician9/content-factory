@@ -87,15 +87,19 @@ async def check_account_admin_rights(
         gid = gid.strip()
         
         # Если это уже полный URL - возвращаем как есть
-        if gid.startswith('https://') or gid.startswith('http://') or gid.startswith('t.me/'):
+        if gid.startswith('https://') or gid.startswith('http://'):
             return gid
         
-        # Если это username без @, добавляем t.me/
-        if not gid.startswith('@'):
-            return f't.me/{gid}'
+        # Если это username с @ или без, используем @ префикс
+        if gid.startswith('@'):
+            return gid
+        if 't.me/' in gid:
+            # Извлекаем username из t.me/username
+            username = gid.split('t.me/')[-1]
+            return f'@{username}'
         
-        # Если это @username, возвращаем как есть
-        return gid
+        # По умолчанию добавляем @ для usernames
+        return f'@{gid}'
     
     normalized_group_id = normalize_group_id(group_id)
     
@@ -572,14 +576,24 @@ async def send_telegram_invite(
                         user = await client.get_entity(invite_data.target_username)
                         group = await client.get_entity(invite_data.group_id)
                         
-                        if hasattr(group, 'megagroup') and group.megagroup:
-                            # Супергруппа
+                        # Определяем тип группы/канала для правильного запроса
+                        # Правильная логика: каналы и супергруппы используют InviteToChannelRequest
+                        # Обычные группы используют AddChatUserRequest
+                        from telethon.tl.types import Channel, Chat
+                        is_channel_or_megagroup = isinstance(group, Channel)
+                        
+                        logger.info(f"🔍 Определение типа чата (Account Manager): {type(group).__name__}, is_channel_or_megagroup: {is_channel_or_megagroup}")
+                        
+                        if is_channel_or_megagroup:
+                            # Каналы и мегагруппы
+                            logger.info(f"📤 Используем InviteToChannelRequest для {group.title if hasattr(group, 'title') else group.id} (Account Manager)")
                             result = await client(InviteToChannelRequest(
                                 channel=group,
                                 users=[user]
                             ))
                         else:
-                            # Обычная группа
+                            # Обычные группы
+                            logger.info(f"📤 Используем AddChatUserRequest для {group.title if hasattr(group, 'title') else group.id} (Account Manager)")
                             result = await client(AddChatUserRequest(
                                 chat_id=group.id,
                                 user_id=user.id,
@@ -603,10 +617,30 @@ async def send_telegram_invite(
                             raise Exception(f"Контакт с номером {invite_data.target_phone} не найден")
                         
                         group = await client.get_entity(invite_data.group_id)
-                        result = await client(InviteToChannelRequest(
-                            channel=group,
-                            users=[user]
-                        ))
+                        
+                        # Определяем тип группы/канала для правильного запроса
+                        # Правильная логика: каналы и супергруппы используют InviteToChannelRequest
+                        # Обычные группы используют AddChatUserRequest
+                        from telethon.tl.types import Channel, Chat
+                        is_channel_or_megagroup = isinstance(group, Channel)
+                        
+                        logger.info(f"🔍 Определение типа чата (по номеру, Account Manager): {type(group).__name__}, is_channel_or_megagroup: {is_channel_or_megagroup}")
+                        
+                        if is_channel_or_megagroup:
+                            # Каналы и мегагруппы
+                            logger.info(f"📤 Используем InviteToChannelRequest для {group.title if hasattr(group, 'title') else group.id} (по номеру, Account Manager)")
+                            result = await client(InviteToChannelRequest(
+                                channel=group,
+                                users=[user]
+                            ))
+                        else:
+                            # Обычные группы
+                            logger.info(f"📤 Используем AddChatUserRequest для {group.title if hasattr(group, 'title') else group.id} (по номеру, Account Manager)")
+                            result = await client(AddChatUserRequest(
+                                chat_id=group.id,
+                                user_id=user.id,
+                                fwd_limit=10
+                            ))
                         
                         usage_stats.invites_sent = 1
                         usage_stats.channels_used = [str(invite_data.group_id)]
