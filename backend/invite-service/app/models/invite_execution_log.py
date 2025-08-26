@@ -102,6 +102,7 @@ class InviteExecutionLog(Base):
     
     # Временные метки
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, comment="Время создания лога")
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False, comment="Время последнего обновления лога")
     
     # Связи
     task = relationship("InviteTask", back_populates="logs")
