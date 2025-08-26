@@ -363,6 +363,41 @@ async def import_targets_from_parsing(
             
             logger.info(f"Импортировано {len(imported_targets)} целей из задачи парсинга {parsing_task_id} для задачи {task_id}")
             
+            # 🎆 АВТОМАТИЧЕСКИЙ ЗАПУСК ЗАДАЧИ ПОСЛЕ ИМПОРТА
+            celery_task_id = None
+            auto_start_status = None
+            
+            if len(imported_targets) > 0 and task.status == "PENDING":
+                try:
+                    # Импорт Celery задачи
+                    from workers.invite_worker import execute_invite_task as celery_execute_task
+                    
+                    logger.info(f"🚀 АВТО-СТАРТ: Запуск задачи {task_id} после успешного импорта {len(imported_targets)} целей из парсинга")
+                    
+                    # Запуск асинхронной задачи через Celery
+                    result = celery_execute_task.delay(task_id)
+                    celery_task_id = result.id
+                    
+                    # Обновление статуса задачи
+                    from app.models.invite_task import TaskStatus
+                    task.status = TaskStatus.IN_PROGRESS.value
+                    task.start_time = datetime.utcnow()
+                    task.updated_at = datetime.utcnow()
+                    db.commit()
+                    
+                    auto_start_status = "started"
+                    logger.info(f"✅ АВТО-СТАРТ: Задача {task_id} успешно запущена автоматически после импорта из парсинга, celery_id={celery_task_id}")
+                    
+                except Exception as auto_start_error:
+                    logger.error(f"❌ Ошибка автозапуска задачи {task_id} после импорта из парсинга: {str(auto_start_error)}")
+                    auto_start_status = f"failed: {str(auto_start_error)}"
+                    # Не прерываем выполнение, импорт прошел успешно
+            else:
+                if len(imported_targets) == 0:
+                    auto_start_status = "skipped: no targets imported"
+                elif task.status != "PENDING":
+                    auto_start_status = f"skipped: task status is {task.status}"
+            
             return {
                 "success": True,
                 "message": f"Successfully imported {len(imported_targets)} targets from parsing results",
@@ -374,7 +409,13 @@ async def import_targets_from_parsing(
                 "errors": errors[:10] if errors else [],  # Показываем только первые 10 ошибок
                 "source_name": source_name,
                 "parsing_task_title": task_data.get('title', 'Unknown'),
-                "parsing_platform": task_data.get('platform', 'telegram')
+                "parsing_platform": task_data.get('platform', 'telegram'),
+                "auto_start": {
+                    "status": auto_start_status,
+                    "celery_task_id": celery_task_id,
+                    "task_status": task.status,
+                    "started_at": task.start_time.isoformat() if task.start_time else None
+                }
             }
         
     except HTTPException:
