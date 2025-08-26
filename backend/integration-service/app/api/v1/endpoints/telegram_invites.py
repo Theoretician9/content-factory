@@ -108,9 +108,9 @@ async def check_account_admin_rights(
         
         # Получаем информацию о группе/канале
         try:
-            group = await client.get_entity(group_id)
+            group = await client.get_entity(normalized_group_id)
         except Exception as e:
-            logger.error(f"Ошибка получения группы {group_id}: {str(e)}")
+            logger.error(f"Ошибка получения группы {normalized_group_id} (оригинал: {group_id}): {str(e)}")
             return {
                 "is_admin": False,
                 "permissions": [],
