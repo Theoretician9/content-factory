@@ -275,7 +275,7 @@ async def reconnect_telegram_account(
 @router.post("/accounts/{session_id}/check-admin")
 async def check_account_admin_rights(
     request: Request,
-    session_id: UUID,
+    session_id: str,
     check_data: dict,
     session: AsyncSession = Depends(get_async_session),
     telegram_service: TelegramService = Depends(get_telegram_service)
