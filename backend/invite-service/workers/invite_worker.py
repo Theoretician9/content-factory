@@ -4,6 +4,7 @@ Celery воркеры для выполнения задач приглашен�
 
 import asyncio
 import logging
+import httpx
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from celery import current_task
