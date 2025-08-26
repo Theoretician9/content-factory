@@ -9,8 +9,8 @@ from kombu import Queue
 # Конфигурация Celery
 celery_app = Celery(
     'invite-service',
-    broker=os.getenv('CELERY_BROKER_URL', 'pyamqp://guest@rabbitmq:5672//'),
-    backend=os.getenv('CELERY_RESULT_BACKEND', 'redis://redis:6379/0'),
+    broker=os.getenv('CELERY_BROKER_URL', 'amqp://user:password@rabbitmq:5672//'),
+    backend=os.getenv('CELERY_RESULT_BACKEND', 'redis://redis:6379/5'),
     include=[
         'workers.invite_worker',
         'workers.maintenance_worker'
