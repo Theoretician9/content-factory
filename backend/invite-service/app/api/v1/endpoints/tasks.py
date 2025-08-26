@@ -467,14 +467,20 @@ async def execute_invite_task(
         # Импорт Celery задачи
         from workers.invite_worker import execute_invite_task as celery_execute_task
         
+        logger.info(f"🔍 DIAGNOSTIC: About to queue Celery task for task_id={task_id}")
+        
         # Запуск асинхронной задачи через Celery
         result = celery_execute_task.delay(task_id)
+        
+        logger.info(f"🔍 DIAGNOSTIC: Celery task queued successfully - task_id={task_id}, celery_id={result.id}")
         
         # Обновление статуса задачи (используем значение enum в БД)
         task.status = TaskStatus.IN_PROGRESS.value
         task.start_time = datetime.utcnow()
         task.updated_at = datetime.utcnow()
         db.commit()
+        
+        logger.info(f"🔍 DIAGNOSTIC: Task status updated to IN_PROGRESS for task_id={task_id}")
         
         return {
             "message": f"Задача {task_id} запущена в выполнение",

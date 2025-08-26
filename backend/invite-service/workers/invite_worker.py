@@ -27,18 +27,22 @@ def execute_invite_task(self, task_id: int):
     Args:
         task_id: ID задачи приглашений
     """
-    logger.info(f"Начинаем выполнение задачи приглашений: {task_id}")
+    logger.info(f"🚀 CELERY WORKER: Получена задача выполнения приглашений: {task_id}")
+    logger.info(f"🚀 CELERY WORKER: Celery task ID: {self.request.id}")
     
-    with get_db_session() as db:
-        # Получение задачи
-        task = db.query(InviteTask).filter(InviteTask.id == task_id).first()
-        
-        if not task:
-            logger.error(f"Задача {task_id} не найдена")
-            raise Exception(f"Задача {task_id} не найдена")
-        
-        if task.status not in [TaskStatus.PENDING, TaskStatus.PAUSED, TaskStatus.FAILED, TaskStatus.IN_PROGRESS]:
-            logger.warning(f"Задача {task_id} имеет некорректный статус для выполнения: {task.status}")
+    try:
+        with get_db_session() as db:
+            # Получение задачи
+            task = db.query(InviteTask).filter(InviteTask.id == task_id).first()
+            
+            if not task:
+                logger.error(f"❌ CELERY WORKER: Задача {task_id} не найдена")
+                raise Exception(f"Задача {task_id} не найдена")
+            
+            logger.info(f"✅ CELERY WORKER: Задача {task_id} найдена, статус: {task.status}")
+            
+            if task.status not in [TaskStatus.PENDING, TaskStatus.PAUSED, TaskStatus.FAILED, TaskStatus.IN_PROGRESS]:
+                logger.warning(f"⚠️ CELERY WORKER: Задача {task_id} имеет некорректный статус для выполнения: {task.status}")
             return f"Задача {task_id} не может быть выполнена со статусом {task.status}"
         
         try:
