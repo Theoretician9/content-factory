@@ -311,7 +311,7 @@ async def _execute_task_async(task: InviteTask, adapter, db: Session) -> str:
         logger.info(f"Найдено {len(all_accounts)} аккаунтов, применяем фильтрацию по админским правам")
         
         # Фильтрация аккаунтов с проверкой админских прав  
-        accounts = _filter_admin_accounts(all_accounts, task)
+        accounts = await _filter_admin_accounts_async(all_accounts, task)
         
         if not accounts:
             raise Exception(f"Нет доступных аккаунтов с административными правами. Из {len(all_accounts)} аккаунтов ни один не прошел проверку на админские права и лимиты")
@@ -450,7 +450,7 @@ async def _process_batch_async(
             raise Exception("Нет доступных аккаунтов")
             
         # Применяем фильтрацию по админским правам  
-        accounts = _filter_admin_accounts(all_accounts, task)
+        accounts = await _filter_admin_accounts_async(all_accounts, task)
         if not accounts:
             raise Exception(f"Ни один аккаунт не прошел проверку на админские права. Из {len(all_accounts)} аккаунтов ни один не является администратором с правами приглашать пользователей")
         
