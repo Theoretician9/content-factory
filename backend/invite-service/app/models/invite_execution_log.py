@@ -12,11 +12,11 @@ from app.core.database import Base
 
 class LogLevel(str, enum.Enum):
     """Уровни логирования"""
-    DEBUG = "debug"
-    INFO = "info"
-    WARNING = "warning"
-    ERROR = "error"
-    CRITICAL = "critical"
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
 
 
 class ActionType(str, enum.Enum):

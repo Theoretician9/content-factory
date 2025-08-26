@@ -86,6 +86,26 @@ def create_enum_types():
                 EXCEPTION
                     WHEN duplicate_object THEN null;
                 END $$;
+                """,
+                """
+                DO $$ BEGIN
+                    CREATE TYPE loglevel AS ENUM (
+                        'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
+                    );
+                EXCEPTION
+                    WHEN duplicate_object THEN null;
+                END $$;
+                """,
+                """
+                DO $$ BEGIN
+                    CREATE TYPE actiontype AS ENUM (
+                        'TASK_STARTED', 'TASK_COMPLETED', 'TASK_FAILED', 'TASK_PAUSED', 'TASK_RESUMED',
+                        'INVITE_SENT', 'INVITE_SUCCESSFUL', 'INVITE_FAILED', 'ACCOUNT_SWITCHED', 
+                        'RATE_LIMIT_HIT', 'ERROR_OCCURRED'
+                    );
+                EXCEPTION
+                    WHEN duplicate_object THEN null;
+                END $$;
                 """
             ]
             
