@@ -113,10 +113,14 @@ async def create_invite_task(
         db.commit()
         db.refresh(task)
         
+        # Логируем создание задачи
+        logger.info(f"✅ Создана новая задача ID {task.id}: '{task.name}' для пользователя {user_id}")
+        
         return task
         
     except Exception as e:
         db.rollback()
+        logger.error(f"❌ Ошибка создания задачи: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка создания задачи: {str(e)}"
