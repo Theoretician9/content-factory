@@ -408,7 +408,10 @@ const Mailing = () => {
           delay_between_invites: 45, // 45 секунд как в ТЗ
           batch_size: 5, // 5 пользователей в час как в ТЗ
           auto_add_contacts: createForm.settings.auto_add_contacts,
-          fallback_to_messages: createForm.settings.fallback_to_messages
+          fallback_to_messages: createForm.settings.fallback_to_messages,
+          // Добавляем group_id для проверки админских прав
+          group_id: createForm.task_type === 'invite_to_group' ? createForm.target_group_id : null,
+          invite_type: createForm.task_type === 'invite_to_group' ? 'group_invite' : 'message'
         }
       });
 

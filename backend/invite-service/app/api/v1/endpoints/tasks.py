@@ -102,11 +102,10 @@ async def create_invite_task(
         if task_data.settings:
             settings_dict = task_data.settings.dict()
             logger.info(f"📝 Настройки (dict): {settings_dict}")
-            if 'group_id' in settings_dict:
+            if 'group_id' in settings_dict and settings_dict['group_id']:
                 logger.info(f"📝 group_id найден: {settings_dict['group_id']}")
             else:
-                logger.warning(f"⚠️ group_id НЕ найден в настройках! Доступные ключи: {list(settings_dict.keys())}")
-        else:
+                logger.warning(f"⚠️ group_id НЕ найден в настройках или пустой! Доступные ключи: {list(settings_dict.keys())}")
             logger.warning(f"⚠️ Настройки не переданы (settings=None)")
         
         # Создание новой задачи
