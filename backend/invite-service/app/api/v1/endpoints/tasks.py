@@ -780,82 +780,144 @@ async def check_admin_rights(
             raise HTTPException(status_code=400, detail="Не указана ссылка на группу/канал")
         
         # Получаем все активные Telegram аккаунты пользователя
-        # TODO: Интеграция с integration-service для получения реальных аккаунтов
+        from app.services.integration_client import get_integration_client
+        integration_client = get_integration_client()
         
-        # Временная заглушка с тестовыми данными
-        mock_accounts = [
-            {
-                "account_id": "test_admin_1",
-                "username": "admin_account_1",
-                "status": "active",
-                "is_admin": True,
-                "permissions": ["invite_users", "add_admins"],
-                "daily_limit": 50,
-                "used_today": 12
-            },
-            {
-                "account_id": "test_user_2", 
-                "username": "regular_user_2",
-                "status": "active",
-                "is_admin": False,
-                "permissions": [],
-                "daily_limit": 30,
-                "used_today": 5
-            },
-            {
-                "account_id": "test_admin_3",
-                "username": "admin_account_3", 
-                "status": "rate_limited",
-                "is_admin": True,
-                "permissions": ["invite_users"],
-                "daily_limit": 40,
-                "used_today": 40,
-                "rate_limit_until": "2024-01-01T15:30:00Z"
+        logger.info(f"🔍 Проверка админских прав для группы: {group_link}")
+        
+        try:
+            # Получаем реальные аккаунты пользователя
+            accounts_data = await integration_client.get_user_accounts(user_id, "telegram")
+            logger.info(f"📊 Получено {len(accounts_data)} аккаунтов пользователя {user_id}")
+            
+            if not accounts_data:
+                return {
+                    "group_link": group_link,
+                    "group_name": group_link.split('/')[-1].replace('@', ''),
+                    "total_accounts_checked": 0,
+                    "admin_accounts": 0,
+                    "ready_accounts": [],
+                    "unavailable_accounts": [],
+                    "can_proceed": False,
+                    "estimated_capacity": 0,
+                    "error": "У пользователя нет активных Telegram аккаунтов"
+                }
+            
+            # Проверяем админские права для каждого аккаунта
+            ready_accounts = []
+            unavailable_accounts = []
+            admin_accounts_count = 0
+            
+            for account in accounts_data:
+                account_id = account.get('id')
+                username = account.get('phone', f"Account_{account_id[:8]}")
+                is_active = account.get('is_active', False)
+                
+                if not is_active:
+                    unavailable_accounts.append({
+                        "account_id": account_id,
+                        "username": username,
+                        "status": "inactive",
+                        "reason": "account_not_active",
+                        "permissions": []
+                    })
+                    continue
+                
+                # Проверяем админские права
+                try:
+                    # Делаем запрос к integration-service для проверки админских прав
+                    admin_check_response = await integration_client._make_request(
+                        method="POST",
+                        endpoint=f"/api/v1/telegram/accounts/{account_id}/check-admin",
+                        json_data={
+                            "group_id": group_link,
+                            "required_permissions": ["invite_users"]
+                        }
+                    )
+                    
+                    is_admin = admin_check_response.get('is_admin', False)
+                    permissions = admin_check_response.get('permissions', [])
+                    has_required_permissions = admin_check_response.get('has_required_permissions', False)
+                    
+                    if is_admin:
+                        admin_accounts_count += 1
+                        
+                        if has_required_permissions:
+                            # Примерные лимиты - в реальности нужно получать из БД или конфига
+                            daily_limit = 50
+                            used_today = 0  # В реальности нужно получать из статистики
+                            available_invites = daily_limit - used_today
+                            
+                            ready_accounts.append({
+                                "account_id": account_id,
+                                "username": username,
+                                "status": "ready",
+                                "available_invites": available_invites,
+                                "permissions": permissions
+                            })
+                            
+                            logger.info(f"✅ Аккаунт {username} готов к инвайтам: {available_invites} доступно")
+                        else:
+                            unavailable_accounts.append({
+                                "account_id": account_id,
+                                "username": username,
+                                "status": "no_invite_permissions",
+                                "reason": "insufficient_admin_permissions",
+                                "permissions": permissions
+                            })
+                            
+                            logger.warning(f"⚠️ Аккаунт {username} - админ, но нет прав на инвайты")
+                    else:
+                        unavailable_accounts.append({
+                            "account_id": account_id,
+                            "username": username,
+                            "status": "not_admin",
+                            "reason": "not_group_admin",
+                            "permissions": []
+                        })
+                        
+                        logger.info(f"ℹ️ Аккаунт {username} не является администратором группы")
+                        
+                except Exception as admin_check_error:
+                    logger.error(f"❌ Ошибка проверки админских прав для {account_id}: {admin_check_error}")
+                    unavailable_accounts.append({
+                        "account_id": account_id,
+                        "username": username,
+                        "status": "check_failed",
+                        "reason": "admin_check_error",
+                        "error": str(admin_check_error),
+                        "permissions": []
+                    })
+            
+            # Извлекаем название группы из ссылки
+            group_name = group_link.split('/')[-1].replace('@', '')
+            
+            total_capacity = sum(acc["available_invites"] for acc in ready_accounts)
+            
+            result = {
+                "group_link": group_link,
+                "group_name": group_name,
+                "total_accounts_checked": len(accounts_data),
+                "admin_accounts": admin_accounts_count,
+                "ready_accounts": ready_accounts,
+                "unavailable_accounts": unavailable_accounts,
+                "can_proceed": len(ready_accounts) > 0,
+                "estimated_capacity": total_capacity
             }
-        ]
-        
-        # Фильтруем только администраторов с правами приглашать
-        admin_accounts = [
-            acc for acc in mock_accounts 
-            if acc["is_admin"] and "invite_users" in acc["permissions"]
-        ]
-        
-        # Проверяем готовность к работе
-        ready_accounts = []
-        unavailable_accounts = []
-        
-        for acc in admin_accounts:
-            if acc["status"] == "active" and acc["used_today"] < acc["daily_limit"]:
-                ready_accounts.append({
-                    "account_id": acc["account_id"],
-                    "username": acc["username"],
-                    "status": "ready",
-                    "available_invites": acc["daily_limit"] - acc["used_today"],
-                    "permissions": acc["permissions"]
-                })
-            else:
-                unavailable_accounts.append({
-                    "account_id": acc["account_id"],
-                    "username": acc["username"],
-                    "status": acc["status"],
-                    "reason": "rate_limited" if acc["status"] == "rate_limited" else "daily_limit_reached",
-                    "available_at": acc.get("rate_limit_until"),
-                    "permissions": acc["permissions"]
-                })
-        
-        # Извлекаем название группы из ссылки (упрощенно)
-        group_name = group_link.split('/')[-1].replace('@', '')
-        
-        return {
-            "group_link": group_link,
-            "group_name": group_name,
-            "total_accounts_checked": len(mock_accounts),
-            "admin_accounts": len(admin_accounts),
-            "ready_accounts": ready_accounts,
-            "unavailable_accounts": unavailable_accounts,
-            "can_proceed": len(ready_accounts) > 0,
-            "estimated_capacity": sum(acc["available_invites"] for acc in ready_accounts)
-        }
+            
+            logger.info(
+                f"📊 Проверка завершена: {len(ready_accounts)} готовых админов, "
+                f"потенциал {total_capacity} приглашений"
+            )
+            
+            return result
+            
+        except Exception as integration_error:
+            logger.error(f"❌ Ошибка интеграции с integration-service: {integration_error}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Ошибка получения данных аккаунтов: {str(integration_error)}"
+            )
         
     except Exception as e:
         logger.error(f"❌ Ошибка проверки админских прав: {e}")

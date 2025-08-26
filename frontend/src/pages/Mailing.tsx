@@ -394,6 +394,17 @@ const Mailing = () => {
         ? `Приглашения в ${groupName}`
         : `Приглашения в группу (${createForm.target_group_id})`;
 
+      // 🔎 Отладочное логирование для понимания проблемы
+      console.log('🔎 Отладка фронтенда:');
+      console.log('task_type:', createForm.task_type);
+      console.log('target_group_id:', createForm.target_group_id);
+      console.log('target_group_id.trim():', createForm.target_group_id.trim());
+      console.log('groupName:', groupName);
+      console.log('adminCheckResult:', adminCheckResult);
+      
+      const calculatedGroupId = createForm.task_type === 'invite_to_group' ? createForm.target_group_id : null;
+      console.log('Вычисленный group_id:', calculatedGroupId);
+
       // ✅ ШАГ 1: СОЗДАНИЕ ЗАДАЧИ
       const res = await inviteApi.tasks.create({
         platform: createForm.platform,
@@ -410,7 +421,7 @@ const Mailing = () => {
           auto_add_contacts: createForm.settings.auto_add_contacts,
           fallback_to_messages: createForm.settings.fallback_to_messages,
           // Добавляем group_id для проверки админских прав
-          group_id: createForm.task_type === 'invite_to_group' ? createForm.target_group_id : null,
+          group_id: calculatedGroupId,
           invite_type: createForm.task_type === 'invite_to_group' ? 'group_invite' : 'message'
         }
       });
