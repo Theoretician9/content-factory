@@ -286,7 +286,15 @@ async def check_account_admin_rights(
     user_id = await get_user_id_from_request(request)
     
     # Получаем аккаунт и проверяем принадлежность пользователю
-    telegram_session = await telegram_service.session_service.get_by_id(session, session_id)
+    try:
+        session_uuid = UUID(session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Неверный формат ID аккаунта"
+        )
+    
+    telegram_session = await telegram_service.session_service.get_by_id(session, session_uuid)
     
     if not telegram_session or telegram_session.user_id != user_id:
         raise HTTPException(
