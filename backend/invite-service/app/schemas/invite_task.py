@@ -35,6 +35,10 @@ class TaskSettingsSchema(BaseModel):
     proxy_settings: Optional[Dict[str, Any]] = None
     custom_headers: Optional[Dict[str, str]] = None
     
+    # Настройки для Telegram приглашений
+    group_id: Optional[str] = Field(None, description="ID группы/канала для приглашений")
+    invite_type: Optional[str] = Field("group_invite", description="Тип приглашения")
+    
     class Config:
         extra = "allow"  # Позволяет дополнительные поля
 
