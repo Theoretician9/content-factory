@@ -254,6 +254,34 @@ class IntegrationServiceClient:
             logger.error(f"Ошибка получения лимитов аккаунта {account_id}: {str(e)}")
             raise
     
+    async def check_admin_rights(
+        self,
+        account_id: str,
+        group_id: str,
+        required_permissions: List[str] = None
+    ) -> Dict[str, Any]:
+        """Проверка административных прав аккаунта в группе/канале"""
+        
+        if required_permissions is None:
+            required_permissions = ["invite_users"]
+        
+        try:
+            response = await self._make_request(
+                method="POST",
+                endpoint=f"/api/v1/telegram/accounts/{account_id}/check-admin",
+                json_data={
+                    "group_id": group_id,
+                    "required_permissions": required_permissions
+                }
+            )
+            
+            logger.info(f"Проверка админских прав для аккаунта {account_id} в группе {group_id}: {response.get('is_admin', False)}")
+            return response
+            
+        except Exception as e:
+            logger.error(f"Ошибка проверки админских прав аккаунта {account_id}: {str(e)}")
+            raise
+
     async def health_check(self) -> bool:
         """Проверка доступности Integration Service"""
         

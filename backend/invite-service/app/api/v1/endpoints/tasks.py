@@ -826,13 +826,10 @@ async def check_admin_rights(
                 # Проверяем админские права
                 try:
                     # Делаем запрос к integration-service для проверки админских прав
-                    admin_check_response = await integration_client._make_request(
-                        method="POST",
-                        endpoint=f"/api/v1/telegram/accounts/{account_id}/check-admin",
-                        json_data={
-                            "group_id": group_link,
-                            "required_permissions": ["invite_users"]
-                        }
+                    admin_check_response = await integration_client.check_admin_rights(
+                        account_id=account_id,
+                        group_id=group_link,
+                        required_permissions=["invite_users"]
                     )
                     
                     is_admin = admin_check_response.get('is_admin', False)
