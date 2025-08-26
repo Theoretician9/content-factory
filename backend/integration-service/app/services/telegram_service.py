@@ -1050,6 +1050,31 @@ class TelegramService:
         await client.connect()
         return client
     
+    async def get_client(self, telegram_session: TelegramSession) -> TelegramClient:
+        """Получение Telegram клиента для сессии"""
+        try:
+            # Проверяем что сессия активна
+            if not telegram_session.is_active:
+                raise ValueError(f"Telegram сессия {telegram_session.id} не активна")
+            
+            # Проверяем наличие данных сессии
+            if not telegram_session.session_data or 'encrypted_session' not in telegram_session.session_data:
+                raise ValueError(f"Telegram сессия {telegram_session.id} не содержит данных для подключения")
+            
+            # Расшифровываем данные сессии
+            encrypted_session = telegram_session.session_data['encrypted_session']
+            session_string = await self._decrypt_session_data(encrypted_session)
+            
+            # Создаем клиента
+            client = await self._create_client_from_session(session_string)
+            
+            logger.info(f"✅ Получен Telegram клиент для сессии {telegram_session.id}")
+            return client
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения Telegram клиента для сессии {telegram_session.id}: {str(e)}")
+            raise
+    
     def _cleanup_old_auth_sessions(self) -> None:
         """Очистка старых auth sessions для предотвращения утечек памяти"""
         try:
