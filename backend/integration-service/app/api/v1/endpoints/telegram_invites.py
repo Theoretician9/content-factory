@@ -236,6 +236,9 @@ async def send_telegram_invite_by_account(
 ):
     """Отправка приглашения через конкретный Telegram аккаунт - совместимость с Invite Service"""
     
+    # Логирование входящих данных для диагностики
+    logger.info(f"🔍 DIAGNOSTIC: Получены данные для приглашения: account_id={account_id}, invite_data={invite_data.dict()}")
+    
     # Изоляция пользователей
     user_id = await get_user_id_from_request(request)
     
