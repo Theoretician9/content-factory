@@ -100,6 +100,9 @@ class InviteExecutionLog(Base):
     user_agent = Column(String(500), nullable=True, comment="User Agent (для веб запросов)")
     ip_address = Column(String(45), nullable=True, comment="IP адрес")
     
+    # Временные метки
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, comment="Время создания лога")
+    
     # Связи
     task = relationship("InviteTask", back_populates="logs")
     target = relationship("InviteTarget", foreign_keys=[target_id])
