@@ -273,7 +273,19 @@ async def send_telegram_invite_by_account(
             if invite_data.target_username:
                 # Приглашение по username
                 user = await client.get_entity(invite_data.target_username)
-                group = await client.get_entity(invite_data.group_id)
+                
+                # Нормализуем group_id
+                def normalize_group_id(gid: str) -> str:
+                    """Нормализует group_id для использования с Telegram API"""
+                    gid = gid.strip()
+                    if gid.startswith('https://') or gid.startswith('http://') or gid.startswith('t.me/'):
+                        return gid
+                    if not gid.startswith('@'):
+                        return f't.me/{gid}'
+                    return gid
+                
+                normalized_group_id = normalize_group_id(invite_data.group_id)
+                group = await client.get_entity(normalized_group_id)
                 
                 if hasattr(group, 'megagroup') and group.megagroup:
                     # Супергруппа
@@ -305,7 +317,17 @@ async def send_telegram_invite_by_account(
                         detail=f"Контакт с номером {invite_data.target_phone} не найден"
                     )
                 
-                group = await client.get_entity(invite_data.group_id)
+                # Нормализуем group_id
+                def normalize_group_id(gid: str) -> str:
+                    gid = gid.strip()
+                    if gid.startswith('https://') or gid.startswith('http://') or gid.startswith('t.me/'):
+                        return gid
+                    if not gid.startswith('@'):
+                        return f't.me/{gid}'
+                    return gid
+                
+                normalized_group_id = normalize_group_id(invite_data.group_id)
+                group = await client.get_entity(normalized_group_id)
                 result_data = await client(InviteToChannelRequest(
                     channel=group,
                     users=[user]
