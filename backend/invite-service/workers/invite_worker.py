@@ -149,10 +149,18 @@ async def _execute_task_async(task: InviteTask, adapter, db: Session) -> str:
     try:
         # Инициализация аккаунтов
         logger.info(f"Инициализация аккаунтов для задачи {task.id}")
-        accounts = await adapter.initialize_accounts(task.user_id)
+        all_accounts = await adapter.initialize_accounts(task.user_id)
+        
+        if not all_accounts:
+            raise Exception("Нет доступных аккаунтов для выполнения задачи")
+        
+        logger.info(f"Найдено {len(all_accounts)} аккаунтов, применяем фильтрацию по админским правам")
+        
+        # Фильтрация аккаунтов с проверкой админских прав  
+        accounts = _filter_admin_accounts(all_accounts, task)
         
         if not accounts:
-            raise Exception("Нет доступных активных аккаунтов для выполнения задачи")
+            raise Exception(f"Нет доступных аккаунтов с административными правами. Из {len(all_accounts)} аккаунтов ни один не прошел проверку на админские права и лимиты")
         
         logger.info(f"Найдено {len(accounts)} активных аккаунтов для задачи {task.id}")
         
@@ -282,10 +290,15 @@ async def _process_batch_async(
     """Асинхронная обработка батча целей"""
     
     try:
-        # Инициализация аккаунтов
-        accounts = await adapter.initialize_accounts(task.user_id)
-        if not accounts:
+        # Инициализация аккаунтов с фильтрацией по админским правам
+        all_accounts = await adapter.initialize_accounts(task.user_id)
+        if not all_accounts:
             raise Exception("Нет доступных аккаунтов")
+            
+        # Применяем фильтрацию по админским правам  
+        accounts = _filter_admin_accounts(all_accounts, task)
+        if not accounts:
+            raise Exception(f"Ни один аккаунт не прошел проверку на админские права. Из {len(all_accounts)} аккаунтов ни один не является администратором с правами приглашать пользователей")
         
         # Round-robin распределение по аккаунтам
         account_index = 0
