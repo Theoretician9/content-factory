@@ -44,6 +44,148 @@ def get_account_manager() -> AccountManagerService:
     return AccountManagerService()
 
 
+@router.post("/accounts/{account_id}/check-admin")
+async def check_account_admin_rights(
+    account_id: UUID,
+    check_data: dict,
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
+    telegram_service: TelegramService = Depends(get_telegram_service)
+):
+    """Проверка административных прав аккаунта в группе/канале"""
+    
+    # Изоляция пользователей
+    user_id = await get_user_id_from_request(request)
+    
+    # Получаем аккаунт и проверяем принадлежность пользователю
+    result = await session.execute(
+        select(TelegramSession).where(
+            TelegramSession.id == account_id,
+            TelegramSession.user_id == user_id
+        )
+    )
+    account = result.scalar_one_or_none()
+    
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Telegram аккаунт не найден или нет доступа"
+        )
+    
+    group_id = check_data.get("group_id")
+    required_permissions = check_data.get("required_permissions", [])
+    
+    if not group_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="group_id обязателен"
+        )
+    
+    try:
+        # Получение Telegram клиента
+        client = await telegram_service.get_client(account)
+        
+        if not client.is_connected():
+            await client.connect()
+        
+        # Получаем информацию о группе/канале
+        try:
+            group = await client.get_entity(group_id)
+        except Exception as e:
+            logger.error(f"Ошибка получения группы {group_id}: {str(e)}")
+            return {
+                "is_admin": False,
+                "permissions": [],
+                "error": f"Не удалось получить информацию о группе: {str(e)}"
+            }
+        
+        # Получаем свои права в этой группе
+        try:
+            # Получаем текущего пользователя (себя)
+            me = await client.get_me()
+            
+            # Получаем список администраторов
+            admins = await client.get_participants(group, filter=lambda p: p.participant)
+            
+            my_admin_rights = None
+            is_admin = False
+            
+            # Ищем себя в списке админов
+            for participant in admins:
+                if hasattr(participant, 'user_id') and participant.user_id == me.id:
+                    if hasattr(participant, 'admin_rights') and participant.admin_rights:
+                        my_admin_rights = participant.admin_rights
+                        is_admin = True
+                        break
+                    elif hasattr(participant, 'creator') and participant.creator:
+                        # Креатор имеет все права
+                        is_admin = True
+                        my_admin_rights = type('AdminRights', (), {
+                            'invite_users': True,
+                            'add_admins': True,
+                            'ban_users': True,
+                            'delete_messages': True,
+                            'edit_messages': True,
+                            'post_messages': True,
+                            'pin_messages': True
+                        })()
+                        break
+            
+            if not is_admin:
+                logger.info(f"Аккаунт {account_id} не является администратором в группе {group_id}")
+                return {
+                    "is_admin": False,
+                    "permissions": [],
+                    "message": "Не является администратором"
+                }
+            
+            # Определяем конкретные права
+            permissions = []
+            
+            if hasattr(my_admin_rights, 'invite_users') and my_admin_rights.invite_users:
+                permissions.append('invite_users')
+            
+            if hasattr(my_admin_rights, 'add_admins') and my_admin_rights.add_admins:
+                permissions.append('add_admins')
+            
+            if hasattr(my_admin_rights, 'ban_users') and my_admin_rights.ban_users:
+                permissions.append('ban_users')
+            
+            if hasattr(my_admin_rights, 'delete_messages') and my_admin_rights.delete_messages:
+                permissions.append('delete_messages')
+            
+            if hasattr(my_admin_rights, 'post_messages') and my_admin_rights.post_messages:
+                permissions.append('post_messages')
+            
+            # Проверяем наличие требуемых прав
+            has_required_permissions = all(perm in permissions for perm in required_permissions)
+            
+            logger.info(f"✅ Аккаунт {account_id} - админ: {is_admin}, права: {permissions}")
+            
+            return {
+                "is_admin": is_admin,
+                "permissions": permissions,
+                "has_required_permissions": has_required_permissions,
+                "group_title": getattr(group, 'title', str(group_id)),
+                "message": f"Аккаунт {'\u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f' if is_admin else '\u043d\u0435 \u044f\u0432\u043b\u044f\u0435\u0442\u0441\u044f'} администратором"
+            }
+            
+        except Exception as e:
+            logger.error(f"Ошибка проверки админ прав для {account_id} в {group_id}: {str(e)}")
+            return {
+                "is_admin": False,
+                "permissions": [],
+                "error": f"Ошибка проверки прав: {str(e)}"
+            }
+            
+    except Exception as e:
+        logger.error(f"Ошибка подключения к Telegram для аккаунта {account_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка подключения к Telegram: {str(e)}"
+        )
+
+
 @router.post("/accounts/{account_id}/invite", response_model=TelegramInviteResponse)
 async def send_telegram_invite_by_account(
     account_id: UUID,
