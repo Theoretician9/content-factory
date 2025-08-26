@@ -284,11 +284,18 @@ async def send_telegram_invite_by_account(
                 def normalize_group_id(gid: str) -> str:
                     """Нормализует group_id для использования с Telegram API"""
                     gid = gid.strip()
-                    if gid.startswith('https://') or gid.startswith('http://') or gid.startswith('t.me/'):
+                    # Если это уже полный URL - возвращаем как есть
+                    if gid.startswith('https://') or gid.startswith('http://'):
                         return gid
-                    if not gid.startswith('@'):
-                        return f't.me/{gid}'
-                    return gid
+                    # Если это username с @ или без, используем @ префикс
+                    if gid.startswith('@'):
+                        return gid
+                    if 't.me/' in gid:
+                        # Извлекаем username из t.me/username
+                        username = gid.split('t.me/')[-1]
+                        return f'@{username}'
+                    # По умолчанию добавляем @ для usernames
+                    return f'@{gid}'
                 
                 normalized_group_id = normalize_group_id(invite_data.group_id)
                 group = await client.get_entity(normalized_group_id)
@@ -335,12 +342,20 @@ async def send_telegram_invite_by_account(
                 
                 # Нормализуем group_id
                 def normalize_group_id(gid: str) -> str:
+                    """Нормализует group_id для использования с Telegram API"""
                     gid = gid.strip()
-                    if gid.startswith('https://') or gid.startswith('http://') or gid.startswith('t.me/'):
+                    # Если это уже полный URL - возвращаем как есть
+                    if gid.startswith('https://') or gid.startswith('http://'):
                         return gid
-                    if not gid.startswith('@'):
-                        return f't.me/{gid}'
-                    return gid
+                    # Если это username с @ или без, используем @ префикс
+                    if gid.startswith('@'):
+                        return gid
+                    if 't.me/' in gid:
+                        # Извлекаем username из t.me/username
+                        username = gid.split('t.me/')[-1]
+                        return f'@{username}'
+                    # По умолчанию добавляем @ для usernames
+                    return f'@{gid}'
                 
                 normalized_group_id = normalize_group_id(invite_data.group_id)
                 group = await client.get_entity(normalized_group_id)
