@@ -351,6 +351,8 @@ export const inviteApi = {
         batch_size?: number;
         auto_add_contacts?: boolean;
         fallback_to_messages?: boolean;
+        group_id?: string; // ID группы для проверки админских прав
+        invite_type?: string; // Тип приглашения
       };
     }) => apiFetch('/api/invite/tasks/', {
       method: 'POST',
