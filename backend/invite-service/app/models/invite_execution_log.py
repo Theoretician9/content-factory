@@ -21,17 +21,17 @@ class LogLevel(str, enum.Enum):
 
 class ActionType(str, enum.Enum):
     """Типы действий в логах"""
-    TASK_STARTED = "task_started"
-    TASK_COMPLETED = "task_completed"
-    TASK_FAILED = "task_failed"
-    TASK_PAUSED = "task_paused"
-    TASK_RESUMED = "task_resumed"
-    INVITE_SENT = "invite_sent"
-    INVITE_SUCCESSFUL = "invite_successful"
-    INVITE_FAILED = "invite_failed"
-    ACCOUNT_SWITCHED = "account_switched"
-    RATE_LIMIT_HIT = "rate_limit_hit"
-    ERROR_OCCURRED = "error_occurred"
+    TASK_STARTED = "TASK_STARTED"
+    TASK_COMPLETED = "TASK_COMPLETED"
+    TASK_FAILED = "TASK_FAILED"
+    TASK_PAUSED = "TASK_PAUSED"
+    TASK_RESUMED = "TASK_RESUMED"
+    INVITE_SENT = "INVITE_SENT"
+    INVITE_SUCCESSFUL = "INVITE_SUCCESSFUL"
+    INVITE_FAILED = "INVITE_FAILED"
+    ACCOUNT_SWITCHED = "ACCOUNT_SWITCHED"
+    RATE_LIMIT_HIT = "RATE_LIMIT_HIT"
+    ERROR_OCCURRED = "ERROR_OCCURRED"
 
 
 class InviteResultStatus(str, enum.Enum):
