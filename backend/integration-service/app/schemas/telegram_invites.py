@@ -34,16 +34,24 @@ class TelegramInviteRequest(BaseModel):
     parse_mode: Optional[str] = Field("text", description="Режим парсинга (text, html)")
     silent: bool = Field(False, description="Отправить без уведомления")
     
-    @validator('target_username', 'target_phone', 'target_user_id')
+    @validator('target_username', 'target_phone', 'target_user_id', pre=True)
     def validate_target_provided(cls, v, values):
         """Проверка что указан хотя бы один способ идентификации цели"""
+        # Проверяем, что хотя бы одно из полей заполнено
         targets = [
             values.get('target_username'),
             values.get('target_phone'),
-            values.get('target_user_id')
+            values.get('target_user_id'),
+            v  # текущее значение
         ]
-        if v is None and all(t is None for t in targets):
-            raise ValueError('Необходимо указать target_username, target_phone или target_user_id')
+        # Фильтруем только непустые значения
+        non_empty_targets = [t for t in targets if t is not None and t != ""]
+        
+        # Если это первый валидатор, проверяем общее условие
+        if 'target_username' in values or 'target_phone' in values or 'target_user_id' in values:
+            if not non_empty_targets:
+                raise ValueError('Необходимо указать target_username, target_phone или target_user_id')
+        
         return v
     
     @validator('group_id')
