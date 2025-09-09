@@ -135,6 +135,50 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
             logger.error(f"❌ Ошибка инициализации Telegram аккаунтов для пользователя {user_id}: {str(e)}")
             raise
     
+    async def validate_target(self, target_data: Dict[str, Any]) -> bool:
+        """Валидация данных цели для Telegram приглашения"""
+        # Проверяем, что цель имеет хотя бы один идентификатор
+        username = target_data.get("username")
+        phone = target_data.get("phone_number")
+        user_id = target_data.get("user_id_platform")
+        
+        # 🔍 ДИАГНОСТИКА: подробная информация о данных цели для валидации
+        logger.info(f"🔍 DIAGNOSTIC: Валидация цели:")
+        logger.info(f"🔍 DIAGNOSTIC:   username: {repr(username)} (empty: {not username or not str(username).strip()})")
+        logger.info(f"🔍 DIAGNOSTIC:   phone_number: {repr(phone)} (empty: {not phone or not str(phone).strip()})")
+        logger.info(f"🔍 DIAGNOSTIC:   user_id_platform: {repr(user_id)} (empty: {not user_id or not str(user_id).strip()})")
+        
+        # Проверяем, есть ли хотя бы один непустой идентификатор
+        has_valid_username = username and str(username).strip()
+        has_valid_phone = phone and str(phone).strip()
+        has_valid_user_id = user_id and str(user_id).strip()
+        
+        logger.info(f"🔍 DIAGNOSTIC:   has_valid_username: {has_valid_username}")
+        logger.info(f"🔍 DIAGNOSTIC:   has_valid_phone: {has_valid_phone}")
+        logger.info(f"🔍 DIAGNOSTIC:   has_valid_user_id: {has_valid_user_id}")
+        logger.info(f"🔍 DIAGNOSTIC:   any valid identifier: {any([has_valid_username, has_valid_phone, has_valid_user_id])}")
+        
+        # ✅ ИЗМЕНЕНО: Более строгая проверка
+        if not any([has_valid_username, has_valid_phone, has_valid_user_id]):
+            logger.warning("Цель не содержит идентификатора для Telegram приглашения")
+            return False
+        
+        # Дополнительная валидация формата данных
+        if username and not isinstance(username, str):
+            logger.warning("Некорректный формат username")
+            return False
+            
+        if phone and not isinstance(phone, str):
+            logger.warning("Некорректный формат phone_number")
+            return False
+            
+        if user_id and not isinstance(user_id, str):
+            logger.warning("Некорректный формат user_id_platform")
+            return False
+        
+        logger.debug(f"Цель прошла валидацию: username={username}, phone={phone}, user_id={user_id}")
+        return True
+    
     async def send_invite(
         self,
         account: PlatformAccount,
@@ -156,25 +200,66 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
             )
         
         try:
-            # Подготовка данных для Integration Service
+            // Проверяем, что у цели есть хотя бы один идентификатор
+            target_username = target.get("username")
+            target_phone = target.get("phone_number")
+            target_user_id = target.get("user_id_platform")
+            
+            // 🔍 ДИАГНОСТИКА: подробное логирование данных цели
+            logger.info(f"🔍 DIAGNOSTIC: Подробные данные цели перед валидацией:")
+            logger.info(f"🔍 DIAGNOSTIC:   username: {repr(target_username)} (type: {type(target_username)})")
+            logger.info(f"🔍 DIAGNOSTIC:   phone_number: {repr(target_phone)} (type: {type(target_phone)})")
+            logger.info(f"🔍 DIAGNOSTIC:   user_id_platform: {repr(target_user_id)} (type: {type(target_user_id)})")
+            logger.info(f"🔍 DIAGNOSTIC:   any identifiers: {any([target_username, target_phone, target_user_id])}")
+            
+            // ✅ ДОБАВЛЕНО: Более строгая проверка перед отправкой
+            if not any([target_username, target_phone, target_user_id]):
+                error_msg = "Цель не содержит идентификатора (username, phone_number или user_id_platform)"
+                logger.error(f"❌ {error_msg}")
+                return InviteResult(
+                    status=InviteResultStatus.FAILED,
+                    error_message=error_msg,
+                    account_id=account.account_id,
+                    can_retry=False
+                )
+            
+            // Подготовка данных для Integration Service
             telegram_invite_data = {
                 "invite_type": invite_data.get("invite_type", "group_invite"),
-                "target_username": target.get("username"),
-                "target_phone": target.get("phone_number"),
-                "target_user_id": target.get("user_id_platform"),
+                "target_username": target_username,
+                "target_phone": target_phone,
+                "target_user_id": target_user_id,
                 "group_id": invite_data.get("group_id"),
                 "message": invite_data.get("message"),
                 "parse_mode": invite_data.get("parse_mode", "text"),
                 "silent": invite_data.get("silent", False)
             }
             
-            # Отправка через Integration Service
+            // 🔍 ДИАГНОСТИКА: логируем данные, отправляемые в Integration Service
+            logger.info(f"🔍 DIAGNOSTIC: Данные для Integration Service:")
+            for key, value in telegram_invite_data.items():
+                logger.info(f"🔍 DIAGNOSTIC:   {key}: {repr(value)}")
+            
+            // ✅ ДОБАВЛЕНО: Проверяем, что хотя бы одно из полей target_* заполнено
+            target_fields = [target_username, target_phone, target_user_id]
+            if not any(field is not None and str(field).strip() for field in target_fields):
+                error_msg = "Цель не содержит корректных идентификаторов для приглашения"
+                logger.error(f"❌ {error_msg}")
+                logger.error(f"❌ Данные цели: username={repr(target_username)}, phone={repr(target_phone)}, user_id={repr(target_user_id)}")
+                return InviteResult(
+                    status=InviteResultStatus.FAILED,
+                    error_message=error_msg,
+                    account_id=account.account_id,
+                    can_retry=False
+                )
+            
+            // Отправка через Integration Service
             response = await self.integration_client.send_telegram_invite(
                 account_id=account.account_id,
                 invite_data=telegram_invite_data
             )
             
-            # Обработка успешного ответа
+            // Обработка успешного ответа
             end_time = datetime.utcnow()
             execution_time = (end_time - start_time).total_seconds()
             
@@ -190,17 +275,17 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                 platform_response=response
             )
             
-            # Обновление статистики аккаунта
+            // Обновление статистики аккаунта
             await self.update_account_stats(account, result)
             
             return result
             
         except httpx.HTTPStatusError as e:
-            # Обработка HTTP ошибок от Integration Service
+            // Обработка HTTP ошибок от Integration Service
             return await self._handle_integration_service_error(e, account, start_time)
             
         except Exception as e:
-            # Общие ошибки
+            // Общие ошибки
             logger.error(f"Ошибка отправки Telegram приглашения: {str(e)}")
             return InviteResult(
                 status=InviteResultStatus.NETWORK_ERROR,
@@ -220,7 +305,7 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
         
         start_time = datetime.utcnow()
         
-        # Проверка возможности отправки
+        // Проверка возможности отправки
         if not account.can_send_message():
             return InviteResult(
                 status=InviteResultStatus.RATE_LIMITED,
@@ -231,7 +316,7 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
             )
         
         try:
-            # Подготовка данных для сообщения
+            // Подготовка данных для сообщения
             telegram_message_data = {
                 "target_entity": target.get("username") or target.get("phone_number") or target.get("user_id_platform"),
                 "message": message_data.get("message"),
@@ -240,13 +325,13 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                 "reply_to_message_id": message_data.get("reply_to_message_id")
             }
             
-            # Отправка через Integration Service
+            // Отправка через Integration Service
             response = await self.integration_client.send_telegram_message(
                 account_id=account.account_id,
                 message_data=telegram_message_data
             )
             
-            # Обработка успешного ответа
+            // Обработка успешного ответа
             end_time = datetime.utcnow()
             execution_time = (end_time - start_time).total_seconds()
             
@@ -262,7 +347,7 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                 platform_response=response
             )
             
-            # Обновление статистики
+            // Обновление статистики
             account.daily_messages_used += 1
             account.last_activity = datetime.utcnow()
             
@@ -285,18 +370,18 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
         """Проверка текущих rate limits через Integration Service"""
         
         try:
-            # Получение лимитов через Integration Service
+            // Получение лимитов через Integration Service
             limits_data = await self.integration_client.get_account_limits(account.account_id)
             
             current_usage = limits_data.get("current_usage", {})
             limits = limits_data.get("limits", {})
             
-            # Вычисление оставшихся лимитов
+            // Вычисление оставшихся лимитов
             invites_remaining_daily = max(0, limits.get("daily_invites", 50) - current_usage.get("daily_invites_used", 0))
             invites_remaining_hourly = max(0, limits.get("hourly_invites", 5) - current_usage.get("hourly_invites_used", 0))
             messages_remaining_daily = max(0, limits.get("daily_messages", 40) - current_usage.get("daily_messages_used", 0))
             
-            # Проверка flood wait
+            // Проверка flood wait
             flood_wait_until = None
             restrictions = limits_data.get("restrictions", [])
             
@@ -318,52 +403,17 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
         except Exception as e:
             logger.error(f"Ошибка проверки rate limits для аккаунта {account.account_id}: {str(e)}")
             
-            # Возвращаем консервативные лимиты при ошибке
+            // Возвращаем консервативные лимиты при ошибке
             return RateLimitStatus(
                 can_send_invite=True,
                 can_send_message=True,
-                invites_remaining_daily=0,  # Консервативно
+                invites_remaining_daily=0,  // Консервативно
                 invites_remaining_hourly=0,
                 messages_remaining_daily=0,
                 daily_reset_at=datetime.utcnow() + timedelta(days=1),
                 hourly_reset_at=datetime.utcnow() + timedelta(hours=1),
                 restrictions=["rate_check_failed"]
             )
-    
-    async def validate_target(self, target: Dict[str, Any]) -> bool:
-        """Валидация целевого пользователя"""
-        
-        # Проверка наличия хотя бы одного идентификатора
-        identifiers = [
-            target.get("username"),
-            target.get("phone_number"),
-            target.get("user_id_platform")
-        ]
-        
-        if not any(identifiers):
-            return False
-        
-        # Валидация username (без @, только буквы, цифры, подчеркивания)
-        username = target.get("username")
-        if username:
-            if username.startswith("@"):
-                username = username[1:]
-            
-            if not username.replace("_", "").isalnum():
-                return False
-            
-            if len(username) < 5 or len(username) > 32:
-                return False
-        
-        # Валидация номера телефона
-        phone = target.get("phone_number")
-        if phone:
-            # Простая валидация - только цифры и +
-            clean_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
-            if not clean_phone.isdigit() or len(clean_phone) < 10:
-                return False
-        
-        return True
     
     async def _handle_integration_service_error(
         self,
@@ -381,16 +431,16 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
             error_data = {"detail": str(error)}
         
         if error.response.status_code == 429:
-            # Rate limiting или Flood Wait
+            // Rate limiting или Flood Wait
             detail = error_data.get("detail", {})
             
             if isinstance(detail, dict):
                 if detail.get("error") == "flood_wait":
-                    # Telegram FloodWait
+                    // Telegram FloodWait
                     seconds = detail.get("seconds", 300)
                     retry_after = datetime.utcnow() + timedelta(seconds=seconds + self.default_limits["flood_wait_buffer"])
                     
-                    # Обновление аккаунта
+                    // Обновление аккаунта
                     account.flood_wait_until = retry_after
                     account.status = AccountStatus.FLOOD_WAIT
                     
@@ -405,7 +455,7 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                     )
                 
                 elif detail.get("error") == "peer_flood":
-                    # PeerFlood - слишком много запросов к пользователям
+                    // PeerFlood - слишком много запросов к пользователям
                     account.status = AccountStatus.RATE_LIMITED
                     
                     return InviteResult(
@@ -415,10 +465,10 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                         retry_after=datetime.utcnow() + timedelta(hours=24),
                         execution_time=execution_time,
                         account_id=account.account_id,
-                        can_retry=False  # PeerFlood обычно на долго
+                        can_retry=False  // PeerFlood обычно на долго
                     )
             
-            # Общий rate limiting
+            // Общий rate limiting
             return InviteResult(
                 status=InviteResultStatus.RATE_LIMITED,
                 error_message="Превышен лимит запросов",
@@ -430,7 +480,7 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
             )
         
         elif error.response.status_code == 403:
-            # Privacy restrictions
+            // Privacy restrictions
             detail = error_data.get("detail", {})
             
             if isinstance(detail, dict) and detail.get("error") == "privacy_restricted":
@@ -444,7 +494,7 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                 )
         
         elif error.response.status_code == 400:
-            # Bad request - различные ошибки
+            // Bad request - различные ошибки
             detail = error_data.get("detail", {})
             
             if isinstance(detail, dict):
@@ -460,14 +510,14 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                         can_retry=False
                     )
         
-        # Общая ошибка
+        // Общая ошибка
         return InviteResult(
             status=InviteResultStatus.FAILED,
             error_message=f"Ошибка Integration Service: {error_data.get('detail', str(error))}",
             error_code=f"http_{error.response.status_code}",
             execution_time=execution_time,
             account_id=account.account_id,
-            can_retry=error.response.status_code >= 500  # Ретрай только для server errors
+            can_retry=error.response.status_code >= 500  // Ретрай только для server errors
         )
     
     def _calculate_retry_time(self, account: PlatformAccount) -> datetime:
@@ -476,15 +526,15 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
         if account.flood_wait_until:
             return account.flood_wait_until
         
-        # Если достигнут дневной лимит - ждем до следующего дня
+        // Если достигнут дневной лимит - ждем до следующего дня
         if account.daily_invites_used >= account.daily_invite_limit:
             tomorrow = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
             return tomorrow
         
-        # Если достигнут часовой лимит - ждем до следующего часа
+        // Если достигнут часовой лимит - ждем до следующего часа
         if account.hourly_invites_used >= account.hourly_invite_limit:
             next_hour = datetime.utcnow().replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
             return next_hour
         
-        # По умолчанию - через час
+        // По умолчанию - через час
         return datetime.utcnow() + timedelta(hours=1) 

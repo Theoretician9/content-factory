@@ -467,6 +467,23 @@ async def _process_batch_async(
                 logger.info(f"Задача {task.id} отменена/провалена, прерываем обработку батча {batch_number}")
                 break
             
+            // 🔍 ДИАГНОСТИКА: Проверяем данные цели перед обработкой
+            logger.info(f"🔍 DIAGNOSTIC: Подготовка к обработке цели {target.id}")
+            logger.info(f"🔍 DIAGNOSTIC:   username: {repr(target.username)}")
+            logger.info(f"🔍 DIAGNOSTIC:   phone_number: {repr(target.phone_number)}")
+            logger.info(f"🔍 DIAGNOSTIC:   user_id_platform: {repr(target.user_id_platform)}")
+            logger.info(f"🔍 DIAGNOSTIC:   has_any_identifier: {any([target.username, target.phone_number, target.user_id_platform])}")
+            
+            // ✅ ДОБАВЛЕНО: Пропускаем цели без идентификаторов
+            if not any([target.username, target.phone_number, target.user_id_platform]):
+                logger.warning(f"⚠️ Цель {target.id} не содержит идентификаторов, пропускаем")
+                target.status = TargetStatus.FAILED
+                target.error_message = "Цель не содержит идентификаторов для приглашения"
+                target.attempt_count += 1
+                target.updated_at = datetime.utcnow()
+                db.commit()
+                continue
+            
             account = accounts[account_index % len(accounts)]
             
             try:
@@ -529,7 +546,20 @@ async def _send_single_invite(
     start_time = datetime.utcnow()
     
     try:
-        # Подготовка данных цели
+        // ✅ ДОБАВЛЕНО: Проверка наличия идентификаторов у цели перед обработкой
+        if not any([target.username, target.phone_number, target.user_id_platform]):
+            error_msg = f"Цель {target.id} не содержит идентификатора для приглашения (пропущена)"
+            logger.warning(f"⚠️ {error_msg}")
+            // Возвращаем результат с ошибкой вместо выбрасывания исключения
+            return InviteResult(
+                status=InviteResultStatus.FAILED,
+                error_message=error_msg,
+                account_id=account.account_id if account else None,
+                execution_time=(datetime.utcnow() - start_time).total_seconds(),
+                can_retry=False
+            )
+        
+        // Подготовка данных цели
         target_data = {
             "username": target.username,
             "phone_number": target.phone_number,
@@ -537,7 +567,28 @@ async def _send_single_invite(
             "email": target.email
         }
         
-        # Подготовка данных приглашения
+        // 🔍 ДИАГНОСТИКА: подробное логирование данных цели из базы
+        logger.info(f"🔍 DIAGNOSTIC: Подробные данные цели {target.id} из базы данных:")
+        logger.info(f"🔍 DIAGNOSTIC:   username: {repr(target.username)} (type: {type(target.username)})")
+        logger.info(f"🔍 DIAGNOSTIC:   phone_number: {repr(target.phone_number)} (type: {type(target.phone_number)})")
+        logger.info(f"🔍 DIAGNOSTIC:   user_id_platform: {repr(target.user_id_platform)} (type: {type(target.user_id_platform)})")
+        logger.info(f"🔍 DIAGNOSTIC:   email: {repr(target.email)} (type: {type(target.email)})")
+        logger.info(f"🔍 DIAGNOSTIC:   any identifiers: {any([target.username, target.phone_number, target.user_id_platform])}")
+        
+        // Проверяем, что цель имеет хотя бы один идентификатор
+        if not any([target.username, target.phone_number, target.user_id_platform]):
+            error_msg = f"Цель {target.id} не содержит идентификатора для приглашения"
+            logger.error(f"❌ {error_msg}")
+            // Возвращаем результат с ошибкой вместо выбрасывания исключения
+            return InviteResult(
+                status=InviteResultStatus.FAILED,
+                error_message=error_msg,
+                account_id=account.account_id if account else None,
+                execution_time=(datetime.utcnow() - start_time).total_seconds(),
+                can_retry=False
+            )
+        
+        // Подготовка данных приглашения
         invite_data = {
             "invite_type": task.settings.get('invite_type', 'group_invite') if task.settings else 'group_invite',
             "group_id": task.settings.get('group_id') if task.settings else None,
@@ -545,14 +596,29 @@ async def _send_single_invite(
             "parse_mode": "text"
         }
         
-        # Валидация цели
-        if not await adapter.validate_target(target_data):
-            raise Exception("Некорректные данные цели")
+        // Логируем данные приглашения для диагностики
+        logger.info(f"🔍 DIAGNOSTIC: Данные приглашения: invite_type={invite_data['invite_type']}, group_id={invite_data['group_id']}")
         
-        # Отправка приглашения
+        // Валидация цели
+        is_valid = await adapter.validate_target(target_data)
+        logger.info(f"🔍 DIAGNOSTIC: Результат валидации цели {target.id}: {is_valid}")
+        
+        if not is_valid:
+            error_msg = "Некорректные данные цели - отсутствуют необходимые идентификаторы"
+            logger.error(f"❌ {error_msg} для цели {target.id}")
+            // Возвращаем результат с ошибкой вместо выбрасывания исключения
+            return InviteResult(
+                status=InviteResultStatus.FAILED,
+                error_message=error_msg,
+                account_id=account.account_id if account else None,
+                execution_time=(datetime.utcnow() - start_time).total_seconds(),
+                can_retry=False
+            )
+        
+        // Отправка приглашения
         result = await adapter.send_invite(account, target_data, invite_data)
         
-        # Обновление цели
+        // Обновление цели
         target.status = TargetStatus.INVITED if result.is_success else TargetStatus.FAILED
         target.invite_sent_at = result.sent_at
         target.error_message = result.error_message
@@ -561,7 +627,7 @@ async def _send_single_invite(
         target.attempt_count += 1
         target.updated_at = datetime.utcnow()
         
-        # Логирование выполнения
+        // Логирование выполнения
         from app.models.invite_execution_log import ActionType, LogLevel
         
         log_entry = InviteExecutionLog(
@@ -585,13 +651,13 @@ async def _send_single_invite(
         return result
         
     except Exception as e:
-        # Обновление цели при ошибке
+        // Обновление цели при ошибке
         target.status = TargetStatus.FAILED
         target.error_message = str(e)
         target.attempt_count += 1
         target.updated_at = datetime.utcnow()
         
-        # Логирование ошибки
+        // Логирование ошибки
         from app.models.invite_execution_log import ActionType, LogLevel
         
         log_entry = InviteExecutionLog(
@@ -615,14 +681,14 @@ async def _send_single_invite(
 def _check_task_completion(task: InviteTask, db: Session):
     """Проверка завершения задачи"""
     
-    # Подсчет оставшихся целей
+    // Подсчет оставшихся целей
     pending_count = db.query(InviteTarget).filter(
         InviteTarget.task_id == task.id,
         InviteTarget.status == TargetStatus.PENDING
     ).count()
     
     if pending_count == 0:
-        # Все цели обработаны
+        // Все цели обработаны
         task.status = TaskStatus.COMPLETED
         task.end_time = datetime.utcnow()
         task.updated_at = datetime.utcnow()
@@ -634,11 +700,11 @@ def _check_task_completion(task: InviteTask, db: Session):
 def _is_retryable_error(error: Exception) -> bool:
     """Проверка возможности retry для ошибки"""
     
-    # Не ретраим WorkerLostError и подобные
+    // Не ретраим WorkerLostError и подобные
     if isinstance(error, WorkerLostError):
         return False
     
-    # Ретраим network ошибки и временные проблемы
+    // Ретраим network ошибки и временные проблемы
     error_str = str(error).lower()
     retryable_patterns = [
         'timeout',
@@ -683,20 +749,20 @@ def single_invite_operation(self, task_id: int, target_id: int, account_id: int 
                 if not all_accounts:
                     raise Exception("Нет доступных аккаунтов")
                 
-                # Применяем фильтрацию по админским правам
+                // Применяем фильтрацию по админским правам
                 accounts = _filter_admin_accounts(all_accounts, task)
                 if not accounts:
                     raise Exception(f"Ни один аккаунт не прошел проверку на админские права. Из {len(all_accounts)} аккаунтов ни один не является администратором")
                 
-                # Выбор аккаунта
+                // Выбор аккаунта
                 account = None
                 if account_id:
                     account = next((acc for acc in accounts if acc.account_id == account_id), None)
                 
                 if not account:
-                    account = accounts[0]  # Первый доступный
+                    account = accounts[0]  // Первый доступный
                 
-                # Отправка приглашения
+                // Отправка приглашения
                 result = loop.run_until_complete(_send_single_invite(task, target, account, adapter, db))
                 
                 return f"Приглашение отправлено: {result.status}"

@@ -272,7 +272,9 @@ async def import_targets_from_parsing(
             results_data = results_response.json()
             parsing_results = results_data.get('results', [])
             
+            // ✅ ДОБАВЛЕНО: Проверка наличия результатов
             if not parsing_results:
+                logger.warning(f"⚠️ Задача парсинга {parsing_task_id} не содержит результатов для импорта")
                 return {
                     "success": False,
                     "message": "No parsing results found for this task",
@@ -280,21 +282,24 @@ async def import_targets_from_parsing(
                     "imported_count": 0
                 }
             
-            # Конвертируем результаты парсинга в формат InviteTarget
+            // Конвертируем результаты парсинга в формат InviteTarget
             imported_targets = []
             errors = []
             
             for i, result in enumerate(parsing_results):
                 try:
-                    # Извлекаем данные из результата парсинга - ✅ ИСПРАВЛЕНО: безопасная обработка None
+                    // Извлекаем данные из результата парсинга - ИСПРАВЛЕНО: правильные названия полей из модели ParseResult
                     target_data = {
-                        "username": result.get('username', '') or '',
+                        "username": result.get('author_username', '') or '',
                         "phone_number": result.get('author_phone', '') or '',
-                        "user_id_platform": result.get('platform_id', '') or '',
-                        "full_name": result.get('display_name', '') or '',
+                        "user_id_platform": result.get('author_id', '') or '',
+                        "full_name": result.get('author_name', '') or '',
                     }
                     
-                    # Безопасно очищаем строки от пробелов
+                    // 🔍 ДИАГНОСТИКА: логируем исходные данные
+                    logger.debug(f"🔍 DIAGNOSTIC: Исходные данные результата парсинга {i}: {result}")
+                    
+                    // Безопасно очищаем строки от пробелов
                     cleaned_data = {}
                     for key, value in target_data.items():
                         if value and str(value).strip():
@@ -302,13 +307,22 @@ async def import_targets_from_parsing(
                         else:
                             cleaned_data[key] = None
                     
-                    # Проверяем что есть хотя бы один идентификатор
-                    if not any([cleaned_data["username"], cleaned_data["phone_number"], 
-                               cleaned_data["user_id_platform"]]):
+                    // 🔍 ДИАГНОСТИКА: логируем очищенные данные
+                    logger.debug(f"🔍 DIAGNOSTIC: Очищенные данные результата парсинга {i}: {cleaned_data}")
+                    
+                    // Проверяем что есть хотя бы один идентификатор
+                    has_identifiers = any([cleaned_data["username"], cleaned_data["phone_number"], 
+                                          cleaned_data["user_id_platform"]])
+                    
+                    logger.debug(f"🔍 DIAGНOSTIC: Результат {i} имеет идентификаторы: {has_identifiers}")
+                    
+                    // ✅ ИЗМЕНЕНО: Пропускаем результаты без идентификаторов с логированием
+                    if not has_identifiers:
                         errors.append(f"Result {i}: No valid identifier found")
+                        logger.warning(f"⚠️ Результат парсинга {i} не содержит идентификаторов: {result}")
                         continue
                     
-                    # Создаем InviteTarget
+                    // Создаем InviteTarget
                     invite_target = InviteTarget(
                         task_id=task_id,
                         username=cleaned_data["username"],
@@ -321,7 +335,7 @@ async def import_targets_from_parsing(
                             "parsing_result_id": result.get('id'),
                             "source_name": source_name,
                             "imported_at": datetime.utcnow().isoformat(),
-                            "original_data": result  # Сохраняем оригинальные данные
+                            "original_data": result  // Сохраняем оригинальные данные
                         }
                     )
                     
@@ -332,19 +346,31 @@ async def import_targets_from_parsing(
                     errors.append(f"Result {i}: {str(e)}")
                     logger.error(f"Error processing parsing result {i}: {e}")
             
-            # ✅ ИСПРАВЛЕНО: сначала коммитим новые записи
+            // ✅ ДОБАВЛЕНО: Проверка, что есть цели для импорта
+            if not imported_targets:
+                logger.warning(f"⚠️ После обработки результатов парсинга не осталось целей для импорта в задачу {task_id}")
+                return {
+                    "success": False,
+                    "message": "No valid targets found in parsing results",
+                    "parsing_task_id": parsing_task_id,
+                    "imported_count": 0,
+                    "error_count": len(errors),
+                    "errors": errors[:10] if errors else []
+                }
+            
+            // ✅ ИСПРАВЛЕНО: сначала коммитим новые записи
             logger.info(f"🔍 DIAGNOSTIC: About to commit {len(imported_targets)} new targets")
             db.commit()
             logger.info(f"🔍 DIAGNOSTIC: Committed successfully")
             
-            # Затем подсчитываем все цели в задаче
+            // Затем подсчитываем все цели в задаче
             current_targets = db.query(InviteTarget).filter(InviteTarget.task_id == task_id).all()
             
-            # 🔍 ДИАГНОСТИКА: подсчет целей при импорте из парсинга
+            // 🔍 ДИАГНОСТИКА: подсчет целей при импорте из парсинга
             old_count = task.target_count
             targets_in_db = len(current_targets)
             new_targets_count = len(imported_targets)
-            final_count = targets_in_db  # Используем реальное количество из БД
+            final_count = targets_in_db  // Используем реальное количество из БД
             
             logger.info(f"🔍 DIAGNOSTIC: Parsing import count update")
             logger.info(f"🔍 DIAGNOSTIC: Task {task_id} old target_count: {old_count}")
@@ -355,30 +381,30 @@ async def import_targets_from_parsing(
             task.target_count = final_count
             task.updated_at = datetime.utcnow()
             
-            # Коммитим обновление задачи
+            // Коммитим обновление задачи
             db.commit()
             
-            # 🔍 ДИАГНОСТИКА: финальная проверка
+            // 🔍 ДИАГНОСТИКА: финальная проверка
             logger.info(f"🔍 DIAGNOSTIC: Parsing import completed, task.target_count: {task.target_count}")
             
             logger.info(f"Импортировано {len(imported_targets)} целей из задачи парсинга {parsing_task_id} для задачи {task_id}")
             
-            # 🎆 АВТОМАТИЧЕСКИЙ ЗАПУСК ЗАДАЧИ ПОСЛЕ ИМПОРТА
+            // 🎆 АВТОМАТИЧЕСКИЙ ЗАПУСК ЗАДАЧИ ПОСЛЕ ИМПОРТА
             celery_task_id = None
             auto_start_status = None
             
             if len(imported_targets) > 0 and task.status == "PENDING":
                 try:
-                    # Импорт Celery задачи
+                    // Импорт Celery задачи
                     from workers.invite_worker import execute_invite_task as celery_execute_task
                     
                     logger.info(f"🚀 АВТО-СТАРТ: Запуск задачи {task_id} после успешного импорта {len(imported_targets)} целей из парсинга")
                     
-                    # Запуск асинхронной задачи через Celery
+                    // Запуск асинхронной задачи через Celery
                     result = celery_execute_task.delay(task_id)
                     celery_task_id = result.id
                     
-                    # Обновление статуса задачи
+                    // Обновление статуса задачи
                     from app.models.invite_task import TaskStatus
                     task.status = TaskStatus.IN_PROGRESS.value
                     task.start_time = datetime.utcnow()
@@ -391,7 +417,7 @@ async def import_targets_from_parsing(
                 except Exception as auto_start_error:
                     logger.error(f"❌ Ошибка автозапуска задачи {task_id} после импорта из парсинга: {str(auto_start_error)}")
                     auto_start_status = f"failed: {str(auto_start_error)}"
-                    # Не прерываем выполнение, импорт прошел успешно
+                    // Не прерываем выполнение, импорт прошел успешно
             else:
                 if len(imported_targets) == 0:
                     auto_start_status = "skipped: no targets imported"
@@ -406,7 +432,7 @@ async def import_targets_from_parsing(
                 "imported_count": len(imported_targets),
                 "error_count": len(errors),
                 "total_processed": len(parsing_results),
-                "errors": errors[:10] if errors else [],  # Показываем только первые 10 ошибок
+                "errors": errors[:10] if errors else [],  // Показываем только первые 10 ошибок
                 "source_name": source_name,
                 "parsing_task_title": task_data.get('title', 'Unknown'),
                 "parsing_platform": task_data.get('platform', 'telegram'),
@@ -451,7 +477,7 @@ async def validate_import_data(
         elif file_extension == 'txt':
             targets, errors = await _parse_txt_content(content_str)
         
-        # Анализ качества данных
+        // Анализ качества данных
         stats = {
             "total_records": len(targets) + len(errors),
             "valid_records": len(targets),
@@ -467,7 +493,7 @@ async def validate_import_data(
             "file_size": len(content),
             "validation_result": "valid" if targets and not errors else "invalid",
             "statistics": stats,
-            "sample_records": targets[:5],  # Первые 5 записей для предпросмотра
+            "sample_records": targets[:5],  // Первые 5 записей для предпросмотра
             "errors": errors[:10] if errors else []
         }
         
@@ -491,7 +517,7 @@ async def _parse_csv_content(content: str) -> tuple[List[Dict], List[str]]:
             try:
                 target = {}
                 
-                # Гибкое сопоставление столбцов
+                // Гибкое сопоставление столбцов
                 for key, value in row.items():
                     if not value or not value.strip():
                         continue
@@ -510,7 +536,7 @@ async def _parse_csv_content(content: str) -> tuple[List[Dict], List[str]]:
                     elif key_lower in ['name', 'full_name', 'fullname', 'display_name']:
                         target['full_name'] = value_clean
                 
-                if target:  # Если хотя бы одно поле заполнено
+                if target:  // Если хотя бы одно поле заполнено
                     targets.append(target)
                 else:
                     errors.append(f"Row {row_num}: No valid data found")
@@ -576,7 +602,7 @@ async def _parse_txt_content(content: str) -> tuple[List[Dict], List[str]]:
             
         target = {}
         
-        # Определяем тип данных по формату
+        // Определяем тип данных по формату
         if '@' in line and '.' in line:
             target['email'] = line
         elif line.startswith('+') or line.replace('-', '').replace(' ', '').isdigit():
@@ -605,13 +631,13 @@ async def _get_jwt_token_for_parsing_service(user_id: int) -> str:
         if not secret_data or 'secret_key' not in secret_data:
             raise Exception("JWT secret not found in Vault")
         
-        # 🔍 ДИАГНОСТИКА: логируем создание токена
+        // 🔍 ДИАГНОСТИКА: логируем создание токена
         logger.debug(f"🔍 DIAGNOSTIC: Creating JWT token for user_id={user_id}")
         
-        # Создаем токен для invite-service с реальным user_id
+        // Создаем токен для invite-service с реальным user_id
         payload = {
             'service': 'invite-service',
-            'user_id': user_id,  # ✅ ИСПРАВЛЕНО: используем реальный user_id
+            'user_id': user_id,  // ✅ ИСПРАВЛЕНО: используем реальный user_id
             'exp': int((datetime.utcnow() + timedelta(hours=1)).timestamp())
         }
         
