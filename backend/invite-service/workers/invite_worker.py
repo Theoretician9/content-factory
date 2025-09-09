@@ -760,7 +760,7 @@ def single_invite_operation(self, task_id: int, target_id: int, account_id: int 
                     account = next((acc for acc in accounts if acc.account_id == account_id), None)
                 
                 if not account:
-                    account = accounts[0]  // Первый доступный
+                    account = accounts[0]  # Первый доступный
                 
                 # Отправка приглашения
                 result = loop.run_until_complete(_send_single_invite(task, target, account, adapter, db))
