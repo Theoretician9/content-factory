@@ -465,7 +465,7 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                         retry_after=datetime.utcnow() + timedelta(hours=24),
                         execution_time=execution_time,
                         account_id=account.account_id,
-                        can_retry=False  // PeerFlood обычно на долго
+                        can_retry=False  # PeerFlood обычно на долго
                     )
             
             # Общий rate limiting
@@ -517,7 +517,7 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
             error_code=f"http_{error.response.status_code}",
             execution_time=execution_time,
             account_id=account.account_id,
-            can_retry=error.response.status_code >= 500  // Ретрай только для server errors
+            can_retry=error.response.status_code >= 500  # Ретрай только для server errors
         )
     
     def _calculate_retry_time(self, account: PlatformAccount) -> datetime:
