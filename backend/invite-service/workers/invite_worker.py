@@ -467,14 +467,14 @@ async def _process_batch_async(
                 logger.info(f"Задача {task.id} отменена/провалена, прерываем обработку батча {batch_number}")
                 break
             
-            // 🔍 ДИАГНОСТИКА: Проверяем данные цели перед обработкой
+            # 🔍 ДИАГНОСТИКА: Проверяем данные цели перед обработкой
             logger.info(f"🔍 DIAGNOSTIC: Подготовка к обработке цели {target.id}")
             logger.info(f"🔍 DIAGNOSTIC:   username: {repr(target.username)}")
             logger.info(f"🔍 DIAGNOSTIC:   phone_number: {repr(target.phone_number)}")
             logger.info(f"🔍 DIAGNOSTIC:   user_id_platform: {repr(target.user_id_platform)}")
             logger.info(f"🔍 DIAGNOSTIC:   has_any_identifier: {any([target.username, target.phone_number, target.user_id_platform])}")
             
-            // ✅ ДОБАВЛЕНО: Пропускаем цели без идентификаторов
+            # ✅ ДОБАВЛЕНО: Пропускаем цели без идентификаторов
             if not any([target.username, target.phone_number, target.user_id_platform]):
                 logger.warning(f"⚠️ Цель {target.id} не содержит идентификаторов, пропускаем")
                 target.status = TargetStatus.FAILED
@@ -546,7 +546,7 @@ async def _send_single_invite(
     start_time = datetime.utcnow()
     
     try:
-        // ✅ ДОБАВЛЕНО: Проверка наличия идентификаторов у цели перед обработкой
+        # ✅ ДОБАВЛЕНО: Проверка наличия идентификаторов у цели перед обработкой
         if not any([target.username, target.phone_number, target.user_id_platform]):
             error_msg = f"Цель {target.id} не содержит идентификатора для приглашения (пропущена)"
             logger.warning(f"⚠️ {error_msg}")
