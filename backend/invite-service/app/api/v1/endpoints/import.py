@@ -231,7 +231,7 @@ async def import_targets_from_parsing(
         
         # 🔍 ДИАГНОСТИКА: логируем начало импорта из парсинга
         logger.info(f"🔍 DIAGNOSTIC: Starting parsing import for task {task_id}")
-        logger.info(f"🔍 DIAGNOSTIC: Parsing task ID: {parsing_task_id}")
+        logger.info(f"🔍 DIAGНOSTIC: Parsing task ID: {parsing_task_id}")
         logger.info(f"🔍 DIAGNOSTIC: User ID: {user_id}")
         logger.info(f"🔍 DIAGNOSTIC: JWT token created for user_id: {user_id}")
         
@@ -296,7 +296,7 @@ async def import_targets_from_parsing(
                         "full_name": result.get('author_name', '') or '',
                     }
                     
-                    // 🔍 ДИАГНОСТИКА: логируем исходные данные
+                    // ДИАГНОСТИКА: логируем исходные данные
                     logger.debug(f"🔍 DIAGNOSTIC: Исходные данные результата парсинга {i}: {result}")
                     
                     // Безопасно очищаем строки от пробелов
