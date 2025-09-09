@@ -231,7 +231,7 @@ async def import_targets_from_parsing(
         
         # 🔍 ДИАГНОСТИКА: логируем начало импорта из парсинга
         logger.info(f"🔍 DIAGNOSTIC: Starting parsing import for task {task_id}")
-        logger.info(f"🔍 DIAGНOSTIC: Parsing task ID: {parsing_task_id}")
+        logger.info(f"🔍 DIAGNOSTIC: Parsing task ID: {parsing_task_id}")
         logger.info(f"🔍 DIAGNOSTIC: User ID: {user_id}")
         logger.info(f"🔍 DIAGNOSTIC: JWT token created for user_id: {user_id}")
         
@@ -307,7 +307,7 @@ async def import_targets_from_parsing(
                         else:
                             cleaned_data[key] = None
                     
-                    // 🔍 ДИАГНОСТИКА: логируем очищенные данные
+                    // ДИАГНОСТИКА: логируем очищенные данные
                     logger.debug(f"🔍 DIAGNOSTIC: Очищенные данные результата парсинга {i}: {cleaned_data}")
                     
                     // Проверяем что есть хотя бы один идентификатор
@@ -316,7 +316,7 @@ async def import_targets_from_parsing(
                     
                     logger.debug(f"🔍 DIAGNOSTIC: Результат {i} имеет идентификаторы: {has_identifiers}")
                     
-                    // ✅ ИЗМЕНЕНО: Пропускаем результаты без идентификаторов с логированием
+                    // ИЗМЕНЕНО: Пропускаем результаты без идентификаторов с логированием
                     if not has_identifiers:
                         errors.append(f"Result {i}: No valid identifier found")
                         logger.warning(f"⚠️ Результат парсинга {i} не содержит идентификаторов: {result}")
@@ -358,7 +358,7 @@ async def import_targets_from_parsing(
                     "errors": errors[:10] if errors else []
                 }
             
-            // ✅ ИСПРАВЛЕНО: сначала коммитим новые записи
+            // ИСПРАВЛЕНО: сначала коммитим новые записи
             logger.info(f"🔍 DIAGNOSTIC: About to commit {len(imported_targets)} new targets")
             db.commit()
             logger.info(f"🔍 DIAGNOSTIC: Committed successfully")
@@ -366,7 +366,7 @@ async def import_targets_from_parsing(
             // Затем подсчитываем все цели в задаче
             current_targets = db.query(InviteTarget).filter(InviteTarget.task_id == task_id).all()
             
-            // 🔍 ДИАГНОСТИКА: подсчет целей при импорте из парсинга
+            // ДИАГНОСТИКА: подсчет целей при импорте из парсинга
             old_count = task.target_count
             targets_in_db = len(current_targets)
             new_targets_count = len(imported_targets)
@@ -384,12 +384,12 @@ async def import_targets_from_parsing(
             // Коммитим обновление задачи
             db.commit()
             
-            // 🔍 ДИАГНОСТИКА: финальная проверка
+            // ДИАГНОСТИКА: финальная проверка
             logger.info(f"🔍 DIAGNOSTIC: Parsing import completed, task.target_count: {task.target_count}")
             
             logger.info(f"Импортировано {len(imported_targets)} целей из задачи парсинга {parsing_task_id} для задачи {task_id}")
             
-            // 🎆 АВТОМАТИЧЕСКИЙ ЗАПУСК ЗАДАЧИ ПОСЛЕ ИМПОРТА
+            // АВТОМАТИЧЕСКИЙ ЗАПУСК ЗАДАЧИ ПОСЛЕ ИМПОРТА
             celery_task_id = None
             auto_start_status = None
             
