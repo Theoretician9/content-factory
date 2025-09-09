@@ -235,12 +235,12 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                 "silent": invite_data.get("silent", False)
             }
             
-            // 🔍 ДИАГНОСТИКА: логируем данные, отправляемые в Integration Service
+            // ДИАГНОСТИКА: логируем данные, отправляемые в Integration Service
             logger.info(f"🔍 DIAGNOSTIC: Данные для Integration Service:")
             for key, value in telegram_invite_data.items():
                 logger.info(f"🔍 DIAGNOSTIC:   {key}: {repr(value)}")
             
-            // ✅ ДОБАВЛЕНО: Проверяем, что хотя бы одно из полей target_* заполнено
+            // ДОБАВЛЕНО: Проверяем, что хотя бы одно из полей target_* заполнено
             target_fields = [target_username, target_phone, target_user_id]
             if not any(field is not None and str(field).strip() for field in target_fields):
                 error_msg = "Цель не содержит корректных идентификаторов для приглашения"
