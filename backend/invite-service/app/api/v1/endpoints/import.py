@@ -631,13 +631,13 @@ async def _get_jwt_token_for_parsing_service(user_id: int) -> str:
         if not secret_data or 'secret_key' not in secret_data:
             raise Exception("JWT secret not found in Vault")
         
-        // 🔍 ДИАГНОСТИКА: логируем создание токена
+        // ДИАГНОСТИКА: логируем создание токена
         logger.debug(f"🔍 DIAGNOSTIC: Creating JWT token for user_id={user_id}")
         
         // Создаем токен для invite-service с реальным user_id
         payload = {
             'service': 'invite-service',
-            'user_id': user_id,  // ✅ ИСПРАВЛЕНО: используем реальный user_id
+            'user_id': user_id,  // ИСПРАВЛЕНО: используем реальный user_id
             'exp': int((datetime.utcnow() + timedelta(hours=1)).timestamp())
         }
         
