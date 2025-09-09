@@ -272,7 +272,7 @@ async def import_targets_from_parsing(
             results_data = results_response.json()
             parsing_results = results_data.get('results', [])
             
-            // ✅ ДОБАВЛЕНО: Проверка наличия результатов
+            // ДОБАВЛЕНО: Проверка наличия результатов
             if not parsing_results:
                 logger.warning(f"⚠️ Задача парсинга {parsing_task_id} не содержит результатов для импорта")
                 return {
@@ -314,7 +314,7 @@ async def import_targets_from_parsing(
                     has_identifiers = any([cleaned_data["username"], cleaned_data["phone_number"], 
                                           cleaned_data["user_id_platform"]])
                     
-                    logger.debug(f"🔍 DIAGНOSTIC: Результат {i} имеет идентификаторы: {has_identifiers}")
+                    logger.debug(f"🔍 DIAGNOSTIC: Результат {i} имеет идентификаторы: {has_identifiers}")
                     
                     // ✅ ИЗМЕНЕНО: Пропускаем результаты без идентификаторов с логированием
                     if not has_identifiers:
@@ -346,7 +346,7 @@ async def import_targets_from_parsing(
                     errors.append(f"Result {i}: {str(e)}")
                     logger.error(f"Error processing parsing result {i}: {e}")
             
-            // ✅ ДОБАВЛЕНО: Проверка, что есть цели для импорта
+            // ДОБАВЛЕНО: Проверка, что есть цели для импорта после фильтрации
             if not imported_targets:
                 logger.warning(f"⚠️ После обработки результатов парсинга не осталось целей для импорта в задачу {task_id}")
                 return {
