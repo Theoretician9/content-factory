@@ -280,6 +280,8 @@ async def send_telegram_invite_by_account(
                     detail="group_id обязателен для group_invite"
                 )
             
+            # Определяем пользователя по разным типам идентификаторов
+            user = None
             if invite_data.target_username:
                 # Приглашение по username
                 user = await client.get_entity(invite_data.target_username)
@@ -292,26 +294,41 @@ async def send_telegram_invite_by_account(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=f"Некорректный target_user_id: {invite_data.target_user_id}"
                     )
-                
-                # Нормализуем group_id
-                def normalize_group_id(gid: str) -> str:
-                    """Нормализует group_id для использования с Telegram API"""
-                    gid = gid.strip()
-                    # Если это уже полный URL - возвращаем как есть
-                    if gid.startswith('https://') or gid.startswith('http://'):
-                        return gid
-                    # Если это username с @ или без, используем @ префикс
-                    if gid.startswith('@'):
-                        return gid
-                    if 't.me/' in gid:
-                        # Извлекаем username из t.me/username
-                        username = gid.split('t.me/')[-1]
-                        return f'@{username}'
-                    # По умолчанию добавляем @ для usernames
-                    return f'@{gid}'
-                
-                normalized_group_id = normalize_group_id(invite_data.group_id)
-                group = await client.get_entity(normalized_group_id)
+            elif invite_data.target_phone:
+                # Приглашение по номеру телефона
+                try:
+                    user = await client.get_entity(invite_data.target_phone)
+                except Exception as e:
+                    logger.error(f"❌ Ошибка получения пользователя по номеру {invite_data.target_phone}: {e}")
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Не удалось найти пользователя по номеру телефона: {invite_data.target_phone}"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Необходимо указать target_username, target_phone или target_user_id"
+                )
+            
+            # Нормализуем group_id
+            def normalize_group_id(gid: str) -> str:
+                """Нормализует group_id для использования с Telegram API"""
+                gid = gid.strip()
+                # Если это уже полный URL - возвращаем как есть
+                if gid.startswith('https://') or gid.startswith('http://'):
+                    return gid
+                # Если это username с @ или без, используем @ префикс
+                if gid.startswith('@'):
+                    return gid
+                if 't.me/' in gid:
+                    # Извлекаем username из t.me/username
+                    username = gid.split('t.me/')[-1]
+                    return f'@{username}'
+                # По умолчанию добавляем @ для usernames
+                return f'@{gid}'
+            
+            normalized_group_id = normalize_group_id(invite_data.group_id)
+            group = await client.get_entity(normalized_group_id)
                 
                 # Определяем тип группы/канала для правильного запроса
                 # Правильная логика: каналы и супергруппы используют InviteToChannelRequest
