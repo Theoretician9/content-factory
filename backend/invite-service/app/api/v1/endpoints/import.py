@@ -288,12 +288,29 @@ async def import_targets_from_parsing(
             
             for i, result in enumerate(parsing_results):
                 try:
-                    # Извлекаем данные из результата парсинга - ИСПРАВЛЕНО: правильные названия полей из модели ParseResult
+                    # Проверяем разные варианты полей из парсинга
+                    platform_specific = result.get('platform_specific_data', {})
+                    
                     target_data = {
-                        "username": result.get('author_username', '') or '',
-                        "phone_number": result.get('author_phone', '') or '',
-                        "user_id_platform": result.get('author_id', '') or '',
-                        "full_name": result.get('author_name', '') or '',
+                        "username": (
+                            result.get('username') or 
+                            platform_specific.get('username') or 
+                            result.get('author_username', '') or ''
+                        ),
+                        "phone_number": (
+                            platform_specific.get('phone') or 
+                            result.get('author_phone', '') or ''
+                        ),
+                        "user_id_platform": (
+                            result.get('platform_id') or 
+                            platform_specific.get('user_id') or 
+                            result.get('author_id', '') or ''
+                        ),
+                        "full_name": (
+                            result.get('display_name') or 
+                            platform_specific.get('first_name', '') + ' ' + (platform_specific.get('last_name') or '') or
+                            result.get('author_name', '') or ''
+                        ),
                     }
                     
                     # ДИАГНОСТИКА: логируем исходные данные

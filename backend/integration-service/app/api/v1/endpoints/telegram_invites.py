@@ -330,18 +330,14 @@ async def send_telegram_invite_by_account(
             
             elif invite_data.target_phone:
                 # Приглашение по номеру телефона
-                contacts = await client.get_contacts()
-                user = None
-                
-                for contact in contacts:
-                    if hasattr(contact, 'phone') and contact.phone == invite_data.target_phone.replace('+', ''):
-                        user = contact
-                        break
-                
-                if not user:
+                try:
+                    # Используем правильный метод для получения пользователя по номеру телефона
+                    user = await client.get_entity(invite_data.target_phone)
+                except Exception as e:
+                    logger.warning(f"Не удалось найти пользователя по номеру {invite_data.target_phone}: {str(e)}")
                     raise HTTPException(
                         status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"Контакт с номером {invite_data.target_phone} не найден"
+                        detail=f"Пользователь с номером {invite_data.target_phone} не найден или недоступен"
                     )
                 
                 # Нормализуем group_id
@@ -605,16 +601,12 @@ async def send_telegram_invite(
                     
                     elif invite_data.target_phone:
                         # Приглашение по номеру телефона
-                        contacts = await client.get_contacts()
-                        user = None
-                        
-                        for contact in contacts:
-                            if hasattr(contact, 'phone') and contact.phone == invite_data.target_phone.replace('+', ''):
-                                user = contact
-                                break
-                        
-                        if not user:
-                            raise Exception(f"Контакт с номером {invite_data.target_phone} не найден")
+                        try:
+                            # Используем правильный метод для получения пользователя по номеру телефона
+                            user = await client.get_entity(invite_data.target_phone)
+                        except Exception as e:
+                            logger.warning(f"Не удалось найти пользователя по номеру {invite_data.target_phone}: {str(e)}")
+                            raise Exception(f"Пользователь с номером {invite_data.target_phone} не найден или недоступен")
                         
                         group = await client.get_entity(invite_data.group_id)
                         
