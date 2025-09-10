@@ -319,9 +319,11 @@ async def send_telegram_invite_by_account(
             def normalize_group_id(gid: str) -> str:
                 """Нормализует group_id для использования с Telegram API"""
                 gid = gid.strip()
+                
                 # Если это уже полный URL - возвращаем как есть
                 if gid.startswith('https://') or gid.startswith('http://'):
                     return gid
+                
                 # Если это username с @ или без, используем @ префикс
                 if gid.startswith('@'):
                     return gid
@@ -329,6 +331,7 @@ async def send_telegram_invite_by_account(
                     # Извлекаем username из t.me/username
                     username = gid.split('t.me/')[-1]
                     return f'@{username}'
+                
                 # По умолчанию добавляем @ для usernames
                 return f'@{gid}'
             
@@ -346,18 +349,55 @@ async def send_telegram_invite_by_account(
             if is_channel_or_megagroup:
                 # Каналы и мегагруппы
                 logger.info(f"📤 Используем InviteToChannelRequest для {group.title if hasattr(group, 'title') else group.id}")
-                result_data = await client(InviteToChannelRequest(
-                    channel=group,
-                    users=[user]
-                ))
+                
+                # Детальное логирование перед отправкой приглашения
+                logger.info(f"🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПЕРЕД ПРИГЛАШЕНИЕМ:")
+                logger.info(f"   - Группа: {group.title} (ID: {group.id})")
+                logger.info(f"   - Пользователь: {user.username if hasattr(user, 'username') else 'N/A'} (ID: {user.id})")
+                logger.info(f"   - Аккаунт: {account_id}")
+                logger.info(f"   - Тип группы: {type(group).__name__}")
+                logger.info(f"   - Участников в группе: {getattr(group, 'participants_count', 'N/A')}")
+                
+                try:
+                    result_data = await client(InviteToChannelRequest(
+                        channel=group,
+                        users=[user]
+                    ))
+                    logger.info(f"✅ Приглашение отправлено успешно")
+                except Exception as invite_error:
+                    logger.error(f"❌ ДЕТАЛЬНАЯ ОШИБКА ПРИГЛАШЕНИЯ:")
+                    logger.error(f"   - Тип ошибки: {type(invite_error).__name__}")
+                    logger.error(f"   - Сообщение: {str(invite_error)}")
+                    logger.error(f"   - Код ошибки: {getattr(invite_error, 'code', 'N/A')}")
+                    logger.error(f"   - Детали: {getattr(invite_error, 'message', 'N/A')}")
+                    raise invite_error
+            
             else:
                 # Обычные группы
                 logger.info(f"📤 Используем AddChatUserRequest для {group.title if hasattr(group, 'title') else group.id}")
-                result_data = await client(AddChatUserRequest(
-                    chat_id=group.id,
-                    user_id=user.id,
-                    fwd_limit=10
-                ))
+                
+                # Детальное логирование перед отправкой приглашения
+                logger.info(f"🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПЕРЕД ПРИГЛАШЕНИЕМ:")
+                logger.info(f"   - Группа: {group.title} (ID: {group.id})")
+                logger.info(f"   - Пользователь: {user.username if hasattr(user, 'username') else 'N/A'} (ID: {user.id})")
+                logger.info(f"   - Аккаунт: {account_id}")
+                logger.info(f"   - Тип группы: {type(group).__name__}")
+                logger.info(f"   - Участников в группе: {getattr(group, 'participants_count', 'N/A')}")
+                
+                try:
+                    result_data = await client(AddChatUserRequest(
+                        chat_id=group.id,
+                        user_id=user.id,
+                        fwd_limit=10
+                    ))
+                    logger.info(f"✅ Приглашение отправлено успешно")
+                except Exception as invite_error:
+                    logger.error(f"❌ ДЕТАЛЬНАЯ ОШИБКА ПРИГЛАШЕНИЯ:")
+                    logger.error(f"   - Тип ошибки: {type(invite_error).__name__}")
+                    logger.error(f"   - Сообщение: {str(invite_error)}")
+                    logger.error(f"   - Код ошибки: {getattr(invite_error, 'code', 'N/A')}")
+                    logger.error(f"   - Детали: {getattr(invite_error, 'message', 'N/A')}")
+                    raise invite_error
         
         elif invite_data.invite_type == "direct_message":
             # Прямое сообщение
@@ -427,14 +467,28 @@ async def send_telegram_invite_by_account(
     
     except PeerFloodError as e:
         # Слишком много запросов к одному пользователю
-        logger.warning(f"PeerFlood для аккаунта {account_id}")
+        target_info = invite_data.target_username or invite_data.target_phone or invite_data.target_user_id
+        logger.warning(f"❌ PeerFlood для аккаунта {account_id}")
+        logger.warning(f"🔍 АНАЛИЗ PEERFLOOD:")
+        logger.warning(f"   - Целевой пользователь: {target_info}")
+        logger.warning(f"   - Группа: {invite_data.group_id}")
+        logger.warning(f"   - Детали ошибки: {str(e)}")
+        logger.warning(f"   - Код ошибки: {getattr(e, 'code', 'N/A')}")
+        logger.warning(f"   - Возможные причины:")
+        logger.warning(f"     1. Пользователь заблокировал аккаунт")
+        logger.warning(f"     2. Строгие настройки приватности пользователя")
+        logger.warning(f"     3. Пользователь уже в группе")
+        logger.warning(f"     4. Ограничения группы на приглашения")
+        logger.warning(f"     5. Аккаунт помечен как подозрительный")
         
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={
                 "error": "peer_flood",
-                "message": "Слишком много запросов к пользователю. Попробуйте позже",
-                "retry_after": 86400  # 24 часа
+                "message": f"Ограничение на приглашения. Возможные причины: настройки приватности пользователя, блокировка, или ограничения группы",
+                "retry_after": 86400,  # 24 часа
+                "target": target_info,
+                "group": invite_data.group_id
             }
         )
     
@@ -447,12 +501,12 @@ async def send_telegram_invite_by_account(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "error": "user_not_mutual_contact",
-                "message": "Пользователь не в списке взаимных контактов"
+                "message": "Пользователь должен быть в ваших контактах"
             }
         )
     
     except Exception as e:
-        # Обработка других ошибок
+        # Обработка ошибок приватности и других общих ошибок
         error_msg = str(e).lower()
         
         if "privacy" in error_msg or "restricted" in error_msg:
@@ -466,22 +520,22 @@ async def send_telegram_invite_by_account(
                     "message": "Настройки приватности пользователя запрещают приглашения"
                 }
             )
-        
-        # Общие ошибки
-        target_info = invite_data.target_username or invite_data.target_phone or invite_data.target_user_id
-        logger.error(f"Telegram invite error для аккаунта {account_id}, цель {target_info}: {str(e)}")
-        
-        # Улучшенная обработка ошибок - не возвращаем пустые сообщения
-        error_detail = str(e) if str(e).strip() else "Неизвестная ошибка при отправке приглашения"
-        
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": "invite_failed",
-                "message": error_detail,
-                "target": target_info
-            }
-        )
+        else:
+            # Общие ошибки
+            target_info = invite_data.target_username or invite_data.target_phone or invite_data.target_user_id
+            logger.error(f"Telegram invite error для аккаунта {account_id}, цель {target_info}: {str(e)}")
+            
+            # Улучшенная обработка ошибок - не возвращаем пустые сообщения
+            error_detail = str(e) if str(e).strip() else "Неизвестная ошибка при отправке приглашения"
+            
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "error": "invite_failed",
+                    "message": error_detail,
+                    "target": target_info
+                }
+            )
 
 
 @router.post("/invite", response_model=TelegramInviteResponse)
@@ -570,21 +624,55 @@ async def send_telegram_invite(
                         if is_channel_or_megagroup:
                             # Каналы и мегагруппы
                             logger.info(f"📤 Используем InviteToChannelRequest для {group.title if hasattr(group, 'title') else group.id} (Account Manager)")
-                            result = await client(InviteToChannelRequest(
-                                channel=group,
-                                users=[user]
-                            ))
+                            
+                            # Детальное логирование перед отправкой приглашения
+                            logger.info(f"🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПЕРЕД ПРИГЛАШЕНИЕМ:")
+                            logger.info(f"   - Группа: {group.title} (ID: {group.id})")
+                            logger.info(f"   - Пользователь: {user.username if hasattr(user, 'username') else 'N/A'} (ID: {user.id})")
+                            logger.info(f"   - Аккаунт: {allocation.account_id}")
+                            logger.info(f"   - Тип группы: {type(group).__name__}")
+                            logger.info(f"   - Участников в группе: {getattr(group, 'participants_count', 'N/A')}")
+                            
+                            try:
+                                result = await client(InviteToChannelRequest(
+                                    channel=group,
+                                    users=[user]
+                                ))
+                                logger.info(f"✅ Приглашение отправлено успешно")
+                            except Exception as invite_error:
+                                logger.error(f"❌ ДЕТАЛЬНАЯ ОШИБКА ПРИГЛАШЕНИЯ:")
+                                logger.error(f"   - Тип ошибки: {type(invite_error).__name__}")
+                                logger.error(f"   - Сообщение: {str(invite_error)}")
+                                logger.error(f"   - Код ошибки: {getattr(invite_error, 'code', 'N/A')}")
+                                logger.error(f"   - Детали: {getattr(invite_error, 'message', 'N/A')}")
+                                raise invite_error
+                        
                         else:
                             # Обычные группы
                             logger.info(f"📤 Используем AddChatUserRequest для {group.title if hasattr(group, 'title') else group.id} (Account Manager)")
-                            result = await client(AddChatUserRequest(
-                                chat_id=group.id,
-                                user_id=user.id,
-                                fwd_limit=10
-                            ))
-                        
-                        usage_stats.invites_sent = 1
-                        usage_stats.channels_used = [str(invite_data.group_id)]
+                            
+                            # Детальное логирование перед отправкой приглашения
+                            logger.info(f"🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПЕРЕД ПРИГЛАШЕНИЕМ:")
+                            logger.info(f"   - Группа: {group.title} (ID: {group.id})")
+                            logger.info(f"   - Пользователь: {user.username if hasattr(user, 'username') else 'N/A'} (ID: {user.id})")
+                            logger.info(f"   - Аккаунт: {allocation.account_id}")
+                            logger.info(f"   - Тип группы: {type(group).__name__}")
+                            logger.info(f"   - Участников в группе: {getattr(group, 'participants_count', 'N/A')}")
+                            
+                            try:
+                                result = await client(AddChatUserRequest(
+                                    chat_id=group.id,
+                                    user_id=user.id,
+                                    fwd_limit=10
+                                ))
+                                logger.info(f"✅ Приглашение отправлено успешно")
+                            except Exception as invite_error:
+                                logger.error(f"❌ ДЕТАЛЬНАЯ ОШИБКА ПРИГЛАШЕНИЯ:")
+                                logger.error(f"   - Тип ошибки: {type(invite_error).__name__}")
+                                logger.error(f"   - Сообщение: {str(invite_error)}")
+                                logger.error(f"   - Код ошибки: {getattr(invite_error, 'code', 'N/A')}")
+                                logger.error(f"   - Детали: {getattr(invite_error, 'message', 'N/A')}")
+                                raise invite_error
                     
                     elif invite_data.target_phone:
                         # Приглашение по номеру телефона
@@ -608,21 +696,55 @@ async def send_telegram_invite(
                         if is_channel_or_megagroup:
                             # Каналы и мегагруппы
                             logger.info(f"📤 Используем InviteToChannelRequest для {group.title if hasattr(group, 'title') else group.id} (по номеру, Account Manager)")
-                            result = await client(InviteToChannelRequest(
-                                channel=group,
-                                users=[user]
-                            ))
+                            
+                            # Детальное логирование перед отправкой приглашения
+                            logger.info(f"🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПЕРЕД ПРИГЛАШЕНИЕМ:")
+                            logger.info(f"   - Группа: {group.title} (ID: {group.id})")
+                            logger.info(f"   - Пользователь: {user.username if hasattr(user, 'username') else 'N/A'} (ID: {user.id})")
+                            logger.info(f"   - Аккаунт: {allocation.account_id}")
+                            logger.info(f"   - Тип группы: {type(group).__name__}")
+                            logger.info(f"   - Участников в группе: {getattr(group, 'participants_count', 'N/A')}")
+                            
+                            try:
+                                result = await client(InviteToChannelRequest(
+                                    channel=group,
+                                    users=[user]
+                                ))
+                                logger.info(f"✅ Приглашение отправлено успешно")
+                            except Exception as invite_error:
+                                logger.error(f"❌ ДЕТАЛЬНАЯ ОШИБКА ПРИГЛАШЕНИЯ:")
+                                logger.error(f"   - Тип ошибки: {type(invite_error).__name__}")
+                                logger.error(f"   - Сообщение: {str(invite_error)}")
+                                logger.error(f"   - Код ошибки: {getattr(invite_error, 'code', 'N/A')}")
+                                logger.error(f"   - Детали: {getattr(invite_error, 'message', 'N/A')}")
+                                raise invite_error
+                        
                         else:
                             # Обычные группы
                             logger.info(f"📤 Используем AddChatUserRequest для {group.title if hasattr(group, 'title') else group.id} (по номеру, Account Manager)")
-                            result = await client(AddChatUserRequest(
-                                chat_id=group.id,
-                                user_id=user.id,
-                                fwd_limit=10
-                            ))
-                        
-                        usage_stats.invites_sent = 1
-                        usage_stats.channels_used = [str(invite_data.group_id)]
+                            
+                            # Детальное логирование перед отправкой приглашения
+                            logger.info(f"🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПЕРЕД ПРИГЛАШЕНИЕМ:")
+                            logger.info(f"   - Группа: {group.title} (ID: {group.id})")
+                            logger.info(f"   - Пользователь: {user.username if hasattr(user, 'username') else 'N/A'} (ID: {user.id})")
+                            logger.info(f"   - Аккаунт: {allocation.account_id}")
+                            logger.info(f"   - Тип группы: {type(group).__name__}")
+                            logger.info(f"   - Участников в группе: {getattr(group, 'participants_count', 'N/A')}")
+                            
+                            try:
+                                result = await client(AddChatUserRequest(
+                                    chat_id=group.id,
+                                    user_id=user.id,
+                                    fwd_limit=10
+                                ))
+                                logger.info(f"✅ Приглашение отправлено успешно")
+                            except Exception as invite_error:
+                                logger.error(f"❌ ДЕТАЛЬНАЯ ОШИБКА ПРИГЛАШЕНИЯ:")
+                                logger.error(f"   - Тип ошибки: {type(invite_error).__name__}")
+                                logger.error(f"   - Сообщение: {str(invite_error)}")
+                                logger.error(f"   - Код ошибки: {getattr(invite_error, 'code', 'N/A')}")
+                                logger.error(f"   - Детали: {getattr(invite_error, 'message', 'N/A')}")
+                                raise invite_error
                 
                 else:
                     raise Exception("group_id обязателен для group_invite")
