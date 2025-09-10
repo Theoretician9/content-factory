@@ -353,75 +353,15 @@ async def send_telegram_invite_by_account(
                     user_id=user.id,
                     fwd_limit=10
                 ))
-                # Приглашение по номеру телефона
-                try:
-                    # Используем правильный метод для получения пользователя по номеру телефона
-                    user = await client.get_entity(invite_data.target_phone)
-                except Exception as e:
-                    logger.warning(f"Не удалось найти пользователя по номеру {invite_data.target_phone}: {str(e)}")
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"Пользователь с номером {invite_data.target_phone} не найден или недоступен"
-                    )
-                
-                # Нормализуем group_id
-                def normalize_group_id(gid: str) -> str:
-                    """Нормализует group_id для использования с Telegram API"""
-                    gid = gid.strip()
-                    # Если это уже полный URL - возвращаем как есть
-                    if gid.startswith('https://') or gid.startswith('http://'):
-                        return gid
-                    # Если это username с @ или без, используем @ префикс
-                    if gid.startswith('@'):
-                        return gid
-                    if 't.me/' in gid:
-                        # Извлекаем username из t.me/username
-                        username = gid.split('t.me/')[-1]
-                        return f'@{username}'
-                    # По умолчанию добавляем @ для usernames
-                    return f'@{gid}'
-                
-                normalized_group_id = normalize_group_id(invite_data.group_id)
-                group = await client.get_entity(normalized_group_id)
-                
-                # Определяем тип группы/канала для правильного запроса
-                # Правильная логика: каналы и супергруппы используют InviteToChannelRequest
-                # Обычные группы используют AddChatUserRequest
-                from telethon.tl.types import Channel, Chat
-                is_channel_or_megagroup = isinstance(group, Channel)
-                
-                logger.info(f"🔍 Определение типа чата (по номеру): {type(group).__name__}, is_channel_or_megagroup: {is_channel_or_megagroup}")
-                
-                if is_channel_or_megagroup:
-                    # Каналы и мегагруппы
-                    logger.info(f"📤 Используем InviteToChannelRequest для {group.title if hasattr(group, 'title') else group.id} (по номеру)")
-                    result_data = await client(InviteToChannelRequest(
-                        channel=group,
-                        users=[user]
-                    ))
-                else:
-                    # Обычные группы
-                    logger.info(f"📤 Используем AddChatUserRequest для {group.title if hasattr(group, 'title') else group.id} (по номеру)")
-                    result_data = await client(AddChatUserRequest(
-                        chat_id=group.id,
-                        user_id=user.id,
-                        fwd_limit=10
-                    ))
-            
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Необходим target_username или target_phone"
-                )
         
         elif invite_data.invite_type == "direct_message":
             # Прямое сообщение
-            target_entity = invite_data.target_username or invite_data.target_phone
+            target_entity = invite_data.target_username or invite_data.target_phone or invite_data.target_user_id
             
             if not target_entity:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Необходим target_username или target_phone для direct_message"
+                    detail="Необходим target_username, target_phone или target_user_id для direct_message"
                 )
             
             if not invite_data.message:
@@ -431,6 +371,16 @@ async def send_telegram_invite_by_account(
                 )
             
             # Отправка сообщения
+            # Если target_user_id - конвертируем в int
+            if invite_data.target_user_id:
+                try:
+                    target_entity = int(invite_data.target_user_id)
+                except ValueError:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Некорректный target_user_id: {invite_data.target_user_id}"
+                    )
+            
             result_data = await client.send_message(
                 entity=target_entity,
                 message=invite_data.message
