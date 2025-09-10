@@ -435,7 +435,8 @@ async def send_telegram_invite_by_account(
     
     except UserNotMutualContactError as e:
         # Пользователь не в контактах
-        logger.info(f"User not mutual contact для {invite_data.target_username or invite_data.target_phone}")
+        target_info = invite_data.target_username or invite_data.target_phone or invite_data.target_user_id
+        logger.info(f"User not mutual contact для {target_info}")
         
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -450,7 +451,8 @@ async def send_telegram_invite_by_account(
         error_msg = str(e).lower()
         
         if "privacy" in error_msg or "restricted" in error_msg:
-            logger.info(f"Privacy restricted для {invite_data.target_username or invite_data.target_phone}")
+            target_info = invite_data.target_username or invite_data.target_phone or invite_data.target_user_id
+            logger.info(f"Privacy restricted для {target_info}")
             
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -461,13 +463,18 @@ async def send_telegram_invite_by_account(
             )
         
         # Общие ошибки
-        logger.error(f"Telegram invite error для аккаунта {account_id}: {str(e)}")
+        target_info = invite_data.target_username or invite_data.target_phone or invite_data.target_user_id
+        logger.error(f"Telegram invite error для аккаунта {account_id}, цель {target_info}: {str(e)}")
+        
+        # Улучшенная обработка ошибок - не возвращаем пустые сообщения
+        error_detail = str(e) if str(e).strip() else "Неизвестная ошибка при отправке приглашения"
         
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error": "invite_failed",
-                "message": str(e)
+                "message": error_detail,
+                "target": target_info
             }
         )
 
