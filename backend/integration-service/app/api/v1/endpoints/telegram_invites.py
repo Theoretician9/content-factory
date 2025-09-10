@@ -271,6 +271,11 @@ async def send_telegram_invite_by_account(
         start_time = datetime.utcnow()
         result_data = None
         
+        # Диагностическое логирование входящих данных
+        target_info = invite_data.target_username or invite_data.target_phone or invite_data.target_user_id
+        logger.info(f"🎯 Обработка приглашения: тип={invite_data.invite_type}, цель={target_info}")
+        logger.info(f"📋 Данные: username={invite_data.target_username}, phone={invite_data.target_phone}, user_id={invite_data.target_user_id}")
+        
         # Обработка разных типов приглашений
         if invite_data.invite_type == "group_invite":
             # Приглашение в группу/канал
