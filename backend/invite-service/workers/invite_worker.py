@@ -272,6 +272,7 @@ def execute_invite_task(self, task_id: int):
             try:
                 result = loop.run_until_complete(_execute_task_async(task, adapter, db))
                 return result
+                
             finally:
                 loop.close()
                 
@@ -445,14 +446,19 @@ async def _process_batch_async(
     
     try:
         # Инициализация аккаунтов с фильтрацией по админским правам
+        logger.info(f"Инициализация аккаунтов для задачи {task.id}")
         all_accounts = await adapter.initialize_accounts(task.user_id)
         if not all_accounts:
             raise Exception("Нет доступных аккаунтов")
-            
-        # Применяем фильтрацию по админским правам  
+        
+        logger.info(f"Найдено {len(all_accounts)} аккаунтов, применяем фильтрацию по админским правам")
+        
+        # Фильтрация аккаунтов с проверкой админских прав  
         accounts = await _filter_admin_accounts_async(all_accounts, task)
         if not accounts:
-            raise Exception(f"Ни один аккаунт не прошел проверку на админские права. Из {len(all_accounts)} аккаунтов ни один не является администратором с правами приглашать пользователей")
+            raise Exception(f"Нет доступных аккаунтов с административными правами. Из {len(all_accounts)} аккаунтов ни один не прошел проверку на админские права и лимиты")
+        
+        logger.info(f"Найдено {len(accounts)} активных аккаунтов для задачи {task.id}")
         
         # Round-robin распределение по аккаунтам
         account_index = 0
@@ -703,6 +709,23 @@ def _is_retryable_error(error: Exception) -> bool:
     # Не ретраим WorkerLostError и подобные
     if isinstance(error, WorkerLostError):
         return False
+    
+    # Ретраим network ошибки и временные проблемы
+    error_str = str(error).lower()
+    retryable_patterns = [
+        'timeout',
+        'connection',
+        'network',
+        'temporary',
+        'rate limit',
+        'flood wait'
+    ]
+    
+    return any(pattern in error_str for pattern in retryable_patterns)
+
+
+def _is_retryable_single_error(error: Exception) -> bool:
+    """Проверка возможности retry для ошибки отправки одного приглашения"""
     
     # Ретраим network ошибки и временные проблемы
     error_str = str(error).lower()
