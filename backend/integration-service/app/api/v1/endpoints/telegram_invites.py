@@ -283,6 +283,15 @@ async def send_telegram_invite_by_account(
             if invite_data.target_username:
                 # Приглашение по username
                 user = await client.get_entity(invite_data.target_username)
+            elif invite_data.target_user_id:
+                # Приглашение по user_id
+                try:
+                    user = await client.get_entity(int(invite_data.target_user_id))
+                except ValueError:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Некорректный target_user_id: {invite_data.target_user_id}"
+                    )
                 
                 # Нормализуем group_id
                 def normalize_group_id(gid: str) -> str:
