@@ -68,6 +68,7 @@ class TelegramInviteResponse(BaseModel):
     # Информация о цели
     target_username: Optional[str] = None
     target_phone: Optional[str] = None
+    target_user_id: Optional[str] = None
     invite_type: InviteType
     
     # Дополнительная информация

@@ -397,13 +397,14 @@ async def send_telegram_invite_by_account(
         execution_time = (end_time - start_time).total_seconds()
         
         return TelegramInviteResponse(
-            success=True,
-            message="Приглашение отправлено успешно",
-            account_id=account_id,
+            status="success",
+            message_id=getattr(result_data, 'id', None),
+            sent_at=end_time,
+            execution_time=execution_time,
             target_username=invite_data.target_username,
             target_phone=invite_data.target_phone,
-            execution_time=execution_time,
-            sent_at=end_time
+            target_user_id=invite_data.target_user_id,
+            invite_type=invite_data.invite_type
         )
     
     except FloodWaitError as e:
