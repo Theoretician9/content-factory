@@ -346,7 +346,6 @@ async def _execute_task_async(task: InviteTask, adapter, db: Session) -> str:
                 await asyncio.sleep(batch_delay)
         
         return f"Запущено {total_batches} батчей для {len(targets)} целей через Account Manager"
-{{ ... }}
         
     except Exception as e:
         logger.error(f"Ошибка в _execute_task_async для задачи {task.id}: {str(e)}")
@@ -426,35 +425,33 @@ async def _process_batch_async(
     db: Session,
     batch_number: int
 ) -> str:
-    """Асинхронная обработка батча целей"""
+    """Асинхронная обработка батча целей через Account Manager согласно ТЗ"""
     
     try:
-        # Инициализация аккаунтов с фильтрацией по админским правам
-        logger.info(f"Инициализация аккаунтов для задачи {task.id}")
-        all_accounts = await adapter.initialize_accounts(task.user_id)
-        if not all_accounts:
-            raise Exception("Нет доступных аккаунтов")
+        # ✅ ПЕРЕРАБОТАНО: Все взаимодействия с аккаунтами только через Account Manager
+        account_manager = AccountManagerClient()
+        logger.info(f"🔍 AccountManager: Начинаем обработку батча {batch_number} через Account Manager")
         
-        logger.info(f"Найдено {len(all_accounts)} аккаунтов, применяем фильтрацию по админским правам")
+        # Вместо прямой инициализации аккаунтов - запрашиваем через Account Manager
+        # Account Manager сам проверит лимиты, статус, блокировки согласно ТЗ
         
-        # Фильтрация аккаунтов с проверкой админских прав  
-        accounts = await _filter_admin_accounts_async(all_accounts, task)
-        if not accounts:
-            raise Exception(f"Нет доступных аккаунтов с административными правами. Из {len(all_accounts)} аккаунтов ни один не прошел проверку на админские права и лимиты")
-        
-        logger.info(f"Найдено {len(accounts)} активных аккаунтов для задачи {task.id}")
-        
-        # Round-robin распределение по аккаунтам
-        account_index = 0
+        # ✅ ПЕРЕРАБОТАНО: Обработка каждой цели через Account Manager с соблюдением лимитов ТЗ
         processed_count = 0
         success_count = 0
         failed_count = 0
+        current_account_allocation = None
         
         for target in targets:
             # Проверка статуса задачи (может быть отменена)
             db.refresh(task)
             if task.status in [TaskStatus.CANCELLED, TaskStatus.FAILED]:
-                logger.info(f"Задача {task.id} отменена/провалена, прерываем обработку батча {batch_number}")
+                logger.info(f"📛 Задача {task.id} отменена/провалена, прерываем обработку батча {batch_number}")
+                # Освобождаем аккаунт если он был выделен
+                if current_account_allocation:
+                    await account_manager.release_account(
+                        current_account_allocation['allocation']['account_id'],
+                        {'invites_sent': success_count, 'success': True}
+                    )
                 break
             
             # 🔍 ДИАГНОСТИКА: Проверяем данные цели перед обработкой
@@ -474,11 +471,65 @@ async def _process_batch_async(
                 db.commit()
                 continue
             
-            account = accounts[account_index % len(accounts)]
-            
             try:
-                # Выполнение приглашения
-                result = await _send_single_invite(task, target, account, adapter, db)
+                # ✅ ПЕРЕРАБОТАНО: Запрос аккаунта через Account Manager для каждого приглашения
+                if not current_account_allocation:
+                    current_account_allocation = await account_manager.allocate_account(
+                        user_id=task.user_id,
+                        purpose="invites",
+                        timeout_minutes=60  # Увеличиваем таймаут для соблюдения пауз ТЗ
+                    )
+                    
+                    if not current_account_allocation:
+                        logger.error(f"❌ AccountManager: Нет доступных аккаунтов для задачи {task.id}")
+                        target.status = TargetStatus.FAILED
+                        target.error_message = "Нет доступных аккаунтов через Account Manager"
+                        target.attempt_count += 1
+                        target.updated_at = datetime.utcnow()
+                        db.commit()
+                        failed_count += 1
+                        continue
+                    
+                    logger.info(f"✅ AccountManager: Выделен аккаунт {current_account_allocation['allocation']['account_id']} для батча {batch_number}")
+                
+                # Проверка лимитов через Account Manager перед каждым приглашением
+                rate_limit_check = await account_manager.check_rate_limit(
+                    current_account_allocation['allocation']['account_id'],
+                    action_type="invite",
+                    target_channel_id=task.settings.get('group_id') if task.settings else None
+                )
+                
+                if not rate_limit_check.get('allowed', False):
+                    logger.warning(f"⚠️ AccountManager: Лимиты превышены для аккаунта {current_account_allocation['allocation']['account_id']}: {rate_limit_check.get('reason')}")
+                    
+                    # Освобождаем текущий аккаунт и пытаемся получить новый
+                    await account_manager.release_account(
+                        current_account_allocation['allocation']['account_id'],
+                        {'invites_sent': success_count, 'success': True}
+                    )
+                    current_account_allocation = None
+                    
+                    # Пытаемся получить новый аккаунт
+                    current_account_allocation = await account_manager.allocate_account(
+                        user_id=task.user_id,
+                        purpose="invites",
+                        timeout_minutes=60
+                    )
+                    
+                    if not current_account_allocation:
+                        logger.error(f"❌ AccountManager: Нет других доступных аккаунтов")
+                        target.status = TargetStatus.FAILED
+                        target.error_message = "Превышены лимиты всех доступных аккаунтов"
+                        target.attempt_count += 1
+                        target.updated_at = datetime.utcnow()
+                        db.commit()
+                        failed_count += 1
+                        continue
+                
+                # Выполнение приглашения через Account Manager
+                result = await _send_single_invite_via_account_manager(
+                    task, target, current_account_allocation, account_manager, adapter, db
+                )
                 
                 if result.is_success:
                     success_count += 1
@@ -489,13 +540,19 @@ async def _process_batch_async(
                 
                 processed_count += 1
                 
-                # Переключение аккаунта
-                account_index += 1
-                
-                # Задержка между приглашениями
+                # ✅ ИСПРАВЛЕНО: Задержка между приглашениями согласно ТЗ Account Manager (10-15 минут)
                 if processed_count < len(targets):
-                    delay = task.delay_between_invites or 60
+                    delay = task.delay_between_invites or 600  # По умолчанию 10 минут согласно ТЗ
+                    logger.info(f"⏱️ AccountManager: Пауза {delay} секунд между приглашениями (согласно ТЗ Account Manager)")
                     await asyncio.sleep(delay)
+                
+                # Записываем действие в Account Manager
+                await account_manager.record_action(
+                    current_account_allocation['allocation']['account_id'],
+                    action_type="invite",
+                    target_channel_id=task.settings.get('group_id') if task.settings else None,
+                    success=result.is_success
+                )
                 
             except Exception as e:
                 logger.error(f"Ошибка обработки цели {target.id}: {str(e)}")
