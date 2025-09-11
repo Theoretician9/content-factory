@@ -1,6 +1,11 @@
-"""
-Account Manager Client для Invite Service
+"""Account Manager Client для Invite Service
 Интеграция с централизованной системой управления Telegram аккаунтами
+
+✅ СООТВЕТСТВУЕТ ТЗ ACCOUNT MANAGER:
+- Все лимиты управляются только Account Manager
+- Invite Service не имеет собственных лимитов
+- Все паузы и ограничения определяются Account Manager
+- Строгое соблюдение ТЗ: 15 инвайтов/день, 200 на паблик, паузы 10-15 минут
 """
 import httpx
 import logging
@@ -26,7 +31,13 @@ class AccountManagerClient:
         timeout_minutes: int = 30
     ) -> Optional[Dict[str, Any]]:
         """
-        Выделить аккаунт для приглашений
+        ✅ СООТВЕТСТВУЕТ ТЗ: Выделить аккаунт для приглашений
+        
+        Account Manager самостоятельно проверяет ВСЕ лимиты согласно ТЗ:
+        - Статус аккаунта (active)
+        - Лимиты: 15 инвайтов/день, 200 на паблик, 30 сообщений/день
+        - FloodWait, BlockedUntil
+        - Устанавливает locked = true
         
         Args:
             user_id: ID пользователя
@@ -38,7 +49,7 @@ class AccountManagerClient:
             Dict с данными аккаунта или None если нет доступных
         """
         try:
-            logger.info(f"🔍 Requesting account allocation for user {user_id}, purpose: {purpose}")
+            logger.info(f"🔍 AccountManager: Requesting account allocation for user {user_id}, purpose: {purpose} (все лимиты управляются Account Manager согласно ТЗ)")
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
@@ -54,7 +65,7 @@ class AccountManagerClient:
                 
                 if response.status_code == 200:
                     allocation = response.json()
-                    logger.info(f"✅ Account allocated: {allocation['account_id']}, phone: {allocation['phone']}")
+                    logger.info(f"✅ AccountManager: Account allocated: {allocation['account_id']}, phone: {allocation['phone']} (лимиты проверены Account Manager)")
                     return allocation
                 elif response.status_code == 404:
                     logger.warning(f"❌ No available accounts for user {user_id}")
@@ -83,7 +94,7 @@ class AccountManagerClient:
             bool: Успешность операции
         """
         try:
-            logger.info(f"🔓 Releasing account {account_id}")
+            logger.info(f"🔓 AccountManager: Releasing account {account_id} (обновление лимитов в Account Manager)")
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
@@ -113,7 +124,12 @@ class AccountManagerClient:
         context: Dict[str, Any] = None
     ) -> bool:
         """
-        Обработать ошибку аккаунта
+        ✅ СООТВЕТСТВУЕТ ТЗ: Обработать ошибку аккаунта
+        
+        Account Manager обрабатывает ошибки согласно ТЗ:
+        - FloodWaitError: устанавливает flood_wait_until, status = "flood_wait"
+        - PeerFloodError, AuthKeyError: status = "blocked"
+        - Автоматическое восстановление по крону
         
         Args:
             account_id: ID аккаунта
@@ -125,7 +141,7 @@ class AccountManagerClient:
             bool: Успешность обработки
         """
         try:
-            logger.warning(f"⚠️ Handling error for account {account_id}: {error_type}")
+            logger.warning(f"⚠️ AccountManager: Handling error for account {account_id}: {error_type} (согласно ТЗ Account Manager)")
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
@@ -156,7 +172,13 @@ class AccountManagerClient:
         target_channel_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Проверить rate limits перед действием
+        ✅ КЛЮЧЕВАЯ ФУНКЦИЯ ТЗ: Проверить rate limits перед действием
+        
+        Account Manager проверяет ВСЕ лимиты согласно ТЗ:
+        - Инвайты: 15/день на аккаунт, 200 на паблик (навсегда)
+        - Паузы: 10-15 минут между инвайтами
+        - Сообщения: 30/день, паузы 1-2 минуты
+        - Контакты: 15/день, потом 5/день
         
         Args:
             account_id: ID аккаунта
@@ -164,7 +186,7 @@ class AccountManagerClient:
             target_channel_id: ID целевого канала
             
         Returns:
-            Dict со статусом лимитов
+            Dict со статусом лимитов и необходимыми паузами
         """
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
