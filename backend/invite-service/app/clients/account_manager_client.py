@@ -1,57 +1,44 @@
 """
 Account Manager Client для Invite Service
-Строго"""
-Клиент для взаимодействия с Account Manager согласно ТЗ
-Account Manager - единственный источник управления лимитами и аккаунтами
-Invite Service не имеет собственных лимитов
+Интеграция с централизованной системой управления Telegram аккаунтами
 """
-import logging
 import httpx
-from typing import Dict, Any, Optional, List
+import logging
+from typing import Optional, Dict, Any, List
 from datetime import datetime
+from ..core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-
 class AccountManagerClient:
-    """
-    ✅ ИСПРАВЛЕНО: Клиент для работы с Account Manager согласно ТЗ
+    """HTTP клиент для взаимодействия с Account Manager в Integration Service"""
     
-    ВАЖНО: Account Manager - единственный источник управления лимитами.
-    Invite Service не должен иметь собственных лимитов или задержек.
-    Все параметры (паузы, лимиты, блокировки) определяются только Account Manager.
-    """
-    
-    def __init__(self, base_url: str = "http://integration-service:8001"):
-        self.base_url = base_url
-        self.session = httpx.AsyncClient(timeout=30.0)
-    
+    def __init__(self):
+        self.settings = get_settings()
+        self.base_url = "http://integration-service:8000/api/v1/account-manager"
+        self.timeout = 30.0
+        
     async def allocate_account(
         self, 
         user_id: int, 
-        purpose: str = "invites",
+        purpose: str = "invite_campaign",
+        preferred_account_id: Optional[str] = None,
         timeout_minutes: int = 30
     ) -> Optional[Dict[str, Any]]:
         """
-        ✅ ОСНОВНАЯ ФУНКЦИЯ: Выделение аккаунта через Account Manager
-        
-        Account Manager самостоятельно определяет ВСЕ параметры:
-        - Статус аккаунта (должен быть active)
-        - Лимиты согласно ТЗ (15 инвайтов/день, 200 на паблик, 30 сообщений/день)
-        - Паузы (10-15 минут между инвайтами, 1-2 минуты между сообщениями)
-        - FloodWait, BlockedUntil
-        - Устанавливает locked = true
+        Выделить аккаунт для приглашений
         
         Args:
             user_id: ID пользователя
-            purpose: Цель использования ("invites", "parsing", "messaging")
-            timeout_minutes: Таймаут резервирования аккаунта
+            purpose: Цель использования (invite_campaign)
+            preferred_account_id: Предпочтительный аккаунт
+            timeout_minutes: Таймаут блокировки в минутах
             
         Returns:
             Dict с данными аккаунта или None если нет доступных
         """
         try:
-            logger.info(f"🔍 AccountManager: Requesting account allocation for user {user_id}, purpose: {purpose}")
+            logger.info(f"🔍 Requesting account allocation for user {user_id}, purpose: {purpose}")
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
