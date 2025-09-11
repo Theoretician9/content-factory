@@ -597,7 +597,11 @@ async def _send_single_invite(
     adapter,
     db: Session
 ) -> InviteResult:
-    """Отправка одного приглашения"""
+    """❌ УСТАРЕВШАЯ ФУНКЦИЯ: Заменена на _send_single_invite_via_account_manager
+    
+    Эта функция больше не используется, так как все взаимодействия с аккаунтами
+    должны происходить только через Account Manager согласно ТЗ.
+    """
     
     start_time = datetime.utcnow()
     
