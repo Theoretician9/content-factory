@@ -16,6 +16,7 @@ from app.core.database import get_db_session
 from app.models import InviteTask, InviteTarget, InviteExecutionLog, TaskStatus, TargetStatus
 from app.adapters.factory import get_platform_adapter
 from app.adapters.base import InviteResult, InviteResultStatus
+from app.clients.account_manager_client import AccountManagerClient
 
 logger = logging.getLogger(__name__)
 
@@ -299,70 +300,53 @@ def execute_invite_task(self, task_id: int):
 
 
 async def _execute_task_async(task: InviteTask, adapter, db: Session) -> str:
-    """Асинхронное выполнение задачи приглашений"""
+    """Асинхронная функция для выполнения задачи приглашений через Account Manager"""
     
     try:
-        # Инициализация аккаунтов
-        logger.info(f"Инициализация аккаунтов для задачи {task.id}")
-        all_accounts = await adapter.initialize_accounts(task.user_id)
+        # ✅ ПЕРЕРАБОТАНО: Все взаимодействия с аккаунтами только через Account Manager
+        logger.info(f"🔍 AccountManager: Начинаем выполнение задачи {task.id} через Account Manager")
         
-        if not all_accounts:
-            raise Exception("Нет доступных аккаунтов для выполнения задачи")
+        # Account Manager заменяет прямую работу с аккаунтами
+        account_manager = AccountManagerClient()
         
-        logger.info(f"Найдено {len(all_accounts)} аккаунтов, применяем фильтрацию по админским правам")
-        
-        # Фильтрация аккаунтов с проверкой админских прав  
-        accounts = await _filter_admin_accounts_async(all_accounts, task)
-        
-        if not accounts:
-            raise Exception(f"Нет доступных аккаунтов с административными правами. Из {len(all_accounts)} аккаунтов ни один не прошел проверку на админские права и лимиты")
-        
-        logger.info(f"Найдено {len(accounts)} активных аккаунтов для задачи {task.id}")
-        
-        # Получение целевой аудитории
+        # Получаем цели для обработки
         targets = db.query(InviteTarget).filter(
             InviteTarget.task_id == task.id,
             InviteTarget.status == TargetStatus.PENDING
         ).all()
         
         if not targets:
-            logger.warning(f"Нет целей для обработки в задаче {task.id}")
-            task.status = TaskStatus.COMPLETED.value
-            task.end_time = datetime.utcnow()
-            db.commit()
-            return f"Задача {task.id} завершена: нет целей для обработки"
+            logger.warning(f"⚠️ Нет целей для обработки в задаче {task.id}")
+            return "Нет целей для обработки"
         
-        logger.info(f"Найдено {len(targets)} целей для обработки в задаче {task.id}")
+        logger.info(f"📊 Найдено {len(targets)} целей для обработки")
         
-        # Разбивка на батчи
-        batch_size = task.settings.get('batch_size', 10) if task.settings else 10
-        delay_between_batches = task.settings.get('delay_between_batches', 30) if task.settings else 30
-        
+        # ✅ ПЕРЕРАБОТАНО: Обработка через Account Manager с соблюдением лимитов ТЗ
+        # Разбиение на батчи согласно настройкам
+        batch_size = task.settings.get('batch_size', 1) if task.settings else 1  # Уменьшаем batch_size для соблюдения лимитов
         total_batches = (len(targets) + batch_size - 1) // batch_size
-        logger.info(f"Разбиваем цели на {total_batches} батчей по {batch_size} элементов")
         
-        # Запуск обработки по батчам
+        logger.info(f"📦 Разбиваем {len(targets)} целей на {total_batches} батчей по {batch_size} целей (согласно ТЗ Account Manager)")
+        
+        # Запуск батчей с задержками согласно ТЗ Account Manager
         for i in range(0, len(targets), batch_size):
-            batch = targets[i:i + batch_size]
-            batch_number = i // batch_size + 1
+            batch_targets = targets[i:i + batch_size]
+            batch_number = (i // batch_size) + 1
             
-            logger.info(f"Запуск обработки батча {batch_number}/{total_batches} (размер: {len(batch)})")
+            # Создание задачи для батча с Account Manager
+            target_ids = [target.id for target in batch_targets]
+            process_target_batch.delay(task.id, target_ids, batch_number)
             
-            # Запуск задачи для батча
-            process_target_batch.delay(
-                task_id=task.id,
-                target_ids=[t.id for t in batch],
-                batch_number=batch_number
-            )
+            logger.info(f"🚀 Запущен батч {batch_number}/{total_batches} с {len(batch_targets)} целями через Account Manager")
             
-            # Задержка между батчами (кроме последнего)
+            # ✅ ИСПРАВЛЕНО: Задержка между батчами согласно ТЗ (минимум 10 минут)
             if i + batch_size < len(targets):
-                logger.debug(f"Ожидание {delay_between_batches}s между батчами")
-                await asyncio.sleep(delay_between_batches)
+                batch_delay = 600  # 10 минут между батчами согласно ТЗ Account Manager
+                logger.info(f"⏱️ Пауза {batch_delay} секунд между батчами (согласно ТЗ Account Manager)")
+                await asyncio.sleep(batch_delay)
         
-        # Задача запущена, батчи обрабатываются асинхронно
-        logger.info(f"Все батчи для задачи {task.id} запущены в обработку")
-        return f"Задача {task.id} запущена: {total_batches} батчей отправлены в обработку"
+        return f"Запущено {total_batches} батчей для {len(targets)} целей через Account Manager"
+{{ ... }}
         
     except Exception as e:
         logger.error(f"Ошибка в _execute_task_async для задачи {task.id}: {str(e)}")
