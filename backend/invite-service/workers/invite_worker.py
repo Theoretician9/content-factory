@@ -798,51 +798,64 @@ def _is_retryable_single_error(error: Exception) -> bool:
 @celery_app.task(bind=True)
 def single_invite_operation(self, task_id: int, target_id: int, account_id: int = None):
     """
-    Отправка одиночного приглашения (для тестирования или ручного управления)
+    ✅ ПЕРЕРАБОТАНО: Отправка одиночного приглашения через Account Manager
     
     Args:
         task_id: ID задачи
         target_id: ID цели
-        account_id: ID аккаунта (опционально)
+        account_id: ID аккаунта (опционально, игнорируется - Account Manager сам выберет)
     """
-    logger.info(f"Отправка одиночного приглашения: задача {task_id}, цель {target_id}")
+    logger.info(f"🔄 AccountManager: Отправка одиночного приглашения через Account Manager: задача {task_id}, цель {target_id}")
     
     with get_db_session() as db:
         task = db.query(InviteTask).filter(InviteTask.id == task_id).first()
         target = db.query(InviteTarget).filter(InviteTarget.id == target_id).first()
         
         if not task or not target:
-            logger.error(f"Задача {task_id} или цель {target_id} не найдены")
+            logger.error(f"❌ Задача {task_id} или цель {target_id} не найдены")
             return "Задача или цель не найдены"
         
         try:
             adapter = get_platform_adapter(task.platform)
+            account_manager = AccountManagerClient()
             
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
             try:
-                all_accounts = loop.run_until_complete(adapter.initialize_accounts(task.user_id))
-                if not all_accounts:
-                    raise Exception("Нет доступных аккаунтов")
+                # ✅ ПЕРЕРАБОТАНО: Запрос аккаунта через Account Manager вместо прямой инициализации
+                account_allocation = loop.run_until_complete(
+                    account_manager.allocate_account(
+                        user_id=task.user_id,
+                        purpose="single_invite",
+                        timeout_minutes=30
+                    )
+                )
                 
-                # Применяем фильтрацию по админским правам
-                accounts = _filter_admin_accounts(all_accounts, task)
-                if not accounts:
-                    raise Exception(f"Ни один аккаунт не прошел проверку на админские права. Из {len(all_accounts)} аккаунтов ни один не является администратором")
+                if not account_allocation:
+                    logger.error(f"❌ AccountManager: Нет доступных аккаунтов для задачи {task_id}")
+                    return "Нет доступных аккаунтов через Account Manager"
                 
-                # Выбор аккаунта
-                account = None
-                if account_id:
-                    account = next((acc for acc in accounts if acc.account_id == account_id), None)
+                logger.info(f"✅ AccountManager: Выделен аккаунт {account_allocation['allocation']['account_id']} для одиночного приглашения")
                 
-                if not account:
-                    account = accounts[0]  # Первый доступный
+                # Отправка приглашения через Account Manager
+                result = loop.run_until_complete(
+                    _send_single_invite_via_account_manager(
+                        task, target, account_allocation, account_manager, adapter, db
+                    )
+                )
                 
-                # Отправка приглашения
-                result = loop.run_until_complete(_send_single_invite(task, target, account, adapter, db))
+                # Освобождаем аккаунт
+                loop.run_until_complete(
+                    account_manager.release_account(
+                        account_allocation['allocation']['account_id'],
+                        {'invites_sent': 1 if result.is_success else 0, 'success': result.is_success}
+                    )
+                )
                 
-                return f"Приглашение отправлено: {result.status}"
+                logger.info(f"🔓 AccountManager: Освобожден аккаунт {account_allocation['allocation']['account_id']} после одиночного приглашения")
+                
+                return f"Приглашение отправлено через Account Manager: {result.status}"
                 
             finally:
                 loop.close()
