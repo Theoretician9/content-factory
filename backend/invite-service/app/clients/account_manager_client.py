@@ -1,6 +1,6 @@
 """
 Account Manager Client для Invite Service
-Интеграция с централизованной системой управления Telegram аккаунтами
+Строгое соответствие ТЗ Account Manager - все взаимодействия с аккаунтами только через Account Manager
 """
 import httpx
 import logging
@@ -21,16 +21,16 @@ class AccountManagerClient:
     async def allocate_account(
         self, 
         user_id: int, 
-        purpose: str = "invite_campaign",
+        purpose: str = "invites",
         preferred_account_id: Optional[str] = None,
         timeout_minutes: int = 30
     ) -> Optional[Dict[str, Any]]:
         """
-        Выделить аккаунт для приглашений
+        Выделить аккаунт для приглашений согласно ТЗ Account Manager
         
         Args:
             user_id: ID пользователя
-            purpose: Цель использования (invite_campaign)
+            purpose: Цель использования (invites согласно ТЗ)
             preferred_account_id: Предпочтительный аккаунт
             timeout_minutes: Таймаут блокировки в минутах
             
@@ -38,7 +38,7 @@ class AccountManagerClient:
             Dict с данными аккаунта или None если нет доступных
         """
         try:
-            logger.info(f"🔍 Requesting account allocation for user {user_id}, purpose: {purpose}")
+            logger.info(f"🔍 AccountManager: Requesting account allocation for user {user_id}, purpose: {purpose}")
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
