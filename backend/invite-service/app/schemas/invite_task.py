@@ -146,9 +146,9 @@ class InviteTaskCreate(BaseModel):
     platform: str = Field(..., description="Платформа (telegram, instagram, whatsapp)")
     priority: TaskPriority = Field(TaskPriority.NORMAL, description="Приоритет задачи")
     
-    # Параметры выполнения
-    delay_between_invites: int = Field(60, ge=30, le=3600, description="Задержка между приглашениями в секундах")
-    max_invites_per_account: int = Field(50, ge=1, le=1000, description="Максимум приглашений с одного аккаунта")
+    # Параметры выполнения (согласно ТЗ Account Manager: пауза 10-15 минут между инвайтами)
+    delay_between_invites: int = Field(600, ge=600, le=900, description="Задержка между приглашениями в секундах (10-15 минут согласно ТЗ Account Manager)")
+    max_invites_per_account: int = Field(15, ge=1, le=30, description="Максимум приглашений с одного аккаунта в день (согласно ТЗ Account Manager)")
     
     # Сообщение для приглашения
     invite_message: Optional[str] = Field(None, max_length=1000, description="Текст сообщения при приглашении")
@@ -179,8 +179,8 @@ class InviteTaskUpdate(BaseModel):
     status: Optional[TaskStatus] = None
     priority: Optional[TaskPriority] = None
     
-    delay_between_invites: Optional[int] = Field(None, ge=30, le=3600)
-    max_invites_per_account: Optional[int] = Field(None, ge=1, le=1000)
+    delay_between_invites: Optional[int] = Field(None, ge=600, le=900)
+    max_invites_per_account: Optional[int] = Field(None, ge=1, le=30)
     invite_message: Optional[str] = Field(None, max_length=1000)
     scheduled_start: Optional[datetime] = None
     settings: Optional[TaskSettingsSchema] = None
