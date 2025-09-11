@@ -178,8 +178,9 @@ class InviteTaskUpdate(BaseModel):
     status: Optional[TaskStatus] = None
     priority: Optional[TaskPriority] = None
     
-    delay_between_invites: Optional[int] = Field(None, ge=600, le=900)
-    max_invites_per_account: Optional[int] = Field(None, ge=1, le=30)
+    # ❌ УДАЛЕНО: Все лимиты управляются только Account Manager согласно ТЗ
+    # Invite Service не должен иметь собственных лимитов
+    
     invite_message: Optional[str] = Field(None, max_length=1000)
     scheduled_start: Optional[datetime] = None
     settings: Optional[TaskSettingsSchema] = None

@@ -74,9 +74,9 @@ class InviteTask(Base):
     completed_count = Column(Integer, default=0, comment="Количество успешно выполненных приглашений")
     failed_count = Column(Integer, default=0, comment="Количество неуспешных приглашений")
     
-    # Настройки задержек и лимитов (согласно ТЗ Account Manager)
-    delay_between_invites = Column(Integer, default=600, comment="Задержка между приглашениями в секундах (10-15 минут согласно ТЗ Account Manager)")
-    max_invites_per_account = Column(Integer, default=15, comment="Максимум приглашений с одного аккаунта в день (согласно ТЗ Account Manager)")
+    # ❌ УДАЛЕНО: Все лимиты управляются только Account Manager согласно ТЗ
+    # Invite Service не должен иметь собственных лимитов и задержек
+    # Все параметры лимитов определяются Account Manager при выделении аккаунтов
     
     # Временные рамки
     created_at = Column(DateTime, server_default=func.now(), default=func.now(), nullable=False, comment="Время создания задачи")
