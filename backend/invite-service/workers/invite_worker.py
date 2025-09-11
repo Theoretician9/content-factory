@@ -17,6 +17,7 @@ from app.models import InviteTask, InviteTarget, InviteExecutionLog, TaskStatus,
 from app.adapters.factory import get_platform_adapter
 from app.adapters.base import InviteResult, InviteResultStatus
 from app.clients.account_manager_client import AccountManagerClient
+from workers.invite_worker_account_manager import _send_single_invite_via_account_manager
 
 logger = logging.getLogger(__name__)
 
