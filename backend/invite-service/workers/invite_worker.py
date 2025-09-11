@@ -322,14 +322,14 @@ async def _execute_task_async(task: InviteTask, adapter, db: Session) -> str:
         
         logger.info(f"📊 Найдено {len(targets)} целей для обработки")
         
-        # ✅ ПЕРЕРАБОТАНО: Обработка через Account Manager с соблюдением лимитов ТЗ
-        # Разбиение на батчи согласно настройкам
-        batch_size = task.settings.get('batch_size', 1) if task.settings else 1  # Уменьшаем batch_size для соблюдения лимитов
+        # ✅ ПЕРЕРАБОТАНО: Обработка через Account Manager - все лимиты управляются Account Manager
+        # Разбиение на батчи - размер определяется настройками задачи, не лимитами Invite Service
+        batch_size = task.settings.get('batch_size', 1) if task.settings else 1
         total_batches = (len(targets) + batch_size - 1) // batch_size
         
-        logger.info(f"📦 Разбиваем {len(targets)} целей на {total_batches} батчей по {batch_size} целей (согласно ТЗ Account Manager)")
+        logger.info(f"📦 Разбиваем {len(targets)} целей на {total_batches} батчей по {batch_size} целей (лимиты управляются Account Manager)")
         
-        # Запуск батчей с задержками согласно ТЗ Account Manager
+        # Запуск батчей - все задержки управляются Account Manager
         for i in range(0, len(targets), batch_size):
             batch_targets = targets[i:i + batch_size]
             batch_number = (i // batch_size) + 1
@@ -340,11 +340,11 @@ async def _execute_task_async(task: InviteTask, adapter, db: Session) -> str:
             
             logger.info(f"🚀 Запущен батч {batch_number}/{total_batches} с {len(batch_targets)} целями через Account Manager")
             
-            # ✅ ИСПРАВЛЕНО: Задержка между батчами согласно ТЗ (минимум 10 минут)
+            # ✅ ИСПРАВЛЕНО: Задержки между батчами управляются Account Manager, не Invite Service
             if i + batch_size < len(targets):
-                batch_delay = 600  # 10 минут между батчами согласно ТЗ Account Manager
-                logger.info(f"⏱️ Пауза {batch_delay} секунд между батчами (согласно ТЗ Account Manager)")
-                await asyncio.sleep(batch_delay)
+                logger.info(f"⏱️ Задержки между батчами управляются Account Manager согласно ТЗ")
+                # Минимальная пауза для предотвращения перегрузки системы, основные паузы - в Account Manager
+                await asyncio.sleep(10)
         
         return f"Запущено {total_batches} батчей для {len(targets)} целей через Account Manager"
         
@@ -541,11 +541,11 @@ async def _process_batch_async(
                 
                 processed_count += 1
                 
-                # ✅ ИСПРАВЛЕНО: Задержка между приглашениями согласно ТЗ Account Manager (10-15 минут)
+                # ✅ ИСПРАВЛЕНО: Все задержки управляются только Account Manager согласно ТЗ
+                # Invite Service не определяет собственные задержки - они устанавливаются Account Manager
                 if processed_count < len(targets):
-                    delay = task.delay_between_invites or 600  # По умолчанию 10 минут согласно ТЗ
-                    logger.info(f"⏱️ AccountManager: Пауза {delay} секунд между приглашениями (согласно ТЗ Account Manager)")
-                    await asyncio.sleep(delay)
+                    # Account Manager сам определяет необходимые паузы при check_rate_limit
+                    logger.info(f"⏱️ AccountManager: Паузы между приглашениями управляются Account Manager согласно ТЗ")
                 
                 # Записываем действие в Account Manager
                 await account_manager.record_action(
