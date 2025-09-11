@@ -566,16 +566,24 @@ async def _process_batch_async(
                 target.attempt_count += 1
                 target.updated_at = datetime.utcnow()
         
-        # Обновление статистики задачи
+        # ✅ ДОБАВЛЕНО: Освобождаем аккаунт в конце обработки батча через Account Manager
+        if current_account_allocation:
+            await account_manager.release_account(
+                current_account_allocation['allocation']['account_id'],
+                {'invites_sent': success_count, 'success': True, 'batch_completed': True}
+            )
+            logger.info(f"🔓 AccountManager: Освобожден аккаунт {current_account_allocation['allocation']['account_id']} после завершения батча {batch_number}")
+        
+        # Обновляем задачу
         task.updated_at = datetime.utcnow()
         db.commit()
         
         logger.info(
-            f"Батч {batch_number} задачи {task.id} завершен: "
+            f"✅ AccountManager: Батч {batch_number} задачи {task.id} завершен через Account Manager: "
             f"обработано {processed_count}, успешно {success_count}, ошибок {failed_count}"
         )
         
-        return f"Батч {batch_number}: {processed_count} обработано, {success_count} успешно"
+        return f"Батч {batch_number}: {processed_count} обработано, {success_count} успешно (через Account Manager)"
         
     except Exception as e:
         logger.error(f"Ошибка в _process_batch_async батч {batch_number} задачи {task.id}: {str(e)}")
