@@ -668,6 +668,9 @@ const Mailing = () => {
           
           if (!data.can_proceed) {
             setAdminCheckError('Ни один из ваших аккаунтов не является администратором этой группы/канала');
+          } else {
+            // Явно очищаем ошибку, если найден хотя бы один администратор
+            setAdminCheckError('');
           }
         } else {
           const error = await res.json();
