@@ -137,10 +137,8 @@ async def get_task_report(
         **stats_data,
         "report_generated_at": datetime.utcnow(),
         "task_settings": {
-            "message_template": task.message_template,
-            "invite_type": task.invite_type,
-            "batch_size": task.batch_size,
-            "delay_between_invites": task.delay_between_invites
+            "invite_message": task.invite_message,
+            "settings": task.settings or {}
         }
     }
     
