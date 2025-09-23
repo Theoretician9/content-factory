@@ -71,6 +71,16 @@ class ReleaseAllRequest(BaseModel):
     service_name: str = Field(..., description="Имя сервиса")
     force: bool = Field(False, description="Принудительное освобождение")
 
+class AccountsSummaryResponse(BaseModel):
+    success: bool
+    user_id: int
+    purpose: Optional[AccountPurpose] = None
+    total_accounts: int
+    active_accounts: int
+    available_now: int
+    aggregates: Dict[str, Any]
+    accounts: List[Dict[str, Any]]
+
 # Dependency injection
 async def get_account_manager() -> AccountManagerService:
     return AccountManagerService()
