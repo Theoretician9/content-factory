@@ -232,12 +232,18 @@ async def handle_account_error(
         logger.error(f"❌ Error handling account error for {account_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error handling account error: {str(e)}")
 
-@router.get("/available-accounts/{user_id}")
-async def get_available_accounts(
-    user_id: int,
-    purpose: Optional[AccountPurpose] = Query(None, description="Фильтр по цели использования"),
+@router.get("/accounts/summary", response_model=Dict[str, Any])
+async def get_accounts_summary(
+    user_id: int = Query(..., description="ID пользователя"),
+    purpose: Optional[AccountPurpose] = Query(None, description="Цель использования аккаунтов"),
+    target_channel_id: Optional[str] = Query(None, description="ID целевого канала/паблика для проверки per-channel лимитов"),
+    status: Optional[str] = Query(None, description="Фильтр по статусу (active, flood_wait, blocked, cooling_down, ...)"),
+    only_available: bool = Query(False, description="Фильтровать только доступные сейчас аккаунты"),
+    sort_by: Optional[str] = Query(None, description="Сортировка: last_used_at|used_invites_today|error_count"),
+    limit: int = Query(500, ge=1, le=2000, description="Максимум аккаунтов в ответе"),
     session: AsyncSession = Depends(get_async_session),
-    account_manager: AccountManagerService = Depends(get_account_manager)
+    account_manager: AccountManagerService = Depends(get_account_manager),
+    rate_limiting: RateLimitingService = Depends(get_rate_limiting_service)
 ):
     """
     Получить список доступных аккаунтов пользователя
@@ -250,8 +256,80 @@ async def get_available_accounts(
             purpose=purpose or AccountPurpose.GENERAL
         )
         
+        # Применяем фильтры по статусу и доступности
+        filtered = []
+        for acc in available_accounts:
+            st = str(acc.status)
+            if status and st != status:
+                continue
+            if only_available and not getattr(acc, "is_available", False):
+                continue
+            filtered.append(acc)
+
+        # Сортировка
+        if sort_by == "last_used_at":
+            filtered.sort(key=lambda a: (getattr(a, "last_used_at", None) or datetime.min))
+        elif sort_by == "used_invites_today":
+            filtered.sort(key=lambda a: (getattr(a, "used_invites_today", 0)))
+        elif sort_by == "error_count":
+            filtered.sort(key=lambda a: (getattr(a, "error_count", 0)), reverse=True)
+
+        # Обрезаем список по limit
+        candidates = filtered[:limit]
+        
+        # Подсчитываем агрегаты
+        can_invite_true = 0
+        capacity_today_sum = 0
+        capacity_today_by_channel = 0
+        status_distribution = {}
+        active_accounts = 0
+        available_now = 0
+        
+        for acc in candidates:
+            # Проверяем, можно ли приглашать в целевой канал
+            if target_channel_id:
+                try:
+                    allowed, details = await rate_limiting.check_rate_limit(
+                        session=session,
+                        account_id=acc.id,
+                        action_type=ActionType.INVITE,
+                        target_channel_id=target_channel_id
+                    )
+                    can_invite_in_channel = bool(allowed)
+                    if can_invite_in_channel:
+                        can_invite_true += 1
+                    # Пытаемся извлечь остатки по лимитам из details, если сервис их отдаёт
+                    if isinstance(details, dict):
+                        remaining_in_channel = details.get("remaining_today_in_channel")
+                        if isinstance(remaining_in_channel, int):
+                            capacity_today_by_channel += max(0, remaining_in_channel)
+                except Exception as rl_err:
+                    logger.warning(f"Rate limit check failed for {acc.id}: {rl_err}")
+                    can_invite_in_channel = False
+
+            # Общая дневная емкость по аккаунту (если доступна)
+            # Ожидается, что AccountManagerService или rate limiting хранит used_invites_today и дневной лимит аккаунта (например, 30)
+            try:
+                daily_limit_account = getattr(acc, "daily_invite_limit", None) or 30
+                used_today = getattr(acc, "used_invites_today", 0)
+                capacity_today_sum += max(0, int(daily_limit_account) - int(used_today))
+            except Exception:
+                pass
+            
+            # Статусы аккаунтов
+            st = str(acc.status)
+            if st not in status_distribution:
+                status_distribution[st] = 0
+            status_distribution[st] += 1
+            
+            # Активные и доступные аккаунты
+            if getattr(acc, "is_active", False):
+                active_accounts += 1
+            if getattr(acc, "is_available", False):
+                available_now += 1
+        
         accounts_data = []
-        for account in available_accounts:
+        for account in candidates:
             accounts_data.append({
                 "account_id": str(account.id),
                 "phone": account.phone,
@@ -266,13 +344,23 @@ async def get_available_accounts(
                 "blocked_until": account.blocked_until.isoformat() if account.blocked_until else None
             })
         
-        return {
+        response = {
             "success": True,
             "user_id": user_id,
-            "purpose": purpose,
+            "purpose": (purpose or AccountPurpose.GENERAL),
             "total_accounts": len(accounts_data),
+            "active_accounts": active_accounts,
+            "available_now": available_now,
+            "aggregates": {
+                "status_distribution": status_distribution,
+                "can_invite_in_channel_true": can_invite_true if target_channel_id else None,
+                "capacity_today_sum": capacity_today_sum,
+                "capacity_today_by_channel": capacity_today_by_channel if target_channel_id else None
+            },
             "accounts": accounts_data
         }
+        
+        return response
         
     except Exception as e:
         logger.error(f"❌ Error getting available accounts for user {user_id}: {e}")
