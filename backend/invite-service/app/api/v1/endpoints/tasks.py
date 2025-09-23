@@ -766,24 +766,41 @@ async def check_admin_rights(
         admin_accounts_count = 0
         visited_accounts = set()
 
-        # Итеративно выделяем аккаунты через Account Manager, проверяем права и сразу освобождаем
-        while True:
+        # 1) Быстрый предфильтр через AM summary (учет доступности и лимитов по целевому паблику)
+        summary = await am_client.get_accounts_summary(
+            user_id=user_id,
+            purpose="invite_campaign",
+            target_channel_id=group_link,
+            limit=2000
+        )
+
+        candidate_ids = []
+        if summary and summary.get("success"):
+            for acc in summary.get("accounts", []):
+                # Берем только доступные аккаунты и те, кто не заведомо ограничен по целевому паблику
+                if acc.get("is_available") and (acc.get("can_invite_in_channel") in (None, True)):
+                    candidate_ids.append(acc.get("account_id"))
+
+        logger.info(f"🔍 Предфильтр AM: найдено {len(candidate_ids)} кандидатов для проверки админских прав")
+
+        # 2) Точечная проверка: аллоцируем конкретный аккаунт по preferred_account_id, проверяем права и релизим
+        for preferred_id in candidate_ids:
             allocation = await am_client.allocate_account(
                 user_id=user_id,
                 purpose="check_admin_rights",
+                preferred_account_id=preferred_id,
                 timeout_minutes=5
             )
 
             if not allocation:
-                logger.info("ℹ️ Account Manager: нет доступных аккаунтов для дальнейшей проверки")
-                break
+                # Не удалось выделить именно этот аккаунт (занят/неактуален) — пропускаем
+                continue
 
             account_id = allocation.get("account_id")
             username = allocation.get("phone") or f"Account_{(account_id or '')[:8]}"
 
             # Защита от повторного выделения одного и того же аккаунта в рамках одного запроса
             if account_id in visited_accounts:
-                logger.debug(f"🔁 Account {account_id} уже проверен в рамках запроса — прерываем цикл")
                 await am_client.release_account(account_id=account_id, usage_stats={
                     "invites_sent": 0,
                     "messages_sent": 0,
@@ -793,14 +810,12 @@ async def check_admin_rights(
                     "error_type": None,
                     "error_message": None
                 })
-                break
+                continue
 
             visited_accounts.add(account_id)
 
             try:
-                # Проверка прав администратора через Integration Service для выделенного аккаунта
                 is_admin, permissions = await integration_client.check_admin_rights(account_id, group_link)
-
                 if is_admin:
                     admin_accounts_count += 1
                     ready_accounts.append({
@@ -826,7 +841,6 @@ async def check_admin_rights(
                     "permissions": []
                 })
             finally:
-                # Освобождаем аккаунт сразу после проверки
                 try:
                     await am_client.release_account(account_id=account_id, usage_stats={
                         "invites_sent": 0,
