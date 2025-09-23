@@ -738,6 +738,9 @@ async def test_single_invite(
         
     except Exception as e:
         raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка отправки тестового приглашения: {str(e)}"
+        )
 @router.post("/check-admin-rights")
 async def check_admin_rights(
     request: dict,
