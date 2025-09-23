@@ -309,6 +309,34 @@ class AccountManagerClient:
         except Exception as e:
             logger.error(f"❌ Error getting available accounts: {e}")
             return None
+
+    async def get_accounts_summary(
+        self,
+        user_id: int,
+        purpose: Optional[str] = None,
+        target_channel_id: Optional[str] = None,
+        limit: int = 500,
+    ) -> Optional[Dict[str, Any]]:
+        """Получить агрегированную витрину аккаунтов пользователя из Account Manager."""
+        try:
+            params: Dict[str, Any] = {"user_id": user_id, "limit": limit}
+            if purpose:
+                params["purpose"] = purpose
+            if target_channel_id:
+                params["target_channel_id"] = target_channel_id
+
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(f"{self.base_url}/accounts/summary", params=params)
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    logger.error(
+                        f"❌ Failed to get accounts summary for user {user_id}: {response.status_code} - {response.text}"
+                    )
+                    return None
+        except Exception as e:
+            logger.error(f"❌ Error getting accounts summary: {e}")
+            return None
     
     async def release_all_accounts(self) -> Dict[str, Any]:
         """
