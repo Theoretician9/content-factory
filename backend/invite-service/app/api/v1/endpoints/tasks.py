@@ -646,45 +646,40 @@ async def get_task_available_accounts(
         )
     
     try:
-        # Получаем список доступных аккаунтов напрямую из Account Manager
+        # Получаем агрегированную витрину из Account Manager с учетом канала задачи
         from app.clients.account_manager_client import AccountManagerClient
         am_client = AccountManagerClient()
-        
-        # В качестве purpose используем invite_campaign для задач инвайтов
-        am_response = await am_client.get_available_accounts(user_id=user_id, purpose="invite_campaign")
-        
+
+        target_channel_id = None
+        if task.settings and isinstance(task.settings, dict):
+            target_channel_id = task.settings.get("group_id") or task.settings.get("channel_id")
+
+        am_response = await am_client.get_accounts_summary(
+            user_id=user_id,
+            purpose="invite_campaign",
+            target_channel_id=target_channel_id,
+            limit=1000,
+        )
+
         if not am_response or not am_response.get("success"):
             return {
                 "task_id": task_id,
                 "platform": task.platform,
                 "total_accounts": 0,
                 "active_accounts": 0,
-                "accounts": []
+                "available_now": 0,
+                "accounts": [],
+                "aggregates": {}
             }
-        
-        accounts = am_response.get("accounts", [])
-        account_info = []
-        for acc in accounts:
-            account_info.append({
-                "account_id": acc.get("account_id"),
-                "phone": acc.get("phone"),
-                "status": acc.get("status"),
-                "is_available": acc.get("is_available", False),
-                "usage": {
-                    "used_invites_today": acc.get("used_invites_today"),
-                    "used_messages_today": acc.get("used_messages_today"),
-                    "contacts_today": acc.get("contacts_today")
-                },
-                "flood_wait_until": acc.get("flood_wait_until"),
-                "blocked_until": acc.get("blocked_until")
-            })
-        
+
         return {
             "task_id": task_id,
             "platform": task.platform,
-            "total_accounts": am_response.get("total_accounts", len(account_info)),
-            "active_accounts": len([a for a in account_info if a.get("status") == "active"]),
-            "accounts": account_info
+            "total_accounts": am_response.get("total_accounts", 0),
+            "active_accounts": am_response.get("active_accounts", 0),
+            "available_now": am_response.get("available_now", 0),
+            "accounts": am_response.get("accounts", []),
+            "aggregates": am_response.get("aggregates", {})
         }
     except Exception as e:
         raise HTTPException(
