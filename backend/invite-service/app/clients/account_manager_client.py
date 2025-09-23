@@ -291,6 +291,25 @@ class AccountManagerClient:
             logger.error(f"❌ Error getting recovery stats: {e}")
             return None
     
+    async def get_available_accounts(self, user_id: int, purpose: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Получить список доступных аккаунтов пользователя из Account Manager."""
+        try:
+            params = {}
+            if purpose:
+                params["purpose"] = purpose
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(
+                    f"{self.base_url}/available-accounts/{user_id}", params=params
+                )
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    logger.error(f"❌ Failed to get available accounts for user {user_id}: {response.status_code} - {response.text}")
+                    return None
+        except Exception as e:
+            logger.error(f"❌ Error getting available accounts: {e}")
+            return None
+    
     async def release_all_accounts(self) -> Dict[str, Any]:
         """
         Освободить все аккаунты, заблокированные данным сервисом
