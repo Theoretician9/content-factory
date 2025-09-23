@@ -857,6 +857,83 @@ async def check_admin_rights(
                 except Exception as release_err:
                     logger.debug(f"Release account error: {release_err}")
 
+        # 3) Fallback: если кандидатов по summary нет, пробуем общий аллокейт без preferred_id (AM может разрешить для цели check_admin_rights)
+        if admin_accounts_count == 0 and not candidate_ids:
+            logger.info("ℹ️ Fallback: summary не дал кандидатов, пробуем общий аллокейт для проверки админских прав")
+            visited_accounts_fallback = set()
+            max_attempts = 50
+            attempts = 0
+            while attempts < max_attempts:
+                attempts += 1
+                allocation = await am_client.allocate_account(
+                    user_id=user_id,
+                    purpose="check_admin_rights",
+                    timeout_minutes=5
+                )
+                if not allocation:
+                    break
+
+                account_id = allocation.get("account_id")
+                username = allocation.get("phone") or f"Account_{(account_id or '')[:8]}"
+
+                if account_id in visited_accounts_fallback:
+                    # уже проверяли в этом проходе
+                    try:
+                        await am_client.release_account(account_id=account_id, usage_stats={
+                            "invites_sent": 0,
+                            "messages_sent": 0,
+                            "contacts_added": 0,
+                            "channels_used": [group_link],
+                            "success": True,
+                            "error_type": None,
+                            "error_message": None
+                        })
+                    except Exception:
+                        pass
+                    break
+
+                visited_accounts_fallback.add(account_id)
+
+                try:
+                    is_admin, permissions = await integration_client.check_admin_rights(account_id, group_link)
+                    if is_admin:
+                        admin_accounts_count += 1
+                        ready_accounts.append({
+                            "account_id": account_id,
+                            "username": username,
+                            "status": "ready",
+                            "permissions": permissions
+                        })
+                    else:
+                        unavailable_accounts.append({
+                            "account_id": account_id,
+                            "username": username,
+                            "status": "not_admin",
+                            "reason": "no_admin_permissions",
+                            "permissions": permissions
+                        })
+                except Exception as check_error:
+                    unavailable_accounts.append({
+                        "account_id": account_id,
+                        "username": username,
+                        "status": "error",
+                        "reason": str(check_error),
+                        "permissions": []
+                    })
+                finally:
+                    try:
+                        await am_client.release_account(account_id=account_id, usage_stats={
+                            "invites_sent": 0,
+                            "messages_sent": 0,
+                            "contacts_added": 0,
+                            "channels_used": [group_link],
+                            "success": True,
+                            "error_type": None,
+                            "error_message": None
+                        })
+                    except Exception:
+                        pass
+
         # Оценка потенциальной вместимости (по ТЗ AM: 15 инвайтов/день на паблик на аккаунт)
         estimated_capacity = admin_accounts_count * 15
         total_checked = len(ready_accounts) + len(unavailable_accounts)
