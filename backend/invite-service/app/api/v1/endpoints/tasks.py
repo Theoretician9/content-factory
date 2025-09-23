@@ -793,7 +793,7 @@ async def check_admin_rights(
         for preferred_id in candidate_ids:
             allocation = await am_client.allocate_account(
                 user_id=user_id,
-                purpose="channel_management",
+                purpose="general",
                 preferred_account_id=preferred_id,
                 timeout_minutes=5
             )
@@ -870,7 +870,7 @@ async def check_admin_rights(
                 attempts += 1
                 allocation = await am_client.allocate_account(
                     user_id=user_id,
-                    purpose="channel_management",
+                    purpose="general",
                     timeout_minutes=5
                 )
                 if not allocation:
