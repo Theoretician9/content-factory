@@ -646,64 +646,50 @@ async def get_task_available_accounts(
         )
     
     try:
-        # Получение адаптера платформы
-        from app.adapters.factory import get_platform_adapter
+        # Получаем список доступных аккаунтов напрямую из Account Manager
+        from app.clients.account_manager_client import AccountManagerClient
+        am_client = AccountManagerClient()
         
-        adapter = get_platform_adapter(task.platform)
+        # В качестве purpose используем invite_campaign для задач инвайтов
+        am_response = await am_client.get_available_accounts(user_id=user_id, purpose="invite_campaign")
         
-        # Асинхронная инициализация аккаунтов
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        if not am_response or not am_response.get("success"):
+            return {
+                "task_id": task_id,
+                "platform": task.platform,
+                "total_accounts": 0,
+                "active_accounts": 0,
+                "accounts": []
+            }
         
-        try:
-            accounts = loop.run_until_complete(adapter.initialize_accounts(user_id))
-        finally:
-            loop.close()
-        
-        # Получение rate limiting информации
-        from app.utils.rate_limiter import get_rate_limiter
-        rate_limiter = get_rate_limiter()
-        
+        accounts = am_response.get("accounts", [])
         account_info = []
-        for account in accounts:
-            # Получение текущего использования
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            try:
-                usage = loop.run_until_complete(rate_limiter.get_account_usage(account))
-                can_invite = loop.run_until_complete(rate_limiter.can_send_invite(account))
-            finally:
-                loop.close()
-            
+        for acc in accounts:
             account_info.append({
-                "account_id": account.account_id,
-                "username": account.username,
-                "phone": account.phone,
-                "status": account.status.value,
-                "platform": account.platform,
-                "limits": {
-                    "daily_invite_limit": account.daily_invite_limit,
-                    "daily_message_limit": account.daily_message_limit,
-                    "hourly_invite_limit": account.hourly_invite_limit
+                "account_id": acc.get("account_id"),
+                "phone": acc.get("phone"),
+                "status": acc.get("status"),
+                "is_available": acc.get("is_available", False),
+                "usage": {
+                    "used_invites_today": acc.get("used_invites_today"),
+                    "used_messages_today": acc.get("used_messages_today"),
+                    "contacts_today": acc.get("contacts_today")
                 },
-                "usage": usage,
-                "can_send_invite": can_invite,
-                "flood_wait_until": account.flood_wait_until.isoformat() if account.flood_wait_until else None
+                "flood_wait_until": acc.get("flood_wait_until"),
+                "blocked_until": acc.get("blocked_until")
             })
         
         return {
             "task_id": task_id,
             "platform": task.platform,
-            "total_accounts": len(accounts),
-            "active_accounts": len([acc for acc in accounts if acc.status.value == 'active']),
+            "total_accounts": am_response.get("total_accounts", len(account_info)),
+            "active_accounts": len([a for a in account_info if a.get("status") == "active"]),
             "accounts": account_info
         }
-        
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка получения аккаунтов: {str(e)}"
+            detail=f"Ошибка получения аккаунтов через Account Manager: {str(e)}"
         )
 
 
@@ -873,10 +859,6 @@ async def check_admin_rights(
             "can_proceed": admin_accounts_count > 0,
             "estimated_capacity": estimated_capacity
         }
-            
-                status_code=500, 
-                detail=f"Ошибка получения данных аккаунтов: {str(integration_error)}"
-            )
         
     except Exception as e:
         logger.error(f"❌ Ошибка проверки админских прав: {e}")
