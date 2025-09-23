@@ -772,7 +772,9 @@ async def check_admin_rights(
         # 1) Быстрый предфильтр через AM summary (учет доступности и лимитов по целевому паблику)
         summary = await am_client.get_accounts_summary(
             user_id=user_id,
-            purpose="invite_campaign",
+            # Для проверки админских прав не требуем соответствия строгим инвайт-лимитам
+            # используем более общий purpose, чтобы не отсеять пригодных админов заранее
+            purpose="general",
             target_channel_id=group_link,
             limit=2000
         )
@@ -780,8 +782,9 @@ async def check_admin_rights(
         candidate_ids = []
         if summary and summary.get("success"):
             for acc in summary.get("accounts", []):
-                # Берем только доступные аккаунты и те, кто не заведомо ограничен по целевому паблику
-                if acc.get("is_available") and (acc.get("can_invite_in_channel") in (None, True)):
+                # Для проверки АДМИН-ПРАВ не учитываем per-channel инвайт лимиты,
+                # достаточно, чтобы аккаунт был доступен/активен.
+                if acc.get("is_available", False) or acc.get("status") == "active":
                     candidate_ids.append(acc.get("account_id"))
 
         logger.info(f"🔍 Предфильтр AM: найдено {len(candidate_ids)} кандидатов для проверки админских прав")
