@@ -102,6 +102,19 @@ async def allocate_account(
     Выделить аккаунт для использования сервисом
     """
     try:
+        # Нормализация идентификатора канала: поддержка t.me/<slug> и @slug
+        if target_channel_id:
+            try:
+                raw = str(target_channel_id).strip()
+                if raw.startswith('t.me/') or raw.startswith('https://t.me/') or raw.startswith('http://t.me/'):
+                    # Берём хвост после последней '/'
+                    raw = raw.split('/')[-1]
+                if raw.startswith('@'):
+                    raw = raw[1:]
+                # Приводим к нижнему регистру для консистентности ключей RL
+                target_channel_id = raw.lower()
+            except Exception as _:
+                pass
         logger.info(f"🔍 Account allocation request from {request.service_name} for user {request.user_id}")
         
         allocation = await account_manager.allocate_account(
