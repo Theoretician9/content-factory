@@ -106,6 +106,7 @@ async def create_invite_task(
                 logger.info(f"📝 group_id найден: {settings_dict['group_id']}")
             else:
                 logger.warning(f"⚠️ group_id НЕ найден в настройках или пустой! Доступные ключи: {list(settings_dict.keys())}")
+        else:
             logger.warning(f"⚠️ Настройки не переданы (settings=None)")
         
         # Создание новой задачи
@@ -115,8 +116,6 @@ async def create_invite_task(
             description=task_data.description,
             platform=task_data.platform,
             priority=task_data.priority,
-            delay_between_invites=task_data.delay_between_invites,
-            max_invites_per_account=task_data.max_invites_per_account,
             invite_message=task_data.invite_message,
             scheduled_start=task_data.scheduled_start,
             settings=task_data.settings.dict() if task_data.settings else None
@@ -305,8 +304,6 @@ async def duplicate_invite_task(
             description=f"Копия: {original_task.description}" if original_task.description else None,
             platform=original_task.platform,
             priority=original_task.priority,
-            delay_between_invites=original_task.delay_between_invites,
-            max_invites_per_account=original_task.max_invites_per_account,
             invite_message=original_task.invite_message,
             settings=original_task.settings if duplicate_data.copy_settings else None,
             scheduled_start=None if duplicate_data.reset_schedule else original_task.scheduled_start,
