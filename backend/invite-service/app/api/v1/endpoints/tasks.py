@@ -941,6 +941,11 @@ async def check_admin_rights(
         estimated_capacity = admin_accounts_count * 15
         total_checked = len(ready_accounts) + len(unavailable_accounts)
 
+        logger.info(
+            f"✅ Результат проверки админских прав: total_checked={total_checked}, "
+            f"admin_accounts={admin_accounts_count}, can_proceed={admin_accounts_count > 0}"
+        )
+
         return {
             "group_link": group_link,
             "group_name": group_link.split('/')[-1].replace('@', ''),
