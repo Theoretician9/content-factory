@@ -141,41 +141,20 @@ class InviteStrategy(ABC):
 
 ### Система управления скоростью и лимитами
 
-#### Автоматическое определение скорости
-**Алгоритм расчета:**
-```python
-def calculate_optimal_speed(
-    platform: Platform,
-    accounts_count: int,
-    target_users_count: int,
-    message_has_links: bool
-) -> RateConfig:
-    # Telegram лимиты
-    if platform == Platform.TELEGRAM:
-        daily_limit_per_account = 10 if message_has_links else 40
-        pause_between_actions = 15  # секунд
-        
-        total_daily_capacity = accounts_count * daily_limit_per_account
-        estimated_hours = max(1, target_users_count / total_daily_capacity * 24)
-        
-        return RateConfig(
-            messages_per_hour=total_daily_capacity // 24,
-            pause_between_messages=pause_between_actions,
-            accounts_rotation=True
-        )
-```
+#### Централизация в Account Manager
+- Все лимиты и паузы применяются исключительно в Account Manager (AM).
+- Invite Service не высчитывает скорость, не выставляет паузы и не ведет собственные счетчики.
+- Перед каждым действием вызывается `AccountManagerClient.check_rate_limit()` с `action_type="invite"` и `target_channel_id`.
 
-#### Система антифлуд защиты
-**FloodWait обработка:**
-- Автоматическое обнаружение FloodWaitError
-- Постановка аккаунта на cooldown согласно серверному времени ожидания
-- Перераспределение нагрузки на активные аккаунты
-- Автоматическое возобновление после cooldown
+#### Фактические лимиты (реализованы в AM)
+- 15 инвайтов в день на один конкретный паблик.
+- 30 инвайтов в день на весь аккаунт.
+- 200 инвайтов на паблик НАВСЕГДА (после достижения — аккаунт больше не может приглашать в этот паблик, но может в другие).
+- Пауза между инвайтами: 10–15 минут. Равномерное распределение в течение дня.
 
-**Адаптивное замедление:**
-- Мониторинг частоты FloodWait событий
-- Динамическое увеличение пауз между действиями
-- Снижение параллелизма при превышении порогов
+#### Обработка Flood/PeerFlood
+- FloodWait/PeerFlood/прочие Telegram-ограничения полностью обрабатываются в AM.
+- Invite Service сообщает об ошибках вызовом `AccountManagerClient.handle_error()` и не реализует локальные cooldown.
 
 #### Приоритизация задач
 **Celery очереди:**
@@ -194,59 +173,52 @@ def calculate_optimal_speed(
 ```sql
 -- Основная таблица задач
 CREATE TABLE invite_tasks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL,
-    platform VARCHAR(20) NOT NULL,
-    task_type VARCHAR(20) NOT NULL, -- 'invite_to_group', 'send_messages'
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    target_group_id VARCHAR(255), -- для приглашений в группу
-    message_template TEXT,
-    priority INTEGER DEFAULT 2, -- 1=HIGH, 2=NORMAL, 3=LOW
-    status VARCHAR(20) DEFAULT 'pending',
-    progress JSONB DEFAULT '{}',
+    id SERIAL PRIMARY KEY,  -- Изменено с UUID на SERIAL для простоты
+    user_id INTEGER NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    platform VARCHAR(50) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    priority INTEGER NOT NULL,
     settings JSONB DEFAULT '{}',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    scheduled_at TIMESTAMP WITH TIME ZONE,
-    started_at TIMESTAMP WITH TIME ZONE,
-    completed_at TIMESTAMP WITH TIME ZONE
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Целевые пользователи для рассылки
 CREATE TABLE invite_targets (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    task_id UUID REFERENCES invite_tasks(id) ON DELETE CASCADE,
-    user_identifier VARCHAR(255) NOT NULL,
-    user_data JSONB DEFAULT '{}', -- {username, first_name, phone, etc}
-    status VARCHAR(20) DEFAULT 'pending',
+    id SERIAL PRIMARY KEY,
+    task_id INTEGER REFERENCES invite_tasks(id) ON DELETE CASCADE,
+    username VARCHAR(255),
+    phone_number VARCHAR(20),
+    user_data JSONB DEFAULT '{}',
+    status VARCHAR(20) NOT NULL,
     result JSONB DEFAULT '{}',
-    processed_at TIMESTAMP WITH TIME ZONE,
+    processed_at TIMESTAMP,
     error_message TEXT
 );
 
 -- Аккаунты задействованные в задаче
 CREATE TABLE invite_task_accounts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    task_id UUID REFERENCES invite_tasks(id) ON DELETE CASCADE,
+    id SERIAL PRIMARY KEY,
+    task_id INTEGER REFERENCES invite_tasks(id) ON DELETE CASCADE,
     account_id VARCHAR(255) NOT NULL,
     platform VARCHAR(20) NOT NULL,
-    status VARCHAR(20) DEFAULT 'active', -- active, cooldown, blocked
-    cooldown_until TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(20) NOT NULL,
+    cooldown_until TIMESTAMP,
     stats JSONB DEFAULT '{}',
-    last_used_at TIMESTAMP WITH TIME ZONE
+    last_used_at TIMESTAMP
 );
 
 -- Логи выполнения
 CREATE TABLE invite_execution_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    task_id UUID REFERENCES invite_tasks(id) ON DELETE CASCADE,
-    target_id UUID REFERENCES invite_targets(id) ON DELETE CASCADE,
+    id SERIAL PRIMARY KEY,
+    task_id INTEGER REFERENCES invite_tasks(id) ON DELETE CASCADE,
+    target_id INTEGER REFERENCES invite_targets(id) ON DELETE CASCADE,
     account_id VARCHAR(255) NOT NULL,
     action VARCHAR(50) NOT NULL,
     status VARCHAR(20) NOT NULL,
     details JSONB DEFAULT '{}',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Индексы для производительности
@@ -266,6 +238,8 @@ CREATE INDEX idx_invite_logs_task_created ON invite_execution_logs(task_id, crea
 - `InviteTaskCreate`, `InviteTaskResponse`
 - `TargetUserImport`, `TaskStatusResponse`
 - `TaskStatistics`, `AccountStatus`
+
+Примечание: Модели и схемы Invite Service не содержат полей локальных лимитов или задержек.
 
 ## API ENDPOINTS
 
@@ -299,6 +273,21 @@ GET    /api/v1/invite/import/validate          # Валидация данных
 GET    /api/v1/invite/health                   # Health check
 GET    /api/v1/invite/accounts                 # Доступные аккаунты
 ```
+
+## Последовательность вызовов и логирование
+
+### Последовательность для одного приглашения
+1. `allocate_account(user_id, purpose="invite_campaign")` — выделение аккаунта в AM.
+2. `check_rate_limit(account_id, action_type="invite", target_channel_id)` — проверка лимитов и пауз.
+3. Отправка приглашения через Integration Service (проксируется AM-политиками).
+4. `release_account(account_id, usage_stats)` — освобождение аккаунта с учетом статистики.
+5. При ошибках: `handle_error(account_id, error_type, error_message, context)`.
+
+### Ключевые логи Invite Service
+- "Account Manager: allocate_account..."
+- "Account Manager: check_rate_limit..."
+- "Account Manager: release_account..."
+- "Account Manager: handle_error..."
 
 ## CELERY ВОРКЕРЫ И ФОНОВЫЕ ЗАДАЧИ
 
@@ -665,22 +654,18 @@ async def get_account_limits(account_id: UUID, request: Request):
 
 ### Текущий статус реализации
 
-#### **✅ Полностью работает:**
-- **База данных**: PostgreSQL с корректными enum типами
-- **API создания задач**: POST /api/v1/tasks/ работает без ошибок
-- **Импорт данных**: Интеграция с parsing-service для загрузки целевой аудитории
-- **JWT аутентификация**: Межсервисная аутентификация между invite-service и integration-service
-- **Получение аккаунтов**: API получения активных Telegram аккаунтов
+#### **✅ Полностью работает (через Account Manager):**
+- Invite Service использует Account Manager для выделения/освобождения аккаунтов, проверки лимитов и обработки ошибок.
+- Локальные лимиты и паузы удалены; batch_size = 1 для соблюдения ТЗ.
+- Логи подтверждают последовательность allocate → check_rate_limit → send → release.
 
-#### **🔧 Требует доработки:**
-- **Endpoint limits**: Ошибка 500 при запросе лимитов аккаунтов (в процессе исправления)
-- **Worker выполнение**: Полное тестирование выполнения задач после исправления limits endpoint
+#### **🧪 Рекомендуемые проверки:**
+1. Пауза 10–15 минут между инвайтами в один паблик (AM возвращает `wait_for_seconds`).
+2. 15/день на паблик — 16‑й инвайт должен быть заблокирован AM.
+3. 30/день на аккаунт — 31‑й инвайт должен быть заблокирован AM.
+4. 200 lifetime на паблик — 201‑й инвайт в тот же паблик должен быть навсегда отклонен.
 
 #### **📊 Архитектурные достижения:**
-- **Production-ready Database**: Все enum типы, индексы и constraints настроены
-- **Type Safety**: Строгая типизация с Pydantic валидаторами
-- **Inter-service Communication**: Надежная HTTP интеграция с JWT аутентификацией
-- **Error Handling**: Comprehensive обработка ошибок с retry логикой
-- **Data Consistency**: Единообразные типы данных между всеми сервисами
-
-**Invite Service находится на финальной стадии реализации. Все основные компоненты работают, остается исправить единственную проблему с получением лимитов аккаунтов для полной готовности к production использованию.** 
+- Централизация лимитов и управления аккаунтами в AM.
+- Единый источник правды по паузам и лимитам.
+- Устойчивость к Flood/PeerFlood за счет AM recovery.

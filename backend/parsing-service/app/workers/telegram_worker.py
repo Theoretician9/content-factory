@@ -164,43 +164,34 @@ def telegram_search_communities(self, keywords: str, user_id: int, offset: int =
         # Import async components
         import asyncio
         from ..adapters.telegram import TelegramAdapter
-        from ..core.integration_client import get_integration_client
         from ..core.vault import get_vault_client
         
         async def perform_search():
-            # Get active Telegram accounts
-            integration_client = get_integration_client()
-            accounts = await integration_client.get_active_telegram_accounts()
-            
-            if not accounts:
-                raise Exception("No active Telegram accounts available for search")
-            
-            # Select first available account
-            selected_account = accounts[0]
-            session_id = selected_account.get('session_id')
-            
+            # ✅ Полный отказ от прямого получения аккаунтов из Integration Service
+            # Используем Account Manager: allocate → check_rate_limit → search → release (внутри адаптера)
+
             # Update progress
             current_task.update_state(
                 state="PROGRESS", 
-                meta={"status": f"Authenticating with account {session_id}", "progress": 20}
+                meta={"status": f"Allocating account via Account Manager", "progress": 20}
             )
-            
-            # Get credentials
+
+            # Get API credentials from Vault
             vault_client = get_vault_client()
             api_keys = vault_client.get_secret("integration-service")
-            
+
             credentials = {
-                'session_id': session_id,
+                'user_id': user_id,
                 'api_id': api_keys.get('telegram_api_id'),
-                'api_hash': api_keys.get('telegram_api_hash'),
-                'session_data': selected_account.get('session_data')
+                'api_hash': api_keys.get('telegram_api_hash')
             }
-            
-            # Create and authenticate adapter
+
+            # Create and authenticate adapter (will allocate via Account Manager)
             adapter = TelegramAdapter()
-            
-            if not await adapter.authenticate(session_id, credentials):
-                raise Exception(f"Failed to authenticate with Telegram account {session_id}")
+
+            # account_id аргумент больше не используется — адаптер сам выделит аккаунт через AM
+            if not await adapter.authenticate(str(user_id), credentials):
+                raise Exception("Failed to allocate/authenticate Telegram account via Account Manager")
             
             # Update progress
             current_task.update_state(

@@ -237,6 +237,22 @@ class TelegramAdapter(BasePlatformAdapter):
             progress_callback = config.get('progress_callback')
             speed_config = config.get('speed_config')  # New: speed configuration
             
+            # ✅ Перед началом парсинга проверяем лимиты в Account Manager, чтобы не конфликтовать с Invite Service
+            if self.current_account_id:
+                try:
+                    rl = await self.account_manager.check_rate_limit(
+                        account_id=self.current_account_id,
+                        action_type="parse",
+                        target_channel_id=normalized_target
+                    )
+                    if rl and rl.get("should_wait"):
+                        wait_sec = int(rl.get("wait_for_seconds", 0))
+                        self.logger.info(f"⏳ AM rate-limit (parse) for {normalized_target}: waiting {wait_sec}s")
+                        if wait_sec > 0:
+                            await asyncio.sleep(wait_sec)
+                except Exception as rl_err:
+                    self.logger.debug(f"Rate-limit check failed (parse start): {rl_err}")
+            
             if speed_config:
                 self.logger.info(f"📥 Starting to parse {normalized_target} (USER LIMIT: {message_limit} users, SPEED: {speed_config.name})")
                 self.logger.info(f"⚡ Speed settings: {speed_config.user_request_delay}s user delay, {speed_config.user_requests_per_minute} req/min")
@@ -291,12 +307,28 @@ class TelegramAdapter(BasePlatformAdapter):
         async for message in self.client.iter_messages(channel, limit=message_search_limit):
             if not isinstance(message, Message):
                 continue
-                
+            
             # Check if we already reached user limit before processing more messages
             if found_commenters >= message_limit:
                 self.logger.info(f"🛑 USER LIMIT REACHED: {found_commenters}/{message_limit} - stopping message iteration")
                 break
-                
+            
+            # ✅ Периодически проверяем rate limit AM, чтобы не пересекаться с Invite Service
+            if self.current_account_id and (processed_messages % 25 == 0):
+                try:
+                    rl = await self.account_manager.check_rate_limit(
+                        account_id=self.current_account_id,
+                        action_type="parse",
+                        target_channel_id=str(channel.id)
+                    )
+                    if rl and rl.get("should_wait"):
+                        wait_sec = int(rl.get("wait_for_seconds", 0))
+                        self.logger.info(f"⏳ AM rate-limit (parse mid) for channel {channel.id}: waiting {wait_sec}s")
+                        if wait_sec > 0:
+                            await asyncio.sleep(wait_sec)
+                except Exception as rl_err:
+                    self.logger.debug(f"Rate-limit check failed (channel mid): {rl_err}")
+            
             processed_messages += 1
             
             # Check if message has comments/replies (only for channels with comments enabled)
@@ -461,6 +493,21 @@ class TelegramAdapter(BasePlatformAdapter):
                         # Speed-configurable rate limiting for large groups
                         if request_count % batch_size == 0:
                             await asyncio.sleep(user_request_delay)
+                            # ✅ Проверка лимита AM между батчами запросов
+                            if self.current_account_id:
+                                try:
+                                    rl = await self.account_manager.check_rate_limit(
+                                        account_id=self.current_account_id,
+                                        action_type="parse",
+                                        target_channel_id=str(chat.id)
+                                    )
+                                    if rl and rl.get("should_wait"):
+                                        wait_sec = int(rl.get("wait_for_seconds", 0))
+                                        self.logger.info(f"⏳ AM rate-limit (group batch) for chat {chat.id}: waiting {wait_sec}s")
+                                        if wait_sec > 0:
+                                            await asyncio.sleep(wait_sec)
+                                except Exception as rl_err:
+                                    self.logger.debug(f"Rate-limit check failed (group batch): {rl_err}")
                     
                     except FloodWaitError as e:
                         self.logger.warning(f"FloodWait {e.seconds}s while processing participant {user_id}")

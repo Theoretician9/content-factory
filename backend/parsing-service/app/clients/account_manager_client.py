@@ -205,3 +205,38 @@ class AccountManagerClient:
         except Exception as e:
             logger.error(f"❌ Error releasing all accounts: {e}")
             return {"error": str(e)}
+
+    async def check_rate_limit(
+        self,
+        account_id: str,
+        action_type: str = "parse",
+        target_channel_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Проверить rate limits в Account Manager перед действием парсинга.
+        По умолчанию используем action_type="parse". AM возвращает статус и, при необходимости, время ожидания.
+        """
+        try:
+            payload = {
+                "action_type": action_type,
+                "service_name": "parsing-service"
+            }
+            if target_channel_id:
+                payload["target_channel_id"] = target_channel_id
+
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    f"{self.base_url}/limits/check/{account_id}",
+                    json=payload
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    logger.info(f"✅ Rate limit check for {account_id}: {data}")
+                    return data
+                else:
+                    logger.error(f"❌ Rate limit check failed: {response.status_code} - {response.text}")
+                    return None
+        except Exception as e:
+            logger.error(f"❌ Error checking rate limit for {account_id}: {e}")
+            return None
