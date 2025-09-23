@@ -785,26 +785,68 @@ async def check_admin_rights(
         admin_accounts_count = 0
         visited_accounts = set()
 
-        try:
-            # Итеративно выделяем аккаунты через Account Manager, проверяем права и сразу освобождаем
-            while True:
-                allocation = await am_client.allocate_account(
-                    user_id=user_id,
-                    purpose="check_admin_rights",
-                    timeout_minutes=5
-                )
+        # Итеративно выделяем аккаунты через Account Manager, проверяем права и сразу освобождаем
+        while True:
+            allocation = await am_client.allocate_account(
+                user_id=user_id,
+                purpose="check_admin_rights",
+                timeout_minutes=5
+            )
 
-                if not allocation:
-                    logger.info("ℹ️ Account Manager: нет доступных аккаунтов для дальнейшей проверки")
-                    break
+            if not allocation:
+                logger.info("ℹ️ Account Manager: нет доступных аккаунтов для дальнейшей проверки")
+                break
 
-                account_id = allocation.get("account_id")
-                username = allocation.get("phone") or f"Account_{(account_id or '')[:8]}"
+            account_id = allocation.get("account_id")
+            username = allocation.get("phone") or f"Account_{(account_id or '')[:8]}"
 
-                # Защита от повторного выделения одного и того же аккаунта в рамках одного запроса
-                if account_id in visited_accounts:
-                    logger.debug(f"🔁 Account {account_id} уже проверен в рамках запроса — прерываем цикл")
-                    # Освобождаем и выходим
+            # Защита от повторного выделения одного и того же аккаунта в рамках одного запроса
+            if account_id in visited_accounts:
+                logger.debug(f"🔁 Account {account_id} уже проверен в рамках запроса — прерываем цикл")
+                await am_client.release_account(account_id=account_id, usage_stats={
+                    "invites_sent": 0,
+                    "messages_sent": 0,
+                    "contacts_added": 0,
+                    "channels_used": [group_link],
+                    "success": True,
+                    "error_type": None,
+                    "error_message": None
+                })
+                break
+
+            visited_accounts.add(account_id)
+
+            try:
+                # Проверка прав администратора через Integration Service для выделенного аккаунта
+                is_admin, permissions = await integration_client.check_admin_rights(account_id, group_link)
+
+                if is_admin:
+                    admin_accounts_count += 1
+                    ready_accounts.append({
+                        "account_id": account_id,
+                        "username": username,
+                        "status": "ready",
+                        "permissions": permissions
+                    })
+                else:
+                    unavailable_accounts.append({
+                        "account_id": account_id,
+                        "username": username,
+                        "status": "not_admin",
+                        "reason": "no_admin_permissions",
+                        "permissions": permissions
+                    })
+            except Exception as check_error:
+                unavailable_accounts.append({
+                    "account_id": account_id,
+                    "username": username,
+                    "status": "error",
+                    "reason": str(check_error),
+                    "permissions": []
+                })
+            finally:
+                # Освобождаем аккаунт сразу после проверки
+                try:
                     await am_client.release_account(account_id=account_id, usage_stats={
                         "invites_sent": 0,
                         "messages_sent": 0,
@@ -814,74 +856,24 @@ async def check_admin_rights(
                         "error_type": None,
                         "error_message": None
                     })
-                    break
+                except Exception as release_err:
+                    logger.debug(f"Release account error: {release_err}")
 
-                visited_accounts.add(account_id)
+        # Оценка потенциальной вместимости (по ТЗ AM: 15 инвайтов/день на паблик на аккаунт)
+        estimated_capacity = admin_accounts_count * 15
+        total_checked = len(ready_accounts) + len(unavailable_accounts)
 
-                try:
-                    # Проверка прав администратора через Integration Service для выделенного аккаунта
-                    is_admin, permissions = await integration_client.check_admin_rights(account_id, group_link)
-
-                    if is_admin:
-                        admin_accounts_count += 1
-                        ready_accounts.append({
-                            "account_id": account_id,
-                            "username": username,
-                            "status": "ready",
-                            "permissions": permissions
-                        })
-                                "permissions": permissions
-                            })
-                            
-                            logger.warning(f"⚠️ Аккаунт {username} - админ, но нет прав на инвайты")
-                    else:
-                        unavailable_accounts.append({
-                            "account_id": account_id,
-                            "username": username,
-                            "status": "not_admin",
-                            "reason": "not_group_admin",
-                            "permissions": []
-                        })
-                        
-                        logger.info(f"ℹ️ Аккаунт {username} не является администратором группы")
-                        
-                except Exception as admin_check_error:
-                    logger.error(f"❌ Ошибка проверки админских прав для {account_id}: {admin_check_error}")
-                    unavailable_accounts.append({
-                        "account_id": account_id,
-                        "username": username,
-                        "status": "check_failed",
-                        "reason": "admin_check_error",
-                        "error": str(admin_check_error),
-                        "permissions": []
-                    })
+        return {
+            "group_link": group_link,
+            "group_name": group_link.split('/')[-1].replace('@', ''),
+            "total_accounts_checked": total_checked,
+            "admin_accounts": admin_accounts_count,
+            "ready_accounts": ready_accounts,
+            "unavailable_accounts": unavailable_accounts,
+            "can_proceed": admin_accounts_count > 0,
+            "estimated_capacity": estimated_capacity
+        }
             
-            # Извлекаем название группы из ссылки
-            group_name = group_link.split('/')[-1].replace('@', '')
-            
-            total_capacity = sum(acc["available_invites"] for acc in ready_accounts)
-            
-            result = {
-                "group_link": group_link,
-                "group_name": group_name,
-                "total_accounts_checked": len(accounts_data),
-                "admin_accounts": admin_accounts_count,
-                "ready_accounts": ready_accounts,
-                "unavailable_accounts": unavailable_accounts,
-                "can_proceed": len(ready_accounts) > 0,
-                "estimated_capacity": total_capacity
-            }
-            
-            logger.info(
-                f"📊 Проверка завершена: {len(ready_accounts)} готовых админов, "
-                f"потенциал {total_capacity} приглашений"
-            )
-            
-            return result
-            
-        except Exception as integration_error:
-            logger.error(f"❌ Ошибка интеграции с integration-service: {integration_error}")
-            raise HTTPException(
                 status_code=500, 
                 detail=f"Ошибка получения данных аккаунтов: {str(integration_error)}"
             )
