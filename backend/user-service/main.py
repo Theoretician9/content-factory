@@ -67,6 +67,9 @@ pwd_context = CryptContext(
     schemes=["bcrypt_sha256", "bcrypt"],
     deprecated="auto"
 )
+
+# Rate limiter setup (восстановлено)
+limiter = Limiter(key_func=get_remote_address)
 # Database Models
 class User(Base):
     __tablename__ = "users"
