@@ -377,8 +377,6 @@ class AccountManagerService:
             
             logger.info(f"✅ Error handled for account {account_id}: {action_taken}")
             return result
-            
-        except Exception as e:
             logger.error(f"❌ Error handling account error: {e}")
             return None
     
@@ -397,20 +395,8 @@ class AccountManagerService:
         logger.info(f"🔍 ДИАГНОСТИКА: Поиск аккаунтов для user_id={user_id}, purpose={purpose}")
         logger.info(f"🔍 ДИАГНОСТИКА: Текущее время (UTC): {now}")
         
-        # Базовые условия для доступности аккаунта (НЕ проверяем locked поля в БД!)
-        conditions = [
-            TelegramSession.user_id == user_id,
-            TelegramSession.is_active == True,
-            TelegramSession.status == AccountStatus.ACTIVE.value,  # Сравниваем с .value
-            or_(
-                TelegramSession.flood_wait_until.is_(None),
-                TelegramSession.flood_wait_until <= now
-            ),
-            or_(
-                TelegramSession.blocked_until.is_(None),
-                TelegramSession.blocked_until <= now
-            )
-        ]
+        # Bypass: если указан preferred_account_id, попробуем вернуть ровно этот аккаунт,
+        # игнорируя строгие фильтры статуса/флуд/blocked, но с проверкой Redis lock и принадлежности пользователю.
         
         # Если указан предпочтительный аккаунт
         if preferred_account_id:
