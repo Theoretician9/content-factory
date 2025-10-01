@@ -377,6 +377,7 @@ class AccountManagerService:
             
             logger.info(f"✅ Error handled for account {account_id}: {action_taken}")
             return result
+        except Exception as e:
             logger.error(f"❌ Error handling account error: {e}")
             return None
     
@@ -395,13 +396,47 @@ class AccountManagerService:
         logger.info(f"🔍 ДИАГНОСТИКА: Поиск аккаунтов для user_id={user_id}, purpose={purpose}")
         logger.info(f"🔍 ДИАГНОСТИКА: Текущее время (UTC): {now}")
         
-        # Bypass: если указан preferred_account_id, попробуем вернуть ровно этот аккаунт,
-        # игнорируя строгие фильтры статуса/флуд/blocked, но с проверкой Redis lock и принадлежности пользователю.
-        
-        # Если указан предпочтительный аккаунт
+        # Bypass: если указан preferred_account_id, попробуем вернуть ровно этот аккаунт
+        # (если принадлежит пользователю, активен и НЕ залочен в Redis),
+        # игнорируя строгие фильтры статуса/флуд/blocked. Это нужно для безопасных операций (например, check_admin_rights).
+        if preferred_account_id:
+            lock_key_pref = f"account_lock:{preferred_account_id}"
+            if not self.redis_client.exists(lock_key_pref):
+                result_pref = await session.execute(
+                    select(TelegramSession).where(
+                        and_(
+                            TelegramSession.id == preferred_account_id,
+                            TelegramSession.user_id == user_id,
+                            TelegramSession.is_active == True,
+                        )
+                    )
+                )
+                preferred_acc = result_pref.scalar_one_or_none()
+                if preferred_acc is not None:
+                    logger.info(f"✅ ДИАГНОСТИКА: Возвращаем preferred аккаунт без строгих фильтров: {preferred_acc.id}")
+                    return [preferred_acc]
+            else:
+                logger.debug(f"🔒 Preferred account {preferred_account_id} is locked in Redis, bypass пропущен")
+
+        # Базовые условия для доступности аккаунта (НЕ проверяем locked поля в БД!)
+        conditions = [
+            TelegramSession.user_id == user_id,
+            TelegramSession.is_active == True,
+            TelegramSession.status == AccountStatus.ACTIVE.value,
+            or_(
+                TelegramSession.flood_wait_until.is_(None),
+                TelegramSession.flood_wait_until <= now
+            ),
+            or_(
+                TelegramSession.blocked_until.is_(None),
+                TelegramSession.blocked_until <= now
+            )
+        ]
+
+        # Если указан предпочтительный аккаунт (и bypass не сработал) — ограничим выбор именно им
         if preferred_account_id:
             conditions.append(TelegramSession.id == preferred_account_id)
-        
+
         query = select(TelegramSession).where(and_(*conditions))
         
         # Сортировка по приоритету (меньше всего использован)
