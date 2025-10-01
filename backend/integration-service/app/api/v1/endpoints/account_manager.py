@@ -7,6 +7,7 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
@@ -18,6 +19,7 @@ from ....models.account_manager_types import (
 from ....services.account_manager import AccountManagerService
 from ....services.flood_ban_manager import FloodBanManager
 from ....services.rate_limiting_service import RateLimitingService
+from ....models.telegram_sessions import TelegramSession
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +241,7 @@ async def get_accounts_summary(
     target_channel_id: Optional[str] = Query(None, description="ID целевого канала/паблика для проверки per-channel лимитов"),
     status: Optional[str] = Query(None, description="Фильтр по статусу (active, flood_wait, blocked, cooling_down, ...)"),
     only_available: bool = Query(False, description="Фильтровать только доступные сейчас аккаунты"),
+    include_unavailable: bool = Query(False, description="Включить ВСЕ аккаунты пользователя (игнорировать доступность)"),
     sort_by: Optional[str] = Query(None, description="Сортировка: last_used_at|used_invites_today|error_count"),
     limit: int = Query(500, ge=1, le=2000, description="Максимум аккаунтов в ответе"),
     session: AsyncSession = Depends(get_async_session),
@@ -260,12 +263,21 @@ async def get_accounts_summary(
                 target_channel_id = raw.lower()
             except Exception:
                 pass
-        # Используем приватный метод через объект (не идеально, но для API нужно)
-        available_accounts = await account_manager._find_available_accounts(
-            session=session,
-            user_id=user_id,
-            purpose=purpose or AccountPurpose.GENERAL
-        )
+        # Либо возвращаем все аккаунты пользователя (минимальные фильтры), либо только доступные сейчас
+        if include_unavailable:
+            q = select(TelegramSession).where(
+                TelegramSession.user_id == user_id,
+                TelegramSession.is_active == True,
+            )
+            result_all = await session.execute(q)
+            available_accounts = result_all.scalars().all()
+        else:
+            # Используем приватный метод через объект (не идеально, но для API нужно)
+            available_accounts = await account_manager._find_available_accounts(
+                session=session,
+                user_id=user_id,
+                purpose=purpose or AccountPurpose.GENERAL
+            )
         
         # Применяем фильтры по статусу и доступности
         filtered = []
