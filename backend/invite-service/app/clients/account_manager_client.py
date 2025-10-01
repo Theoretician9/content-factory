@@ -320,10 +320,11 @@ class AccountManagerClient:
         purpose: Optional[str] = None,
         target_channel_id: Optional[str] = None,
         limit: int = 500,
+        include_unavailable: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """Получить агрегированную витрину аккаунтов пользователя из Account Manager."""
         try:
-            params: Dict[str, Any] = {"user_id": user_id, "limit": limit}
+            params: Dict[str, Any] = {"user_id": user_id, "limit": limit, "include_unavailable": include_unavailable}
             if purpose:
                 params["purpose"] = purpose
             if target_channel_id:

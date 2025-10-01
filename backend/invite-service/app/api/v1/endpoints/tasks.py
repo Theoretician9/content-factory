@@ -776,7 +776,8 @@ async def check_admin_rights(
             # используем более общий purpose, чтобы не отсеять пригодных админов заранее
             purpose="general",
             target_channel_id=group_link,
-            limit=2000
+            limit=2000,
+            include_unavailable=True
         )
 
         candidate_ids = []
