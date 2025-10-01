@@ -70,6 +70,9 @@ pwd_context = CryptContext(
 
 # Rate limiter setup (восстановлено)
 limiter = Limiter(key_func=get_remote_address)
+
+# OAuth2 scheme (восстановлено)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 # Database Models
 class User(Base):
     __tablename__ = "users"
