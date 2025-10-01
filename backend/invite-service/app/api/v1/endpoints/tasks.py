@@ -781,11 +781,17 @@ async def check_admin_rights(
 
         candidate_ids = []
         if summary and summary.get("success"):
+            # Берем ВСЕ аккаунты из summary, далее AM сам решит, можно ли аллоцировать конкретный preferred_id
+            seen = set()
             for acc in summary.get("accounts", []):
-                # Для проверки АДМИН-ПРАВ не учитываем per-channel инвайт лимиты,
-                # достаточно, чтобы аккаунт был доступен/активен.
-                if acc.get("is_available", False) or acc.get("status") == "active":
-                    candidate_ids.append(acc.get("account_id"))
+                acc_id = acc.get("account_id")
+                if acc_id and acc_id not in seen:
+                    seen.add(acc_id)
+                    candidate_ids.append(acc_id)
+            # Безопасный предел количества точечных проверок
+            max_candidates = 100
+            if len(candidate_ids) > max_candidates:
+                candidate_ids = candidate_ids[:max_candidates]
 
         logger.info(f"🔍 Предфильтр AM: найдено {len(candidate_ids)} кандидатов для проверки админских прав")
 
