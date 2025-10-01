@@ -797,6 +797,7 @@ async def check_admin_rights(
         logger.info(f"🔍 Предфильтр AM: найдено {len(candidate_ids)} кандидатов для проверки админских прав")
 
         # 2) Точечная проверка: аллоцируем конкретный аккаунт по preferred_account_id, проверяем права и релизим
+        admin_found = False
         for preferred_id in candidate_ids:
             allocation = await am_client.allocate_account(
                 user_id=user_id,
@@ -837,6 +838,7 @@ async def check_admin_rights(
                         "status": "ready",
                         "permissions": permissions
                     })
+                    admin_found = True
                 else:
                     unavailable_accounts.append({
                         "account_id": account_id,
@@ -867,9 +869,31 @@ async def check_admin_rights(
                 except Exception as release_err:
                     logger.debug(f"Release account error: {release_err}")
 
+            # Если нашли админа — возвращаем результат без дальнейших аллокаций
+            if admin_found:
+                estimated_capacity = admin_accounts_count * 15
+                total_checked = len(ready_accounts) + len(unavailable_accounts)
+                logger.info(
+                    f"✅ Результат проверки админских прав: total_checked={total_checked}, "
+                    f"admin_accounts={admin_accounts_count}, can_proceed={admin_accounts_count > 0}"
+                )
+                return {
+                    "group_link": group_link,
+                    "group_name": group_link.split('/')[-1].replace('@', ''),
+                    "total_accounts_checked": total_checked,
+                    "admin_accounts": admin_accounts_count,
+                    "ready_accounts": ready_accounts,
+                    "unavailable_accounts": unavailable_accounts,
+                    "can_proceed": True,
+                    "estimated_capacity": estimated_capacity
+                }
+
         # 3) Fallback: если админов не нашли после точечных проверок, пробуем общий аллокейт без preferred_id
         if admin_accounts_count == 0:
-            logger.info("ℹ️ Fallback: summary не дал кандидатов, пробуем общий аллокейт для проверки админских прав")
+            if len(candidate_ids) == 0:
+                logger.info("ℹ️ Fallback: summary не дал кандидатов, пробуем общий аллокейт для проверки админских прав")
+            else:
+                logger.info("ℹ️ Fallback: админ не найден среди кандидатов, пробуем общий аллокейт")
             visited_accounts_fallback = set()
             max_attempts = 50
             attempts = 0
