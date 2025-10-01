@@ -763,6 +763,11 @@ async def check_admin_rights(
         am_client = AccountManagerClient()
 
         logger.info(f"🔍 Проверка админских прав через Account Manager для группы: {group_link}")
+        # Диагностика: проверяем, какой модуль/файл исполняется на рантайме
+        try:
+            logger.info(f"DEBUG_MARK: check_admin_rights entry module={__name__} file={__file__}")
+        except Exception:
+            logger.info("DEBUG_MARK: check_admin_rights entry (no __file__ available)")
 
         ready_accounts = []
         unavailable_accounts = []
@@ -871,6 +876,7 @@ async def check_admin_rights(
 
             # Если нашли админа — возвращаем результат без дальнейших аллокаций
             if admin_found:
+                logger.info("DEBUG_MARK: early-return-preferred")
                 estimated_capacity = admin_accounts_count * 15
                 total_checked = len(ready_accounts) + len(unavailable_accounts)
                 logger.info(
@@ -939,6 +945,7 @@ async def check_admin_rights(
                             "permissions": permissions
                         })
                         # Немедленный возврат результата при первом найденном админе в fallback
+                        logger.info("DEBUG_MARK: early-return-fallback")
                         estimated_capacity = admin_accounts_count * 15
                         total_checked = len(ready_accounts) + len(unavailable_accounts)
                         logger.info(
