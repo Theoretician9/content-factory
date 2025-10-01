@@ -62,12 +62,11 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 30
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-# Rate limiter setup
-limiter = Limiter(key_func=get_remote_address)
-
+# Используем bcrypt_sha256 (решает ограничение 72 байт у bcrypt) с fallback на bcrypt для совместимости
+pwd_context = CryptContext(
+    schemes=["bcrypt_sha256", "bcrypt"],
+    deprecated="auto"
+)
 # Database Models
 class User(Base):
     __tablename__ = "users"
