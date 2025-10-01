@@ -866,8 +866,8 @@ async def check_admin_rights(
                 except Exception as release_err:
                     logger.debug(f"Release account error: {release_err}")
 
-        # 3) Fallback: если кандидатов по summary нет, пробуем общий аллокейт без preferred_id (AM может разрешить для цели check_admin_rights)
-        if admin_accounts_count == 0 and not candidate_ids:
+        # 3) Fallback: если админов не нашли после точечных проверок, пробуем общий аллокейт без preferred_id
+        if admin_accounts_count == 0:
             logger.info("ℹ️ Fallback: summary не дал кандидатов, пробуем общий аллокейт для проверки админских прав")
             visited_accounts_fallback = set()
             max_attempts = 50
