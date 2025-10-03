@@ -14,6 +14,29 @@ from app.clients.account_manager_client import AccountManagerClient
 logger = logging.getLogger(__name__)
 
 
+def _map_error_type_for_am(message: str) -> Optional[str]:
+    """Преобразует текст ошибки адаптера/исключения в допустимый enum Account Manager.
+    Возвращает None, если тип неизвестен и репортить в AM не нужно (чтобы избежать 422).
+    """
+    if not message:
+        return None
+    m = str(message).lower()
+    if "flood wait" in m or "flood_wait" in m:
+        return "flood_wait"
+    if "peer flood" in m or "peer_flood" in m:
+        return "peer_flood"
+    if "deactivated" in m or "inputuserdeactivated" in m:
+        return "deactivated"
+    if "auth" in m and "key" in m:
+        return "auth_key"
+    if "blocked" in m or "ban" in m:
+        return "blocked"
+    if "in_progress" in m or "in progress" in m:
+        # Это не ошибка для AM — пропускаем репортинг, чтобы не ловить 422 по enum
+        return None
+    # Неизвестный тип — лучше не отправлять, чтобы избежать 422
+    return None
+
 async def _send_single_invite_via_account_manager(
     task,
     target: InviteTarget,
@@ -84,16 +107,20 @@ async def _send_single_invite_via_account_manager(
             target.error_message = result.error_message
             
             # Уведомляем Account Manager об ошибке для корректировки лимитов/блокировок
-            await account_manager.handle_error(
-                account_id=account_id,
-                error_type="invite_failed",
-                error_message=str(result.error_message) if result.error_message else "unknown_error",
-                context={
-                    'target_id': target.id,
-                    'task_id': task.id,
-                    'action': 'invite'
-                }
-            )
+            am_error_type = _map_error_type_for_am(result.error_message)
+            if am_error_type:
+                await account_manager.handle_error(
+                    account_id=account_id,
+                    error_type=am_error_type,
+                    error_message=str(result.error_message),
+                    context={
+                        'target_id': target.id,
+                        'task_id': task.id,
+                        'action': 'invite'
+                    }
+                )
+            else:
+                logger.info("ℹ️ Пропускаем handle_error в AM: неизвестный/некритичный тип ошибки для enum (во избежание 422)")
         
         target.updated_at = datetime.utcnow()
         
@@ -134,17 +161,21 @@ async def _send_single_invite_via_account_manager(
         # Уведомляем Account Manager об ошибке
         if account_allocation:
             try:
-                await account_manager.handle_error(
-                    account_id=account_allocation['account_id'],
-                    error_type="exception_during_invite",
-                    error_message=str(e),
-                    context={
-                        'target_id': target.id,
-                        'task_id': task.id,
-                        'action': 'invite',
-                        'error': 'exception_during_invite'
-                    }
-                )
+                am_error_type = _map_error_type_for_am(str(e)) or "blocked" if "blocked" in str(e).lower() else None
+                if am_error_type:
+                    await account_manager.handle_error(
+                        account_id=account_allocation['account_id'],
+                        error_type=am_error_type,
+                        error_message=str(e),
+                        context={
+                            'target_id': target.id,
+                            'task_id': task.id,
+                            'action': 'invite',
+                            'error': 'exception_during_invite'
+                        }
+                    )
+                else:
+                    logger.info("ℹ️ Пропускаем handle_error в AM для exception: неизвестный тип (во избежание 422)")
             except Exception as error_report_error:
                 logger.error(f"❌ Ошибка при уведомлении Account Manager об ошибке: {str(error_report_error)}")
         
