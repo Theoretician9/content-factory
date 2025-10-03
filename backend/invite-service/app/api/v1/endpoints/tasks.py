@@ -834,7 +834,10 @@ async def check_admin_rights(
             visited_accounts.add(account_id)
 
             try:
-                is_admin, permissions = await integration_client.check_admin_rights(account_id, group_link)
+                # Integration client returns a dict: {"is_admin": bool, "permissions": [...]}
+                check_resp = await integration_client.check_admin_rights(account_id, group_link)
+                is_admin = bool(check_resp.get("is_admin", False))
+                permissions = check_resp.get("permissions", [])
                 if is_admin:
                     admin_accounts_count += 1
                     ready_accounts.append({
@@ -935,7 +938,10 @@ async def check_admin_rights(
                 visited_accounts_fallback.add(account_id)
 
                 try:
-                    is_admin, permissions = await integration_client.check_admin_rights(account_id, group_link)
+                    # Integration client returns a dict: {"is_admin": bool, "permissions": [...]}
+                    check_resp = await integration_client.check_admin_rights(account_id, group_link)
+                    is_admin = bool(check_resp.get("is_admin", False))
+                    permissions = check_resp.get("permissions", [])
                     if is_admin:
                         admin_accounts_count += 1
                         ready_accounts.append({
