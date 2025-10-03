@@ -442,6 +442,7 @@ async def _process_batch_async(
         success_count = 0
         failed_count = 0
         current_account_allocation = None
+        had_in_progress_soft = False
 
         # Построим очередь кандидатов из summary (приоритет AM) под конкретный паблик
         preferred_queue: List[str] = []
@@ -609,6 +610,7 @@ async def _process_batch_async(
                     logger.info(f"⏳ AccountManager: Цель {target.id} помечена как PENDING (in_progress), оставляем текущий аккаунт заблокированным для этой задачи")
                     # Не освобождаем аккаунт: пусть остаётся залочен AM за текущей задачей/сервисом
                     # Не инкрементим failed/success/processed — повтор пойдёт позже
+                    had_in_progress_soft = True
                 elif result.is_success:
                     success_count += 1
                     task.completed_count += 1
@@ -644,13 +646,20 @@ async def _process_batch_async(
                 target.attempt_count += 1
                 target.updated_at = datetime.utcnow()
         
-        # ✅ ДОБАВЛЕНО: Освобождаем аккаунт в конце обработки батча через Account Manager
+        # ✅ Освобождаем аккаунт в конце обработки батча через Account Manager,
+        #    НО если был in_progress_soft — сохраняем лок до ретрая (не освобождаем)
         if current_account_allocation:
-            await account_manager.release_account(
-                current_account_allocation['account_id'],
-                {'invites_sent': success_count, 'success': True, 'batch_completed': True}
-            )
-            logger.info(f"🔓 AccountManager: Освобожден аккаунт {current_account_allocation['account_id']} после завершения батча {batch_number}")
+            if had_in_progress_soft:
+                logger.info(
+                    f"🔒 AccountManager: Сохраняем блокировку аккаунта {current_account_allocation['account_id']} после батча {batch_number} (есть in_progress), "
+                    "чтобы другие сервисы/задачи не перехватили аккаунт до завершения операции"
+                )
+            else:
+                await account_manager.release_account(
+                    current_account_allocation['account_id'],
+                    {'invites_sent': success_count, 'success': True, 'batch_completed': True}
+                )
+                logger.info(f"🔓 AccountManager: Освобожден аккаунт {current_account_allocation['account_id']} после завершения батча {batch_number}")
         
         # Обновляем задачу
         task.updated_at = datetime.utcnow()
