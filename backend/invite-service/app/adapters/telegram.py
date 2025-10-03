@@ -437,48 +437,18 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
         detail_str = str(detail).lower() if detail is not None else ""
         if (
             (error.response.status_code in (409, 423)) or
-            (isinstance(detail, str) and detail_str == "in_progress" or "in progress" in detail_str) or
-            (isinstance(detail, dict) and str(detail.get("error", "")).lower() in ("in_progress", "in progress"))
+            (isinstance(detail, str) and (detail_str == "in_progress" or "in progress" in detail_str)) or
+            (isinstance(detail, dict) and str(detail.get("error", "")).lower().replace(" ", "_") == "in_progress")
         ):
             retry_after = datetime.utcnow() + timedelta(minutes=2)
-                    
-                    # Обновление аккаунта
-                    account.flood_wait_until = retry_after
-                    account.status = AccountStatus.FLOOD_WAIT
-                    
-                    return InviteResult(
-                        status=InviteResultStatus.FLOOD_WAIT,
-                        error_message=f"Telegram FloodWait: {seconds} секунд",
-                        error_code="flood_wait",
-                        retry_after=retry_after,
-                        execution_time=execution_time,
-                        account_id=account.account_id,
-                        can_retry=True
-                    )
-                
-                elif detail.get("error") == "peer_flood":
-                    # PeerFlood - слишком много запросов к пользователям
-                    account.status = AccountStatus.RATE_LIMITED
-                    
-                    return InviteResult(
-                        status=InviteResultStatus.PEER_FLOOD,
-                        error_message="Слишком много запросов к пользователям",
-                        error_code="peer_flood",
-                        retry_after=datetime.utcnow() + timedelta(hours=24),
-                        execution_time=execution_time,
-                        account_id=account.account_id,
-                        can_retry=False  # PeerFlood обычно на долго
-                    )
-            
-            # Общий rate limiting
             return InviteResult(
                 status=InviteResultStatus.RATE_LIMITED,
-                error_message="Превышен лимит запросов",
-                error_code="rate_limited",
-                retry_after=datetime.utcnow() + timedelta(hours=1),
+                error_message="Operation in progress",
+                error_code="in_progress",
+                retry_after=retry_after,
                 execution_time=execution_time,
                 account_id=account.account_id,
-                can_retry=True
+                can_retry=True,
             )
         
         elif error.response.status_code == 403:
