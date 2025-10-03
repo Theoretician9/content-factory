@@ -596,14 +596,25 @@ async def _process_batch_async(
                     task, target, current_account_allocation, account_manager, adapter, db
                 )
                 
-                if result.is_success:
+                # Не считаем мягкий in_progress как ошибку и не увеличиваем processed_count — цель остаётся PENDING для повтора
+                msg_low = (result.error_message or "").lower()
+                is_in_progress_soft = (
+                    result.status == InviteResultStatus.RATE_LIMITED and (
+                        (getattr(result, 'error_code', None) == 'in_progress') or
+                        ('in_progress' in msg_low) or ('in progress' in msg_low)
+                    )
+                )
+                if is_in_progress_soft:
+                    logger.info(f"⏳ AccountManager: Цель {target.id} помечена как PENDING (in_progress), не учитываем в ошибках батча")
+                    # Не инкрементим failed/success/processed — повтор пойдёт позже
+                elif result.is_success:
                     success_count += 1
                     task.completed_count += 1
+                    processed_count += 1
                 else:
                     failed_count += 1
                     task.failed_count += 1
-                
-                processed_count += 1
+                    processed_count += 1
                 
                 # ✅ ИСПРАВЛЕНО: Все задержки управляются только Account Manager согласно ТЗ
                 # Invite Service не определяет собственные задержки - они устанавливаются Account Manager
