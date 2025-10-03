@@ -156,11 +156,34 @@ async def _send_single_invite_via_account_manager(
         return result
         
     except Exception as e:
-        logger.error(f"❌ AccountManager: Ошибка при отправке приглашения для цели {target.id}: {str(e)}")
+        e_str = str(e)
+        e_low = e_str.lower()
+        # Мягкая обработка IN_PROGRESS из Integration Service, даже если прилетело как исключение
+        if "in_progress" in e_low or "in progress" in e_low:
+            logger.info(f"⏳ AccountManager: Исключение IN_PROGRESS для цели {target.id} — трактуем как мягкий ретрай")
+            target.status = TargetStatus.PENDING
+            target.error_message = "in_progress"
+            target.updated_at = datetime.utcnow()
+            try:
+                db.commit()
+            except Exception as db_error:
+                logger.error(f"❌ Ошибка сохранения состояния (in_progress) в БД для цели {target.id}: {str(db_error)}")
+                db.rollback()
+            # Не репортим в AM
+            return InviteResult(
+                status=InviteResultStatus.RATE_LIMITED,
+                error_message="Operation in progress",
+                error_code="in_progress",
+                account_id=account_allocation['account_id'] if account_allocation else None,
+                execution_time=(datetime.utcnow() - start_time).total_seconds(),
+                can_retry=True
+            )
+
+        logger.error(f"❌ AccountManager: Ошибка при отправке приглашения для цели {target.id}: {e_str}")
         
         # Обновляем цель как неудачную
         target.status = TargetStatus.FAILED
-        target.error_message = str(e)
+        target.error_message = e_str
         target.updated_at = datetime.utcnow()
         
         try:
@@ -172,12 +195,12 @@ async def _send_single_invite_via_account_manager(
         # Уведомляем Account Manager об ошибке
         if account_allocation:
             try:
-                am_error_type = _map_error_type_for_am(str(e)) or "blocked" if "blocked" in str(e).lower() else None
+                am_error_type = _map_error_type_for_am(e_str) or ("blocked" if "blocked" in e_low else None)
                 if am_error_type:
                     await account_manager.handle_error(
                         account_id=account_allocation['account_id'],
                         error_type=am_error_type,
-                        error_message=str(e),
+                        error_message=e_str,
                         context={
                             'target_id': target.id,
                             'task_id': task.id,
@@ -193,7 +216,7 @@ async def _send_single_invite_via_account_manager(
         # Возвращаем результат с ошибкой
         return InviteResult(
             status=InviteResultStatus.FAILED,
-            error_message=str(e),
+            error_message=e_str,
             account_id=account_allocation['account_id'] if account_allocation else None,
             execution_time=(datetime.utcnow() - start_time).total_seconds(),
             can_retry=_is_retryable_single_error(e)
