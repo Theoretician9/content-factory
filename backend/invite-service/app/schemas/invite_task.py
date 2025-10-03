@@ -61,8 +61,9 @@ class InviteTaskResponse(BaseModel):
     progress_percentage: float
     
     # Параметры
-    delay_between_invites: int
-    max_invites_per_account: int
+    # Управляются Account Manager, поэтому поля опциональные для обратной совместимости
+    delay_between_invites: Optional[int] = 0
+    max_invites_per_account: Optional[int] = 0
     invite_message: Optional[str]
     
     # Временные рамки
