@@ -67,10 +67,38 @@ class AccountManagerService:
             timeout_minutes: Таймаут блокировки в минутах
             target_channel_id: ID целевого канала (если есть)
         """
-        logger.info(f"🔍 Allocating account for user {user_id}, purpose: {purpose}, service: {service_name}")
+        try:
+            logger.info(f"🔍 Allocating account for user {user_id}, purpose: {purpose}, service: {service_name}")
             
-        timeout_minutes = timeout_minutes or self.default_lock_timeout
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=timeout_minutes)
+            timeout_minutes = timeout_minutes or self.default_lock_timeout
+            expires_at = datetime.now(timezone.utc) + timedelta(minutes=timeout_minutes)
+            
+            # Нормализуем идентификатор канала: slug без t.me/ и @, в нижнем регистре
+            norm_channel = None
+            if target_channel_id:
+                try:
+                    raw = str(target_channel_id).strip()
+                    if raw.startswith('https://t.me/') or raw.startswith('http://t.me/') or raw.startswith('t.me/'):
+                        raw = raw.split('/')[-1]
+                    if raw.startswith('@'):
+                        raw = raw[1:]
+                    norm_channel = raw.lower()
+                except Exception:
+                    norm_channel = target_channel_id
+
+            # 1. Найти доступные аккаунты
+            available_accounts = await self._find_available_accounts(
+                session=session,
+                user_id=user_id,
+                purpose=purpose,
+                preferred_account_id=preferred_account_id,
+                target_channel_id=norm_channel
+            )
+            
+            if not available_accounts:
+                logger.warning(f"❌ No available accounts for user {user_id}, purpose: {purpose}")
+                return None
+            
             # 2. Выбрать оптимальный аккаунт
             selected_account = await self._select_optimal_account(available_accounts, purpose)
             
@@ -439,7 +467,7 @@ class AccountManagerService:
         
         logger.info(f"🔍 ДИАГНОСТИКА: Найдено {len(accounts)} аккаунтов после SQL фильтрации")
         
-        # Дополнительная фильтрация по лимитам в зависимости от цели
+        # Дополнительная фильтрация по лимитам в зависимости от цели (игнорируем DB-флаг locked, т.к. используем Redis locks)
         filtered_accounts = []
         for i, account in enumerate(accounts):
             logger.info(f"🔍 ДИАГНОСТИКА: Аккаунт {i+1}: id={account.id}, status='{account.status}', is_active={account.is_active}")
@@ -454,7 +482,31 @@ class AccountManagerService:
                 logger.debug(f"🔒 Account {account.id} is locked in Redis, skipping")
                 continue
             
-            if purpose == AccountPurpose.INVITE_CAMPAIGN and account.can_send_invite(target_channel_id):
+            # Базовая доступность (без учета поля locked в БД)
+            base_ok = (
+                bool(account.is_active)
+                and str(account.status) == 'active'
+                and (not account.flood_wait_until or account.flood_wait_until <= now)
+                and (not account.blocked_until or account.blocked_until <= now)
+            )
+            if not base_ok:
+                logger.debug(f"⛔ Account {account.id} not base-available for purpose {purpose}")
+                continue
+
+            if purpose == AccountPurpose.INVITE_CAMPAIGN:
+                # Дневной лимит аккаунта
+                if getattr(account, 'used_invites_today', 0) >= getattr(account, 'daily_invite_limit', 30):
+                    logger.debug(f"⛔ Account {account.id} daily invite limit reached")
+                    continue
+                # Лимиты по каналу
+                if target_channel_id:
+                    per_ch = (account.per_channel_invites or {}).get(target_channel_id, {'today': 0, 'total': 0})
+                    if per_ch.get('today', 0) >= getattr(account, 'per_channel_invite_limit', 15):
+                        logger.debug(f"⛔ Account {account.id} per-channel daily limit reached for {target_channel_id}")
+                        continue
+                    if per_ch.get('total', 0) >= getattr(account, 'max_per_channel_total', 200):
+                        logger.debug(f"⛔ Account {account.id} per-channel total limit reached for {target_channel_id}")
+                        continue
                 filtered_accounts.append(account)
                 logger.info(f"✅ ДИАГНОСТИКА: Аккаунт {account.id} подходит для INVITE_CAMPAIGN")
             elif purpose == AccountPurpose.MESSAGE_CAMPAIGN and account.can_send_message():
