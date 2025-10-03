@@ -286,10 +286,25 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
             
         except Exception as e:
             # Общие ошибки
-            logger.error(f"Ошибка отправки Telegram приглашения: {str(e)}")
+            e_str = str(e)
+            e_low = e_str.lower()
+            # Мягкая обработка IN_PROGRESS, даже если пришло как исключение не HTTP формата
+            if "in_progress" in e_low or "in progress" in e_low:
+                retry_after = datetime.utcnow() + timedelta(minutes=2)
+                logger.info("Telegram invite: operation in progress (soft retry)")
+                return InviteResult(
+                    status=InviteResultStatus.RATE_LIMITED,
+                    error_message="Operation in progress",
+                    error_code="in_progress",
+                    account_id=account.account_id,
+                    execution_time=(datetime.utcnow() - start_time).total_seconds(),
+                    can_retry=True,
+                    retry_after=retry_after,
+                )
+            logger.error(f"Ошибка отправки Telegram приглашения: {e_str}")
             return InviteResult(
                 status=InviteResultStatus.NETWORK_ERROR,
-                error_message=f"Ошибка сети: {str(e)}",
+                error_message=f"Ошибка сети: {e_str}",
                 account_id=account.account_id,
                 execution_time=(datetime.utcnow() - start_time).total_seconds(),
                 can_retry=True
