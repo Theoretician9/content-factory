@@ -29,8 +29,8 @@ async def _send_single_invite_via_account_manager(
     start_time = datetime.utcnow()
     
     try:
-        # Получаем данные аккаунта из выделения Account Manager
-        account_data = account_allocation['allocation']
+        # Получаем данные аккаунта из выделения Account Manager (плоская структура)
+        account_data = account_allocation
         account_id = account_data['account_id']
         
         logger.info(f"🔄 AccountManager: Отправка приглашения для цели {target.id} через аккаунт {account_id}")
@@ -134,7 +134,7 @@ async def _send_single_invite_via_account_manager(
         if account_allocation:
             try:
                 await account_manager.handle_error(
-                    account_id=account_allocation['allocation']['account_id'],
+                    account_id=account_allocation['account_id'],
                     error_type=str(e),
                     context={
                         'target_id': target.id,
@@ -150,7 +150,7 @@ async def _send_single_invite_via_account_manager(
         return InviteResult(
             status=InviteResultStatus.FAILED,
             error_message=str(e),
-            account_id=account_allocation['allocation']['account_id'] if account_allocation else None,
+            account_id=account_allocation['account_id'] if account_allocation else None,
             execution_time=(datetime.utcnow() - start_time).total_seconds(),
             can_retry=_is_retryable_single_error(e)
         )
