@@ -477,7 +477,7 @@ async def _process_batch_async(
                 if not current_account_allocation:
                     current_account_allocation = await account_manager.allocate_account(
                         user_id=task.user_id,
-                        purpose="invites",
+                        purpose="invite_campaign",
                         timeout_minutes=60  # Увеличиваем таймаут для соблюдения пауз ТЗ
                     )
                     
@@ -513,7 +513,7 @@ async def _process_batch_async(
                     # Пытаемся получить новый аккаунт
                     current_account_allocation = await account_manager.allocate_account(
                         user_id=task.user_id,
-                        purpose="invites",
+                        purpose="invite_campaign",
                         timeout_minutes=60
                     )
                     
