@@ -28,7 +28,8 @@ class AccountManagerClient:
         user_id: int, 
         purpose: str = "invite_campaign",
         preferred_account_id: Optional[str] = None,
-        timeout_minutes: int = 30
+        timeout_minutes: int = 30,
+        target_channel_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         ✅ СООТВЕТСТВУЕТ ТЗ: Выделить аккаунт для приглашений
@@ -53,15 +54,18 @@ class AccountManagerClient:
             logger.info(f"🔍 AccountManager: Requesting account allocation for user {user_id}, purpose: {purpose} (все лимиты управляются Account Manager согласно ТЗ)")
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
+                payload: Dict[str, Any] = {
+                    "user_id": user_id,
+                    "purpose": purpose,
+                    "service_name": "invite-service",
+                    "preferred_account_id": preferred_account_id,
+                    "timeout_minutes": timeout_minutes,
+                }
+                if target_channel_id:
+                    payload["target_channel_id"] = target_channel_id
                 response = await client.post(
                     f"{self.base_url}/allocate",
-                    json={
-                        "user_id": user_id,
-                        "purpose": purpose,
-                        "service_name": "invite-service",
-                        "preferred_account_id": preferred_account_id,
-                        "timeout_minutes": timeout_minutes
-                    }
+                    json=payload
                 )
                 
                 if response.status_code == 200:

@@ -505,6 +505,7 @@ async def _process_batch_async(
                             purpose="invite_campaign",
                             preferred_account_id=pid,
                             timeout_minutes=60,
+                            target_channel_id=task.settings.get('group_id') if task.settings else None,
                         )
                     # 2) Если приоритетных нет/не дали — общий аллокейт под кампанию
                     if allocation is None:
@@ -512,6 +513,7 @@ async def _process_batch_async(
                             user_id=task.user_id,
                             purpose="invite_campaign",
                             timeout_minutes=60,
+                            target_channel_id=task.settings.get('group_id') if task.settings else None,
                         )
                     # 3) Финальный fallback: general
                     if allocation is None:
@@ -519,6 +521,7 @@ async def _process_batch_async(
                             user_id=task.user_id,
                             purpose="general",
                             timeout_minutes=60,
+                            target_channel_id=task.settings.get('group_id') if task.settings else None,
                         )
                     current_account_allocation = allocation
                     
@@ -560,6 +563,7 @@ async def _process_batch_async(
                             purpose="invite_campaign",
                             preferred_account_id=pid,
                             timeout_minutes=60,
+                            target_channel_id=task.settings.get('group_id') if task.settings else None,
                         )
                     if next_allocation is None:
                         # Пробуем общий аллокейт под кампанию, затем general
@@ -567,12 +571,14 @@ async def _process_batch_async(
                             user_id=task.user_id,
                             purpose="invite_campaign",
                             timeout_minutes=60,
+                            target_channel_id=task.settings.get('group_id') if task.settings else None,
                         )
                     if next_allocation is None:
                         next_allocation = await account_manager.allocate_account(
                             user_id=task.user_id,
                             purpose="general",
                             timeout_minutes=60,
+                            target_channel_id=task.settings.get('group_id') if task.settings else None,
                         )
                     if not next_allocation:
                         logger.error(f"❌ AccountManager: Нет других доступных аккаунтов")
