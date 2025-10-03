@@ -40,7 +40,6 @@ class AccountManagerService:
             decode_responses=True
         )
         
-        # Конфигурация лимитов по умолчанию
         self.default_limits = AccountLimits()
         
         # Timeout для блокировки аккаунтов (минуты)
@@ -53,7 +52,8 @@ class AccountManagerService:
         purpose: AccountPurpose,
         service_name: str = "unknown",
         preferred_account_id: Optional[UUID] = None,
-        timeout_minutes: int = None
+        timeout_minutes: int = None,
+        target_channel_id: Optional[str] = None
     ) -> Optional[TelegramAccountAllocation]:
         """
         Выделить аккаунт для использования сервисом
@@ -65,25 +65,12 @@ class AccountManagerService:
             service_name: Имя сервиса, запрашивающего аккаунт
             preferred_account_id: Предпочтительный аккаунт (если есть)
             timeout_minutes: Таймаут блокировки в минутах
-        
-        Returns:
-            TelegramAccountAllocation или None если нет доступных аккаунтов
+            target_channel_id: ID целевого канала (если есть)
         """
-        try:
-            logger.info(f"🔍 Allocating account for user {user_id}, purpose: {purpose}, service: {service_name}")
+        logger.info(f"🔍 Allocating account for user {user_id}, purpose: {purpose}, service: {service_name}")
             
-            timeout_minutes = timeout_minutes or self.default_lock_timeout
-            expires_at = datetime.now(timezone.utc) + timedelta(minutes=timeout_minutes)
-            
-            # 1. Найти доступные аккаунты
-            available_accounts = await self._find_available_accounts(
-                session, user_id, purpose, preferred_account_id
-            )
-            
-            if not available_accounts:
-                logger.warning(f"❌ No available accounts for user {user_id}, purpose: {purpose}")
-                return None
-            
+        timeout_minutes = timeout_minutes or self.default_lock_timeout
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=timeout_minutes)
             # 2. Выбрать оптимальный аккаунт
             selected_account = await self._select_optimal_account(available_accounts, purpose)
             
@@ -386,7 +373,8 @@ class AccountManagerService:
         session: AsyncSession,
         user_id: int,
         purpose: AccountPurpose,
-        preferred_account_id: Optional[UUID] = None
+        preferred_account_id: Optional[UUID] = None,
+        target_channel_id: Optional[str] = None
     ) -> List[TelegramSession]:
         """
         Найти доступные аккаунты для пользователя
@@ -466,7 +454,7 @@ class AccountManagerService:
                 logger.debug(f"🔒 Account {account.id} is locked in Redis, skipping")
                 continue
             
-            if purpose == AccountPurpose.INVITE_CAMPAIGN and account.can_send_invite():
+            if purpose == AccountPurpose.INVITE_CAMPAIGN and account.can_send_invite(target_channel_id):
                 filtered_accounts.append(account)
                 logger.info(f"✅ ДИАГНОСТИКА: Аккаунт {account.id} подходит для INVITE_CAMPAIGN")
             elif purpose == AccountPurpose.MESSAGE_CAMPAIGN and account.can_send_message():
