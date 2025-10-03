@@ -606,16 +606,8 @@ async def _process_batch_async(
                     )
                 )
                 if is_in_progress_soft:
-                    logger.info(f"⏳ AccountManager: Цель {target.id} помечена как PENDING (in_progress), не учитываем в ошибках батча")
-                    # Освобождаем текущий аккаунт, чтобы не упираться в лок/очередь Integration Service
-                    try:
-                        await account_manager.release_account(
-                            current_account_allocation['account_id'],
-                            {'invites_sent': success_count, 'success': False}
-                        )
-                    except Exception as rel_err:
-                        logger.warning(f"⚠️ Не удалось освободить аккаунт после in_progress: {rel_err}")
-                    current_account_allocation = None
+                    logger.info(f"⏳ AccountManager: Цель {target.id} помечена как PENDING (in_progress), оставляем текущий аккаунт заблокированным для этой задачи")
+                    # Не освобождаем аккаунт: пусть остаётся залочен AM за текущей задачей/сервисом
                     # Не инкрементим failed/success/processed — повтор пойдёт позже
                 elif result.is_success:
                     success_count += 1
