@@ -71,7 +71,7 @@ async def _send_single_invite_via_account_manager(
         if target.phone_number:
             target_data['phone_number'] = target.phone_number
         if target.user_id_platform:
-            target_data['user_id'] = target.user_id_platform
+            target_data['user_id_platform'] = target.user_id_platform
             
         # Подготавливаем данные приглашения
         invite_data = {
@@ -102,25 +102,36 @@ async def _send_single_invite_via_account_manager(
             target.completed_at = datetime.utcnow()
             target.error_message = None
         else:
-            logger.warning(f"⚠️ AccountManager: Неудачное приглашение для цели {target.id}: {result.error_message}")
-            target.status = TargetStatus.FAILED
-            target.error_message = result.error_message
+            # Мягкие отказы (в т.ч. IN_PROGRESS из Integration Service) обрабатываем как ретрай, не помечая цель FAILED
+            msg_lower = (result.error_message or "").lower()
+            in_progress = (result.error_code == "in_progress") or ("in_progress" in msg_lower) or ("in progress" in msg_lower)
+            if result.status == InviteResultStatus.RATE_LIMITED and in_progress:
+                logger.info(f"⏳ AccountManager: Операция в процессе для цели {target.id} (in_progress). Планируем повтор")
+                target.status = TargetStatus.PENDING
+                target.error_message = "in_progress"
+                # Ничего не репортим в AM, чтобы не засорять статистику
+            else:
+                logger.warning(f"⚠️ AccountManager: Неудачное приглашение для цели {target.id}: {result.error_message}")
+                target.status = TargetStatus.FAILED
+                target.error_message = result.error_message
             
             # Уведомляем Account Manager об ошибке для корректировки лимитов/блокировок
-            am_error_type = _map_error_type_for_am(result.error_message)
-            if am_error_type:
-                await account_manager.handle_error(
-                    account_id=account_id,
-                    error_type=am_error_type,
-                    error_message=str(result.error_message),
-                    context={
-                        'target_id': target.id,
-                        'task_id': task.id,
-                        'action': 'invite'
-                    }
-                )
-            else:
-                logger.info("ℹ️ Пропускаем handle_error в AM: неизвестный/некритичный тип ошибки для enum (во избежание 422)")
+            # Репортим в AM только если это не in_progress и тип известен
+            if not (result.status == InviteResultStatus.RATE_LIMITED and in_progress):
+                am_error_type = _map_error_type_for_am(result.error_message)
+                if am_error_type:
+                    await account_manager.handle_error(
+                        account_id=account_id,
+                        error_type=am_error_type,
+                        error_message=str(result.error_message),
+                        context={
+                            'target_id': target.id,
+                            'task_id': task.id,
+                            'action': 'invite'
+                        }
+                    )
+                else:
+                    logger.info("ℹ️ Пропускаем handle_error в AM: неизвестный/некритичный тип ошибки для enum (во избежание 422)")
         
         target.updated_at = datetime.utcnow()
         
