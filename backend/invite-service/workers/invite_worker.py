@@ -450,7 +450,7 @@ async def _process_batch_async(
                 # Освобождаем аккаунт если он был выделен
                 if current_account_allocation:
                     await account_manager.release_account(
-                        current_account_allocation['allocation']['account_id'],
+                        current_account_allocation['account_id'],
                         {'invites_sent': success_count, 'success': True}
                     )
                 break
@@ -495,7 +495,7 @@ async def _process_batch_async(
                 
                 # Проверка лимитов через Account Manager перед каждым приглашением
                 rate_limit_check = await account_manager.check_rate_limit(
-                    current_account_allocation['allocation']['account_id'],
+                    current_account_allocation['account_id'],
                     action_type="invite",
                     target_channel_id=task.settings.get('group_id') if task.settings else None
                 )
@@ -549,7 +549,7 @@ async def _process_batch_async(
                 
                 # Записываем действие в Account Manager
                 await account_manager.record_action(
-                    current_account_allocation['allocation']['account_id'],
+                    current_account_allocation['account_id'],
                     action_type="invite",
                     target_channel_id=task.settings.get('group_id') if task.settings else None,
                     success=result.is_success
@@ -569,10 +569,10 @@ async def _process_batch_async(
         # ✅ ДОБАВЛЕНО: Освобождаем аккаунт в конце обработки батча через Account Manager
         if current_account_allocation:
             await account_manager.release_account(
-                current_account_allocation['allocation']['account_id'],
+                current_account_allocation['account_id'],
                 {'invites_sent': success_count, 'success': True, 'batch_completed': True}
             )
-            logger.info(f"🔓 AccountManager: Освобожден аккаунт {current_account_allocation['allocation']['account_id']} после завершения батча {batch_number}")
+            logger.info(f"🔓 AccountManager: Освобожден аккаунт {current_account_allocation['account_id']} после завершения батча {batch_number}")
         
         # Обновляем задачу
         task.updated_at = datetime.utcnow()
