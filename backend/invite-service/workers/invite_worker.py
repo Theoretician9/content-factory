@@ -324,7 +324,8 @@ async def _execute_task_async(task: InviteTask, adapter, db: Session) -> str:
         
         # ✅ ПЕРЕРАБОТАНО: Обработка через Account Manager - все лимиты управляются Account Manager
         # Разбиение на батчи - размер определяется настройками задачи, не лимитами Invite Service
-        batch_size = task.settings.get('batch_size', 1) if task.settings else 1
+        # Жёстко соблюдаем ТЗ AM: batch_size = 1
+        batch_size = 1
         total_batches = (len(targets) + batch_size - 1) // batch_size
         
         logger.info(f"📦 Разбиваем {len(targets)} целей на {total_batches} батчей по {batch_size} целей (лимиты управляются Account Manager)")
@@ -606,6 +607,15 @@ async def _process_batch_async(
                 )
                 if is_in_progress_soft:
                     logger.info(f"⏳ AccountManager: Цель {target.id} помечена как PENDING (in_progress), не учитываем в ошибках батча")
+                    # Освобождаем текущий аккаунт, чтобы не упираться в лок/очередь Integration Service
+                    try:
+                        await account_manager.release_account(
+                            current_account_allocation['account_id'],
+                            {'invites_sent': success_count, 'success': False}
+                        )
+                    except Exception as rel_err:
+                        logger.warning(f"⚠️ Не удалось освободить аккаунт после in_progress: {rel_err}")
+                    current_account_allocation = None
                     # Не инкрементим failed/success/processed — повтор пойдёт позже
                 elif result.is_success:
                     success_count += 1
@@ -622,13 +632,14 @@ async def _process_batch_async(
                     # Account Manager сам определяет необходимые паузы при check_rate_limit
                     logger.info(f"⏱️ AccountManager: Паузы между приглашениями управляются Account Manager согласно ТЗ")
                 
-                # Записываем действие в Account Manager
-                await account_manager.record_action(
-                    current_account_allocation['account_id'],
-                    action_type="invite",
-                    target_channel_id=task.settings.get('group_id') if task.settings else None,
-                    success=result.is_success
-                )
+                # Записываем действие в Account Manager, кроме in_progress soft
+                if not is_in_progress_soft and current_account_allocation:
+                    await account_manager.record_action(
+                        current_account_allocation['account_id'],
+                        action_type="invite",
+                        target_channel_id=task.settings.get('group_id') if task.settings else None,
+                        success=result.is_success
+                    )
                 
             except Exception as e:
                 logger.error(f"Ошибка обработки цели {target.id}: {str(e)}")
