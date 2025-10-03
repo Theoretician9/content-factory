@@ -441,6 +441,27 @@ async def _process_batch_async(
         success_count = 0
         failed_count = 0
         current_account_allocation = None
+
+        # Построим очередь кандидатов из summary (приоритет AM) под конкретный паблик
+        preferred_queue: List[str] = []
+        try:
+            group_id = task.settings.get('group_id') if task.settings else None
+            summary = await account_manager.get_accounts_summary(
+                user_id=task.user_id,
+                purpose="invite_campaign",
+                target_channel_id=group_id,
+                limit=1000,
+                include_unavailable=False,
+            )
+            if summary and isinstance(summary.get("accounts", []), list):
+                seen = set()
+                for acc in summary["accounts"]:
+                    acc_id = acc.get("account_id")
+                    if acc_id and acc_id not in seen:
+                        seen.add(acc_id)
+                        preferred_queue.append(acc_id)
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось получить accounts summary из Account Manager: {e}")
         
         for target in targets:
             # Проверка статуса задачи (может быть отменена)
@@ -473,13 +494,33 @@ async def _process_batch_async(
                 continue
             
             try:
-                # ✅ ПЕРЕРАБОТАНО: Запрос аккаунта через Account Manager для каждого приглашения
+                # ✅ ПЕРЕРАБОТАНО: Запрос аккаунта через Account Manager с учётом приоритета AM
                 if not current_account_allocation:
-                    current_account_allocation = await account_manager.allocate_account(
-                        user_id=task.user_id,
-                        purpose="invite_campaign",
-                        timeout_minutes=60  # Увеличиваем таймаут для соблюдения пауз ТЗ
-                    )
+                    allocation: Optional[Dict[str, Any]] = None
+                    # 1) Пробуем приоритетные аккаунты через preferred_account_id
+                    while preferred_queue and allocation is None:
+                        pid = preferred_queue.pop(0)
+                        allocation = await account_manager.allocate_account(
+                            user_id=task.user_id,
+                            purpose="invite_campaign",
+                            preferred_account_id=pid,
+                            timeout_minutes=60,
+                        )
+                    # 2) Если приоритетных нет/не дали — общий аллокейт под кампанию
+                    if allocation is None:
+                        allocation = await account_manager.allocate_account(
+                            user_id=task.user_id,
+                            purpose="invite_campaign",
+                            timeout_minutes=60,
+                        )
+                    # 3) Финальный fallback: general
+                    if allocation is None:
+                        allocation = await account_manager.allocate_account(
+                            user_id=task.user_id,
+                            purpose="general",
+                            timeout_minutes=60,
+                        )
+                    current_account_allocation = allocation
                     
                     if not current_account_allocation:
                         logger.error(f"❌ AccountManager: Нет доступных аккаунтов для задачи {task.id}")
@@ -503,21 +544,37 @@ async def _process_batch_async(
                 if not rate_limit_check.get('allowed', False):
                     logger.warning(f"⚠️ AccountManager: Лимиты превышены для аккаунта {current_account_allocation['account_id']}: {rate_limit_check.get('reason')}")
                     
-                    # Освобождаем текущий аккаунт и пытаемся получить новый
+                    # Освобождаем текущий аккаунт и берём следующий кандидат
                     await account_manager.release_account(
                         current_account_allocation['account_id'],
                         {'invites_sent': success_count, 'success': True}
                     )
                     current_account_allocation = None
                     
-                    # Пытаемся получить новый аккаунт
-                    current_account_allocation = await account_manager.allocate_account(
-                        user_id=task.user_id,
-                        purpose="invite_campaign",
-                        timeout_minutes=60
-                    )
-                    
-                    if not current_account_allocation:
+                    # Получаем следующий доступный аккаунт из очереди приоритетов
+                    next_allocation: Optional[Dict[str, Any]] = None
+                    while preferred_queue and next_allocation is None:
+                        pid = preferred_queue.pop(0)
+                        next_allocation = await account_manager.allocate_account(
+                            user_id=task.user_id,
+                            purpose="invite_campaign",
+                            preferred_account_id=pid,
+                            timeout_minutes=60,
+                        )
+                    if next_allocation is None:
+                        # Пробуем общий аллокейт под кампанию, затем general
+                        next_allocation = await account_manager.allocate_account(
+                            user_id=task.user_id,
+                            purpose="invite_campaign",
+                            timeout_minutes=60,
+                        )
+                    if next_allocation is None:
+                        next_allocation = await account_manager.allocate_account(
+                            user_id=task.user_id,
+                            purpose="general",
+                            timeout_minutes=60,
+                        )
+                    if not next_allocation:
                         logger.error(f"❌ AccountManager: Нет других доступных аккаунтов")
                         target.status = TargetStatus.FAILED
                         target.error_message = "Превышены лимиты всех доступных аккаунтов"
@@ -526,6 +583,7 @@ async def _process_batch_async(
                         db.commit()
                         failed_count += 1
                         continue
+                    current_account_allocation = next_allocation
                 
                 # Выполнение приглашения через Account Manager
                 result = await _send_single_invite_via_account_manager(
