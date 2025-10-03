@@ -33,6 +33,7 @@ class AccountAllocationRequest(BaseModel):
     service_name: str = Field(..., description="Имя сервиса-заказчика")
     preferred_account_id: Optional[UUID] = Field(None, description="Предпочтительный аккаунт")
     timeout_minutes: Optional[int] = Field(30, description="Таймаут блокировки в минутах")
+    target_channel_id: Optional[str] = Field(None, description="ID целевого канала/паблика для кампании")
 
 class AccountReleaseRequest(BaseModel):
     """Запрос на освобождение аккаунта"""
@@ -112,7 +113,8 @@ async def allocate_account(
             purpose=request.purpose,
             service_name=request.service_name,
             preferred_account_id=request.preferred_account_id,
-            timeout_minutes=request.timeout_minutes
+            timeout_minutes=request.timeout_minutes,
+            target_channel_id=request.target_channel_id
         )
         
         if not allocation:
