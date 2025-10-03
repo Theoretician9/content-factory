@@ -86,7 +86,8 @@ async def _send_single_invite_via_account_manager(
             # Уведомляем Account Manager об ошибке для корректировки лимитов/блокировок
             await account_manager.handle_error(
                 account_id=account_id,
-                error_type=result.error_message,
+                error_type="invite_failed",
+                error_message=str(result.error_message) if result.error_message else "unknown_error",
                 context={
                     'target_id': target.id,
                     'task_id': task.id,
@@ -135,7 +136,8 @@ async def _send_single_invite_via_account_manager(
             try:
                 await account_manager.handle_error(
                     account_id=account_allocation['account_id'],
-                    error_type=str(e),
+                    error_type="exception_during_invite",
+                    error_message=str(e),
                     context={
                         'target_id': target.id,
                         'task_id': task.id,
