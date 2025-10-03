@@ -491,7 +491,7 @@ async def _process_batch_async(
                         failed_count += 1
                         continue
                     
-                    logger.info(f"✅ AccountManager: Выделен аккаунт {current_account_allocation['allocation']['account_id']} для батча {batch_number}")
+                    logger.info(f"✅ AccountManager: Выделен аккаунт {current_account_allocation['account_id']} для батча {batch_number}")
                 
                 # Проверка лимитов через Account Manager перед каждым приглашением
                 rate_limit_check = await account_manager.check_rate_limit(
@@ -501,11 +501,11 @@ async def _process_batch_async(
                 )
                 
                 if not rate_limit_check.get('allowed', False):
-                    logger.warning(f"⚠️ AccountManager: Лимиты превышены для аккаунта {current_account_allocation['allocation']['account_id']}: {rate_limit_check.get('reason')}")
+                    logger.warning(f"⚠️ AccountManager: Лимиты превышены для аккаунта {current_account_allocation['account_id']}: {rate_limit_check.get('reason')}")
                     
                     # Освобождаем текущий аккаунт и пытаемся получить новый
                     await account_manager.release_account(
-                        current_account_allocation['allocation']['account_id'],
+                        current_account_allocation['account_id'],
                         {'invites_sent': success_count, 'success': True}
                     )
                     current_account_allocation = None
