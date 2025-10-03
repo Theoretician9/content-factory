@@ -430,15 +430,17 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
         except:
             error_data = {"detail": str(error)}
         
-        if error.response.status_code == 429:
-            # Rate limiting или Flood Wait
-            detail = error_data.get("detail", {})
-            
-            if isinstance(detail, dict):
-                if detail.get("error") == "flood_wait":
-                    # Telegram FloodWait
-                    seconds = detail.get("seconds", 300)
-                    retry_after = datetime.utcnow() + timedelta(seconds=seconds + self.default_limits["flood_wait_buffer"])
+        # Специальная обработка идемпотентной/конкурентной ситуации: операция уже выполняется
+        # Integration Service может вернуть detail = "IN_PROGRESS" или структуры с error="in_progress"
+        detail = error_data.get("detail") if isinstance(error_data, dict) else None
+        # Нормализуем строку для проверки
+        detail_str = str(detail).lower() if detail is not None else ""
+        if (
+            (error.response.status_code in (409, 423)) or
+            (isinstance(detail, str) and detail_str == "in_progress" or "in progress" in detail_str) or
+            (isinstance(detail, dict) and str(detail.get("error", "")).lower() in ("in_progress", "in progress"))
+        ):
+            retry_after = datetime.utcnow() + timedelta(minutes=2)
                     
                     # Обновление аккаунта
                     account.flood_wait_until = retry_after
