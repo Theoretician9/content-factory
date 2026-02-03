@@ -511,6 +511,11 @@ async def check_rate_limit(
     Проверить можно ли выполнить действие с учетом лимитов
     """
     try:
+        # Диагностика: что реально пришло в теле запроса (allow_locked должен быть True от invite-service после allocate)
+        logger.info(
+            f"🔍 rate-limit/check received: account_id={account_id}, action_type={request.action_type}, "
+            f"allow_locked={getattr(request, 'allow_locked', 'MISSING')} (type={type(getattr(request, 'allow_locked', None))})"
+        )
         allowed, details = await rate_limiting.check_rate_limit(
             session=session,
             account_id=account_id,
