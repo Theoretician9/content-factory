@@ -520,6 +520,7 @@ async def check_rate_limit(
         return {
             "success": True,
             "allowed": allowed,
+            "reason": details.get("error") if isinstance(details, dict) else None,
             "details": details
         }
         
