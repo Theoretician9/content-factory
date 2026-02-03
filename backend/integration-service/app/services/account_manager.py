@@ -509,18 +509,29 @@ class AccountManagerService:
                 continue
 
             if purpose == AccountPurpose.INVITE_CAMPAIGN:
+                used_today = getattr(account, 'used_invites_today', 0)
+                daily_limit = getattr(account, 'daily_invite_limit', 30)
+                per_ch = (account.per_channel_invites or {}).get(target_channel_id or "", {'today': 0, 'total': 0})
+                ch_today = per_ch.get('today', 0)
+                ch_total = per_ch.get('total', 0)
+                per_ch_limit = getattr(account, 'per_channel_invite_limit', 15)
+                ch_total_limit = getattr(account, 'max_per_channel_total', 200)
+                logger.info(
+                    f"🔍 ДИАГНОСТИКА INVITE_CAMPAIGN: account={account.id} used_invites_today={used_today} "
+                    f"daily_limit={daily_limit} target_channel_id={target_channel_id!r} "
+                    f"per_channel today={ch_today} total={ch_total} limits({per_ch_limit}/{ch_total_limit})"
+                )
                 # Дневной лимит аккаунта
-                if getattr(account, 'used_invites_today', 0) >= getattr(account, 'daily_invite_limit', 30):
-                    logger.debug(f"⛔ Account {account.id} daily invite limit reached")
+                if used_today >= daily_limit:
+                    logger.info(f"⛔ ДИАГНОСТИКА: Аккаунт {account.id} отфильтрован для INVITE_CAMPAIGN: дневной лимит ({used_today} >= {daily_limit})")
                     continue
                 # Лимиты по каналу
                 if target_channel_id:
-                    per_ch = (account.per_channel_invites or {}).get(target_channel_id, {'today': 0, 'total': 0})
-                    if per_ch.get('today', 0) >= getattr(account, 'per_channel_invite_limit', 15):
-                        logger.debug(f"⛔ Account {account.id} per-channel daily limit reached for {target_channel_id}")
+                    if ch_today >= per_ch_limit:
+                        logger.info(f"⛔ ДИАГНОСТИКА: Аккаунт {account.id} отфильтрован для INVITE_CAMPAIGN: лимит по каналу сегодня ({ch_today} >= {per_ch_limit}) для {target_channel_id}")
                         continue
-                    if per_ch.get('total', 0) >= getattr(account, 'max_per_channel_total', 200):
-                        logger.debug(f"⛔ Account {account.id} per-channel total limit reached for {target_channel_id}")
+                    if ch_total >= ch_total_limit:
+                        logger.info(f"⛔ ДИАГНОСТИКА: Аккаунт {account.id} отфильтрован для INVITE_CAMPAIGN: лимит по каналу всего ({ch_total} >= {ch_total_limit}) для {target_channel_id}")
                         continue
                 filtered_accounts.append(account)
                 logger.info(f"✅ ДИАГНОСТИКА: Аккаунт {account.id} подходит для INVITE_CAMPAIGN")
