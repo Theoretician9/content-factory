@@ -5,7 +5,7 @@ Rate Limiting System
 import logging
 import asyncio
 from typing import Dict, List, Optional, Tuple, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_, func
@@ -79,9 +79,22 @@ class RateLimitingService:
                 f"🔍 RATE_LIMIT: Account {account.id} not available: is_active={getattr(account, 'is_active', None)}, status={getattr(account, 'status', None)}"
             )
             return False
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         try:
-            if getattr(account, 'flood_wait_until', None) and account.flood_wait_until and account.flood_wait_until > now:
+            fw = getattr(account, 'flood_wait_until', None)
+            if fw and (fw.tzinfo and fw > now if fw.tzinfo else fw.replace(tzinfo=timezone.utc) > now if fw else False):
+                if fw > now:
+                    logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: flood_wait_until={fw} > now")
+                    return False
+            elif fw and not fw.tzinfo and fw > datetime.utcnow():
+                logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: flood_wait_until={fw} > now (naive)")
+                return False
+            if getattr(account, 'flood_wait_until', None) and account.flood_wait_until:
+                _fw = account.flood_wait_until
+                _now = _fw.replace(tzinfo=timezone.utc) if _fw.tzinfo is None else now
+                if _fw > _now:
+                    logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: flood_wait_until > now")
+                    return False
                 logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: flood_wait_until={account.flood_wait_until} > now")
                 return False
             if getattr(account, 'blocked_until', None) and account.blocked_until and account.blocked_until > now:
