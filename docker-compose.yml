@@ -168,7 +168,7 @@ services:
       - app-network
     restart: unless-stopped
 
-  # Invite Worker - Celery
+  # Invite Worker - Celery (обрабатывает задачи приглашений: execute_invite_task → process_target_batch)
   invite-worker:
     build: ./backend/invite-service
     command: python -m celery -A workers.celery_app:celery_app worker --loglevel=info --queues=invite-high,invite-normal,invite-low --concurrency=2 --hostname=invite-worker@%h
@@ -198,6 +198,8 @@ services:
         condition: service_started
       invite-postgres:
         condition: service_healthy
+      integration-service:
+        condition: service_started
     networks:
       - backend
       - app-network
