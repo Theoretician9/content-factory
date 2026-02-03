@@ -226,57 +226,14 @@ class AccountManagerClient:
 
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
-                    f"{self.base_url}/rate-limit/check/{account_id}",
+                    f"{self.base_url}/limits/check/{account_id}",
                     json=payload
                 )
 
                 if response.status_code == 200:
                     data = response.json()
-                    # Преобразуем формат ответа из integration-service в формат, ожидаемый parsing-service
-                    # integration-service возвращает: {"success": True, "allowed": bool, "details": {...}}
-                    # parsing-service ожидает: {"should_wait": bool, "wait_for_seconds": int}
-                    if data.get("success") and isinstance(data.get("details"), dict):
-                        details = data["details"]
-                        allowed = data.get("allowed", True)
-                        
-                        # Если действие не разрешено, проверяем причину и время ожидания
-                        if not allowed:
-                            # Извлекаем время ожидания из details
-                            wait_seconds = 0
-                            if "cooldown_remaining" in details:
-                                wait_seconds = details["cooldown_remaining"]
-                            elif "burst_cooldown_remaining" in details:
-                                wait_seconds = details["burst_cooldown_remaining"]
-                            elif "next_allowed_at" in details:
-                                from datetime import datetime
-                                try:
-                                    next_allowed = datetime.fromisoformat(details["next_allowed_at"])
-                                    wait_seconds = max(0, int((next_allowed - datetime.utcnow()).total_seconds()))
-                                except:
-                                    pass
-                            
-                            result = {
-                                "should_wait": True,
-                                "wait_for_seconds": wait_seconds,
-                                "reason": details.get("error", "Rate limit exceeded"),
-                                "details": details
-                            }
-                        else:
-                            result = {
-                                "should_wait": False,
-                                "wait_for_seconds": 0,
-                                "details": details
-                            }
-                        
-                        logger.info(f"✅ Rate limit check for {account_id}: allowed={allowed}, wait={result.get('wait_for_seconds', 0)}s")
-                        return result
-                    else:
-                        logger.warning(f"⚠️ Unexpected response format: {data}")
-                        return None
-                elif response.status_code == 404:
-                    # Endpoint не найден или action_type не поддерживается - пропускаем проверку
-                    logger.debug(f"⚠️ Rate limit check endpoint not found or action_type '{action_type}' not supported, skipping check")
-                    return None
+                    logger.info(f"✅ Rate limit check for {account_id}: {data}")
+                    return data
                 else:
                     logger.error(f"❌ Rate limit check failed: {response.status_code} - {response.text}")
                     return None

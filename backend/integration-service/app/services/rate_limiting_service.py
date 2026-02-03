@@ -59,13 +59,6 @@ class RateLimitingService:
                 'cooldown_seconds': 300,   # 5 минут между добавлениями
                 'burst_limit': 2,          # Максимум 2 контакта подряд
                 'burst_cooldown': 600      # 10 минут после burst
-            },
-            ActionType.PARSE: {
-                'daily_limit': 1000,       # Парсинг - чтение данных, более мягкие лимиты
-                'hourly_limit': 200,       # 200 операций парсинга в час
-                'cooldown_seconds': 1,     # Минимальный cooldown для парсинга
-                'burst_limit': 50,         # Можно парсить много подряд
-                'burst_cooldown': 60       # 1 минута после burst
             }
         }
     
@@ -136,7 +129,7 @@ class RateLimitingService:
                 daily_used = account.used_messages_today
                 daily_limit = limits['daily_limit']
                 
-            elif action_type == ActionType.ADD_CONTACT:
+            elif action_type == ActionType.CONTACT_ADD:
                 daily_used = account.contacts_today
                 daily_limit = limits['daily_limit']
             
@@ -286,7 +279,7 @@ class RateLimitingService:
             elif action_type == ActionType.MESSAGE:
                 update_values['used_messages_today'] = TelegramSession.used_messages_today + 1
                 
-            elif action_type == ActionType.ADD_CONTACT:
+            elif action_type == ActionType.CONTACT_ADD:
                 update_values['contacts_today'] = TelegramSession.contacts_today + 1
             
             # Для парсинга не обновляем дневные лимиты в БД, так как это чтение данных
