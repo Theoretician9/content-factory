@@ -108,12 +108,13 @@ async def perform_real_parsing_with_progress(
     user_id: int = 1,
     progress_callback=None,
     message_limit: int = 100,
-    speed_config=None  # New parameter for parsing speed configuration
+    speed_config=None,  # New parameter for parsing speed configuration
+    allocated_account: Optional[Dict] = None  # Уже выделенный аккаунт от main (без повторного allocate)
 ) -> int:
     """
     ГЛАВНАЯ функция парсинга - оркестрирует весь процесс:
     
-    1. Получение активных аккаунтов от Integration Service
+    1. Использует уже выделенный аккаунт (allocated_account) ИЛИ получает аккаунты и выделяет через AM
     2. Создание и настройка Platform Adapter
     3. Аутентификация с платформой
     4. Парсинг с real-time progress callbacks и speed configuration
@@ -127,33 +128,35 @@ async def perform_real_parsing_with_progress(
         logger.info(f"🚀 Starting REAL parsing for task {task_id}: {link} (USER LIMIT: {message_limit})")
     
     try:
-        # Step 1: Get real Telegram accounts from integration-service
-        accounts = await get_real_telegram_accounts()
-        if not accounts:
-            raise Exception("No real Telegram accounts available for parsing")
-        
-        logger.info(f"📱 Using {len(accounts)} real Telegram accounts for parsing")
-        
-        # Step 2: Select best account (least recently used)
-        selected_account = min(accounts, key=lambda x: x.get('last_used_at', ''))
-        session_id = selected_account.get('session_id')
-        
-        # Step 3: Get API credentials from Vault + session data from Integration Service
-        vault_client = get_vault_client()
-        api_keys = vault_client.get_secret("integration-service")
-        
-        credentials = {
-            'session_id': session_id,
-            'api_id': api_keys.get('telegram_api_id'),
-            'api_hash': api_keys.get('telegram_api_hash'),
-            'session_data': selected_account.get('session_data')  # From Integration DB
-        }
-        
-        # Step 4: Create and authenticate adapter
         adapter = TelegramAdapter()
         
-        if not await adapter.authenticate(session_id, credentials):
-            raise Exception(f"Failed to authenticate with session {session_id}")
+        if allocated_account:
+            # Используем уже выделенный main'ом аккаунт — без повторного allocate
+            vault_client = get_vault_client()
+            api_keys = vault_client.get_secret("integration-service")
+            api_id = api_keys.get("telegram_api_id")
+            api_hash = api_keys.get("telegram_api_hash")
+            if not await adapter.authenticate_with_allocation(allocated_account, api_id=api_id, api_hash=api_hash):
+                raise Exception(f"Failed to authenticate with pre-allocated account {allocated_account.get('account_id')}")
+        else:
+            # Legacy: получаем аккаунты и выделяем через Account Manager
+            accounts = await get_real_telegram_accounts()
+            if not accounts:
+                raise Exception("No real Telegram accounts available for parsing")
+            logger.info(f"📱 Using {len(accounts)} real Telegram accounts for parsing")
+            selected_account = min(accounts, key=lambda x: x.get('last_used_at', ''))
+            session_id = selected_account.get('session_id')
+            vault_client = get_vault_client()
+            api_keys = vault_client.get_secret("integration-service")
+            credentials = {
+                'session_id': session_id,
+                'user_id': user_id,
+                'api_id': api_keys.get('telegram_api_id'),
+                'api_hash': api_keys.get('telegram_api_hash'),
+                'session_data': selected_account.get('session_data'),
+            }
+            if not await adapter.authenticate(session_id, credentials):
+                raise Exception(f"Failed to authenticate with session {session_id}")
         
         # Step 5: Parse target with progress tracking and speed configuration
         if speed_config:
