@@ -558,7 +558,8 @@ async def execute_real_parsing_with_account_manager(task, allocation):
             user_id=task.get("user_id", 1),
             progress_callback=update_progress,
             message_limit=message_limit,
-            speed_config=speed_config  # Pass speed configuration
+            speed_config=speed_config,
+            allocated_account=allocation  # Используем уже выделенный аккаунт — без повторного allocate
         )
         
         # Step 2: Saving phase (95-100%)
@@ -619,8 +620,8 @@ async def execute_real_parsing_with_account_manager(task, allocation):
         
         logger.error(f"❌ AccountManager: Task {task['id']} failed on account {assigned_account_id}: {e}")
         
-        # Handle errors through Account Manager
-        error_type = "unknown"
+        # Handle errors through Account Manager (ErrorType: unknown_error, flood_wait, peer_flood, auth_key_error)
+        error_type = "unknown_error"
         if "FloodWaitError" in str(e) or "flood" in str(e).lower():
             error_type = "flood_wait"
         elif "PeerFloodError" in str(e):
