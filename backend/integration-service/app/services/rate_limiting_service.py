@@ -59,6 +59,13 @@ class RateLimitingService:
                 'cooldown_seconds': 300,   # 5 минут между добавлениями
                 'burst_limit': 2,          # Максимум 2 контакта подряд
                 'burst_cooldown': 600      # 10 минут после burst
+            },
+            ActionType.PARSE: {
+                'daily_limit': 1000,       # Парсинг - чтение данных, более мягкие лимиты
+                'hourly_limit': 200,       # 200 операций парсинга в час
+                'cooldown_seconds': 1,     # Минимальный cooldown для парсинга
+                'burst_limit': 50,         # Можно парсить много подряд
+                'burst_cooldown': 60       # 1 минута после burst
             }
         }
     
@@ -133,7 +140,13 @@ class RateLimitingService:
                 daily_used = account.contacts_today
                 daily_limit = limits['daily_limit']
             
-            if daily_used >= daily_limit:
+            elif action_type == ActionType.PARSE:
+                # Для парсинга не проверяем дневные лимиты из БД, так как это чтение данных
+                # Используем только часовые лимиты и cooldown для избежания конфликтов
+                daily_used = 0
+                daily_limit = limits['daily_limit']
+            
+            if action_type != ActionType.PARSE and daily_used >= daily_limit:
                 return False, {
                     "error": "Daily limit exceeded",
                     "daily_used": daily_used,
@@ -248,7 +261,7 @@ class RateLimitingService:
         try:
             now = datetime.utcnow()
             
-            # 1. Обновляем дневные лимиты в базе данных
+            # 1. Обновляем дневные лимиты в базе данных (только для действий записи, не для парсинга)
             update_values = {}
             
             if action_type == ActionType.INVITE:
@@ -276,19 +289,26 @@ class RateLimitingService:
             elif action_type == ActionType.CONTACT_ADD:
                 update_values['contacts_today'] = TelegramSession.contacts_today + 1
             
-            update_values['last_used_at'] = now
+            # Для парсинга не обновляем дневные лимиты в БД, так как это чтение данных
+            # Но обновляем last_used_at для всех типов действий
+            if action_type != ActionType.PARSE:
+                update_values['last_used_at'] = now
+            else:
+                # Для парсинга только обновляем last_used_at без изменения счетчиков
+                update_values['last_used_at'] = now
             
             if success:
                 # Сбрасываем счетчик ошибок при успешном действии
                 update_values['error_count'] = 0
             
-            # Применяем обновления в базе данных
-            await session.execute(
-                update(TelegramSession)
-                .where(TelegramSession.id == account_id)
-                .values(**update_values)
-            )
-            await session.commit()
+            # Применяем обновления в базе данных (только если есть что обновлять)
+            if update_values:
+                await session.execute(
+                    update(TelegramSession)
+                    .where(TelegramSession.id == account_id)
+                    .values(**update_values)
+                )
+                await session.commit()
             
             # 2. Обновляем часовые лимиты в Redis
             hourly_key = f"hourly:{account_id}:{action_type}:{now.strftime('%Y-%m-%d-%H')}"
@@ -385,8 +405,10 @@ class RateLimitingService:
             }
             
             # Проверяем каждый тип действия
-            for action_type in [ActionType.INVITE, ActionType.MESSAGE, ActionType.ADD_CONTACT]:
-                limits = self.telegram_limits[action_type]
+            for action_type in [ActionType.INVITE, ActionType.MESSAGE, ActionType.ADD_CONTACT, ActionType.PARSE]:
+                limits = self.telegram_limits.get(action_type)
+                if not limits:
+                    continue
                 
                 # Дневные лимиты
                 if action_type == ActionType.INVITE:
@@ -395,6 +417,9 @@ class RateLimitingService:
                     daily_used = account.used_messages_today
                 elif action_type == ActionType.ADD_CONTACT:
                     daily_used = account.contacts_today
+                elif action_type == ActionType.PARSE:
+                    # Для парсинга не отслеживаем дневные лимиты в БД (чтение данных)
+                    daily_used = 0
                 
                 daily_limit = limits['daily_limit']
                 status["daily_limits"][action_type] = {

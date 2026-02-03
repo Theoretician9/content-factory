@@ -22,6 +22,7 @@ class ActionType(str, Enum):
     ADD_CONTACT = "add_contact"
     JOIN_CHANNEL = "join_channel"
     LEAVE_CHANNEL = "leave_channel"
+    PARSE = "parse"  # Парсинг каналов/групп (чтение данных)
 
 class AccountPurpose(str, Enum):
     """Цель использования аккаунта"""
