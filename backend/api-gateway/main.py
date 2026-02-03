@@ -712,13 +712,13 @@ async def proxy_invite_service(request: Request, path: str):
     if auth_header:
         headers["Authorization"] = auth_header
     
-    # Логирование для отладки авторизации
-    auth_header = headers.get("authorization", "MISSING")
+    # Логирование для отладки авторизации (используем значение из request)
+    auth_for_log = auth_header[:50] + "..." if auth_header and len(auth_header) > 50 else (auth_header or "MISSING")
     logger.info(json.dumps({
         "event": "proxy_to_invite_service", 
         "path": path, 
         "method": request.method,
-        "auth_header": auth_header[:50] + "..." if len(auth_header) > 50 else auth_header,
+        "auth_header": auth_for_log,
         "target_url": target_url
     }))
     
