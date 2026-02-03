@@ -22,7 +22,8 @@ class AccountManagerClient:
         self, 
         user_id: int, 
         purpose: str = "parsing",
-        timeout_minutes: int = 60
+        timeout_minutes: int = 60,
+        preferred_account_id: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Выделить аккаунт для парсинга
@@ -31,6 +32,7 @@ class AccountManagerClient:
             user_id: ID пользователя
             purpose: Цель использования (parsing)
             timeout_minutes: Таймаут блокировки в минутах
+            preferred_account_id: Предпочтительный аккаунт (UUID), если уже выбран (например, для поиска)
             
         Returns:
             Dict с данными аккаунта или None если нет доступных
@@ -38,15 +40,19 @@ class AccountManagerClient:
         try:
             logger.info(f"🔍 Requesting account allocation for user {user_id}, purpose: {purpose}")
             
+            payload = {
+                "user_id": user_id,
+                "purpose": purpose,
+                "service_name": "parsing-service",
+                "timeout_minutes": timeout_minutes
+            }
+            if preferred_account_id:
+                payload["preferred_account_id"] = preferred_account_id
+            
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
                     f"{self.base_url}/allocate",
-                    json={
-                        "user_id": user_id,
-                        "purpose": purpose,
-                        "service_name": "parsing-service",
-                        "timeout_minutes": timeout_minutes
-                    }
+                    json=payload
                 )
                 
                 if response.status_code == 200:
