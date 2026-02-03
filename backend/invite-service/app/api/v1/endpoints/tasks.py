@@ -352,8 +352,10 @@ async def bulk_task_operations(
     try:
         affected_count = 0
         
+        deleted_task_ids = []
         if bulk_request.action == TaskBulkAction.DELETE:
             # Удаление задач
+            deleted_task_ids = [t.id for t in tasks]
             for task in tasks:
                 db.delete(task)
                 affected_count += 1
@@ -392,11 +394,21 @@ async def bulk_task_operations(
                 task.priority = TaskPriority(new_priority)
                 affected_count += 1
         
-        # Обновление времени изменения для всех затронутых задач
+        # Обновление времени изменения для всех затронутых задач (кроме удалённых)
         for task in tasks:
-            task.updated_at = datetime.utcnow()
+            if bulk_request.action != TaskBulkAction.DELETE:
+                task.updated_at = datetime.utcnow()
         
         db.commit()
+        
+        # Помечаем удалённые задачи в Redis (воркеры пропустят уже поставленные батчи)
+        if deleted_task_ids:
+            try:
+                r = redis.Redis.from_url(get_settings().REDIS_URL, decode_responses=True)
+                for tid in deleted_task_ids:
+                    r.setex(f"invite:deleted_task:{tid}", 7200, "1")
+            except Exception as e:
+                logger.warning("Не удалось пометить удалённые задачи в Redis: %s", e)
         
         return {
             "message": f"Операция '{bulk_request.action}' выполнена",
