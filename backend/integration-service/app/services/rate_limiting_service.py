@@ -80,28 +80,23 @@ class RateLimitingService:
             )
             return False
         now = datetime.now(timezone.utc)
+        def _until_past(until_val):
+            if not until_val:
+                return False
+            try:
+                until = until_val.replace(tzinfo=timezone.utc) if getattr(until_val, 'tzinfo', None) is None else until_val
+                return until > now
+            except TypeError:
+                return False
         try:
-            fw = getattr(account, 'flood_wait_until', None)
-            if fw and (fw.tzinfo and fw > now if fw.tzinfo else fw.replace(tzinfo=timezone.utc) > now if fw else False):
-                if fw > now:
-                    logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: flood_wait_until={fw} > now")
-                    return False
-            elif fw and not fw.tzinfo and fw > datetime.utcnow():
-                logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: flood_wait_until={fw} > now (naive)")
+            if _until_past(getattr(account, 'flood_wait_until', None)):
+                logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: flood_wait_until > now")
                 return False
-            if getattr(account, 'flood_wait_until', None) and account.flood_wait_until:
-                _fw = account.flood_wait_until
-                _now = _fw.replace(tzinfo=timezone.utc) if _fw.tzinfo is None else now
-                if _fw > _now:
-                    logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: flood_wait_until > now")
-                    return False
-                logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: flood_wait_until={account.flood_wait_until} > now")
+            if _until_past(getattr(account, 'blocked_until', None)):
+                logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: blocked_until > now")
                 return False
-            if getattr(account, 'blocked_until', None) and account.blocked_until and account.blocked_until > now:
-                logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: blocked_until={account.blocked_until} > now")
-                return False
-        except TypeError as e:
-            logger.warning(f"🔍 RATE_LIMIT: datetime compare error for account {account.id}: {e} (naive/aware?)")
+        except Exception as e:
+            logger.warning(f"🔍 RATE_LIMIT: datetime check error for account {account.id}: {e}")
             return False
         if not allow_locked and getattr(account, 'locked', False):
             logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: locked=True, allow_locked={allow_locked}")
