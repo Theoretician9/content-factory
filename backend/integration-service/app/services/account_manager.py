@@ -91,6 +91,7 @@ class AccountManagerService:
                 session=session,
                 user_id=user_id,
                 purpose=purpose,
+                service_name=service_name,
                 preferred_account_id=preferred_account_id,
                 target_channel_id=norm_channel
             )
@@ -401,6 +402,7 @@ class AccountManagerService:
         session: AsyncSession,
         user_id: int,
         purpose: AccountPurpose,
+        service_name: Optional[str] = None,
         preferred_account_id: Optional[UUID] = None,
         target_channel_id: Optional[str] = None
     ) -> List[TelegramSession]:
@@ -413,11 +415,17 @@ class AccountManagerService:
         logger.info(f"🔍 ДИАГНОСТИКА: Текущее время (UTC): {now}")
         
         # Bypass: если указан preferred_account_id, попробуем вернуть ровно этот аккаунт
-        # (если принадлежит пользователю, активен и НЕ залочен в Redis),
-        # игнорируя строгие фильтры статуса/флуд/blocked. Это нужно для безопасных операций (например, check_admin_rights).
+        # (если принадлежит пользователю, активен). Если залочен в Redis — разрешаем только если lock наш (тот же сервис).
         if preferred_account_id:
             lock_key_pref = f"account_lock:{preferred_account_id}"
-            if not self.redis_client.exists(lock_key_pref):
+            lock_exists = self.redis_client.exists(lock_key_pref)
+            lock_ours = False
+            if lock_exists and service_name:
+                current_val = self.redis_client.get(lock_key_pref) or ""
+                lock_ours = current_val.startswith(f"{service_name}:")
+                if lock_ours:
+                    logger.info(f"✅ ДИАГНОСТИКА: Preferred аккаунт залочен нами ({service_name}), разрешаем переиспользование")
+            if not lock_exists or lock_ours:
                 result_pref = await session.execute(
                     select(TelegramSession).where(
                         and_(
@@ -429,10 +437,10 @@ class AccountManagerService:
                 )
                 preferred_acc = result_pref.scalar_one_or_none()
                 if preferred_acc is not None:
-                    logger.info(f"✅ ДИАГНОСТИКА: Возвращаем preferred аккаунт без строгих фильтров: {preferred_acc.id}")
+                    logger.info(f"✅ ДИАГНОСТИКА: Возвращаем preferred аккаунт: {preferred_acc.id}")
                     return [preferred_acc]
-            else:
-                logger.debug(f"🔒 Preferred account {preferred_account_id} is locked in Redis, bypass пропущен")
+            if lock_exists and not lock_ours:
+                logger.debug(f"🔒 Preferred account {preferred_account_id} is locked by another service, bypass пропущен")
 
         # Базовые условия для доступности аккаунта (НЕ проверяем locked поля в БД!)
         conditions = [
@@ -479,8 +487,15 @@ class AccountManagerService:
             logger.info(f"🔍 ДИАГНОСТИКА: Redis lock для {account.id}: {redis_locked}")
             
             if redis_locked:
-                logger.debug(f"🔒 Account {account.id} is locked in Redis, skipping")
-                continue
+                # Тот же сервис может переиспользовать свой lock (обновим TTL при allocate)
+                lock_ours = False
+                if service_name:
+                    current_val = self.redis_client.get(lock_key) or ""
+                    lock_ours = current_val.startswith(f"{service_name}:")
+                if not lock_ours:
+                    logger.debug(f"🔒 Account {account.id} is locked in Redis, skipping")
+                    continue
+                logger.debug(f"🔒 Account {account.id} locked by us ({service_name}), allowing")
             
             # Базовая доступность (без учета поля locked в БД)
             base_ok = (
@@ -570,25 +585,32 @@ class AccountManagerService:
         timeout_minutes: int
     ) -> bool:
         """
-        Получить distributed lock на аккаунт
+        Получить distributed lock на аккаунт.
+        Если lock уже принадлежит тому же сервису — перезаписываем (обновляем TTL).
         """
         lock_key = f"account_lock:{account_id}"
         lock_value = f"{service_name}:{datetime.now(timezone.utc).isoformat()}"
+        ttl_seconds = timeout_minutes * 60
         
-        # Устанавливаем lock с TTL
+        current_value = self.redis_client.get(lock_key)
+        if current_value and current_value.startswith(f"{service_name}:"):
+            # Наш старый lock — перезаписываем и обновляем TTL
+            self.redis_client.setex(lock_key, ttl_seconds, lock_value)
+            logger.debug(f"🔒 Re-acquired (refreshed) lock for account {account_id} by {service_name}")
+            return True
+        
+        # Устанавливаем lock с TTL только если ключ не существует
         result = self.redis_client.set(
-            lock_key, 
-            lock_value, 
-            nx=True,  # Только если ключ не существует
-            ex=timeout_minutes * 60  # TTL в секундах
+            lock_key,
+            lock_value,
+            nx=True,
+            ex=ttl_seconds
         )
-        
         if result:
             logger.debug(f"🔒 Acquired lock for account {account_id} by {service_name}")
             return True
-        else:
-            logger.warning(f"❌ Failed to acquire lock for account {account_id}, already locked")
-            return False
+        logger.warning(f"❌ Failed to acquire lock for account {account_id}, already locked")
+        return False
     
     async def _release_account_lock(
         self,
