@@ -4,6 +4,8 @@ Celery воркеры для выполнения задач приглашен�
 
 import asyncio
 import logging
+import os
+import redis
 import httpx
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
@@ -364,6 +366,16 @@ def process_target_batch(self, task_id: int, target_ids: List[int], batch_number
         target_ids: Список ID целей для обработки
         batch_number: Номер батча для логирования
     """
+    # Если задачу удалили через веб — пропускаем батч без обращения к БД (ключ в Redis с TTL 2 ч)
+    try:
+        redis_url = os.getenv("REDIS_URL") or os.getenv("CELERY_RESULT_BACKEND") or "redis://redis:6379/5"
+        r = redis.Redis.from_url(redis_url, decode_responses=True)
+        if r.get(f"invite:deleted_task:{task_id}"):
+            logger.info("Задача %s удалена, пропуск батча %s", task_id, batch_number)
+            return
+    except Exception as e:
+        logger.debug("Проверка Redis deleted_task: %s", e)
+
     logger.info(f"Обработка батча {batch_number} для задачи {task_id}: {len(target_ids)} целей")
     
     with get_db_session() as db:
@@ -540,10 +552,12 @@ async def _process_batch_async(
                     logger.info(f"✅ AccountManager: Выделен аккаунт {current_account_allocation['account_id']} для батча {batch_number}")
                 
                 # Проверка лимитов через Account Manager перед каждым приглашением
+                # allow_locked=True: аккаунт только что выделен этим воркером, lock не должен блокировать проверку
                 rate_limit_check = await account_manager.check_rate_limit(
                     current_account_allocation['account_id'],
                     action_type="invite",
-                    target_channel_id=task.settings.get('group_id') if task.settings else None
+                    target_channel_id=task.settings.get('group_id') if task.settings else None,
+                    allow_locked=True
                 )
                 
                 if not rate_limit_check.get('allowed', False):

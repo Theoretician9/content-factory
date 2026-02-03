@@ -9,8 +9,10 @@ from typing import List, Optional
 from datetime import datetime
 import math
 import logging
+import redis
 
 from app.core.database import get_db
+from app.core.config import get_settings
 from app.models import InviteTask, TaskStatus, TaskPriority, InviteTarget, TargetStatus
 from app.schemas.invite_task import (
     InviteTaskCreate, 
@@ -432,6 +434,12 @@ async def delete_invite_task(
     try:
         db.delete(task)
         db.commit()
+        # Помечаем задачу как удалённую в Redis: воркеры пропустят уже поставленные в очередь батчи (TTL 2 ч)
+        try:
+            r = redis.Redis.from_url(get_settings().REDIS_URL, decode_responses=True)
+            r.setex(f"invite:deleted_task:{task_id}", 7200, "1")
+        except Exception as e:
+            logger.warning("Не удалось пометить задачу как удалённую в Redis: %s", e)
         return {"message": f"Задача {task_id} успешно удалена"}
     except Exception as e:
         db.rollback()

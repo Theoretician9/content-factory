@@ -178,7 +178,8 @@ class AccountManagerClient:
         self,
         account_id: str,
         action_type: str = "invite",
-        target_channel_id: Optional[str] = None
+        target_channel_id: Optional[str] = None,
+        allow_locked: bool = False
     ) -> Dict[str, Any]:
         """
         ✅ КЛЮЧЕВАЯ ФУНКЦИЯ ТЗ: Проверить rate limits перед действием
@@ -194,6 +195,7 @@ class AccountManagerClient:
             account_id: ID аккаунта
             action_type: Тип действия (invite, message, add_contact)
             target_channel_id: ID целевого канала
+            allow_locked: True при вызове сразу после allocate (аккаунт залочен текущим вызовом)
             
         Returns:
             Dict со статусом лимитов и необходимыми паузами
@@ -204,7 +206,8 @@ class AccountManagerClient:
                     f"{self.base_url}/rate-limit/check/{account_id}",
                     json={
                         "action_type": action_type,
-                        "target_channel_id": target_channel_id
+                        "target_channel_id": target_channel_id,
+                        "allow_locked": allow_locked
                     }
                 )
                 
