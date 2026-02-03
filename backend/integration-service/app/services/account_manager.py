@@ -512,6 +512,8 @@ class AccountManagerService:
                 # Ленивый сброс дневных счётчиков: если reset_at в прошлом (Celery не сбросил в полночь),
                 # сбрасываем счётчики в БД и считаем лимиты нулевыми для этого аккаунта
                 reset_at_val = getattr(account, 'reset_at', None)
+                if reset_at_val is not None and reset_at_val.tzinfo is None:
+                    reset_at_val = reset_at_val.replace(tzinfo=timezone.utc)
                 counters_stale = reset_at_val is not None and now > reset_at_val
                 if counters_stale:
                     next_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
