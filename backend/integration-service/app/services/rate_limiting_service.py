@@ -136,7 +136,7 @@ class RateLimitingService:
                 daily_used = account.used_messages_today
                 daily_limit = limits['daily_limit']
                 
-            elif action_type == ActionType.CONTACT_ADD:
+            elif action_type == ActionType.ADD_CONTACT:
                 daily_used = account.contacts_today
                 daily_limit = limits['daily_limit']
             
@@ -286,7 +286,7 @@ class RateLimitingService:
             elif action_type == ActionType.MESSAGE:
                 update_values['used_messages_today'] = TelegramSession.used_messages_today + 1
                 
-            elif action_type == ActionType.CONTACT_ADD:
+            elif action_type == ActionType.ADD_CONTACT:
                 update_values['contacts_today'] = TelegramSession.contacts_today + 1
             
             # Для парсинга не обновляем дневные лимиты в БД, так как это чтение данных
