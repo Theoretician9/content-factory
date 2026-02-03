@@ -509,11 +509,30 @@ class AccountManagerService:
                 continue
 
             if purpose == AccountPurpose.INVITE_CAMPAIGN:
-                used_today = getattr(account, 'used_invites_today', 0)
+                # Ленивый сброс дневных счётчиков: если reset_at в прошлом (Celery не сбросил в полночь),
+                # сбрасываем счётчики в БД и считаем лимиты нулевыми для этого аккаунта
+                reset_at_val = getattr(account, 'reset_at', None)
+                counters_stale = reset_at_val is not None and now > reset_at_val
+                if counters_stale:
+                    next_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                    await session.execute(
+                        update(TelegramSession)
+                        .where(TelegramSession.id == account.id)
+                        .values(
+                            used_invites_today=0,
+                            used_messages_today=0,
+                            contacts_today=0,
+                            per_channel_invites={},
+                            reset_at=next_midnight
+                        )
+                    )
+                    await session.flush()
+                    logger.info(f"🔄 Lazy reset daily limits for account {account.id} (reset_at was in the past)")
+                used_today = 0 if counters_stale else getattr(account, 'used_invites_today', 0)
                 daily_limit = getattr(account, 'daily_invite_limit', 30)
                 per_ch = (account.per_channel_invites or {}).get(target_channel_id or "", {'today': 0, 'total': 0})
-                ch_today = per_ch.get('today', 0)
-                ch_total = per_ch.get('total', 0)
+                ch_today = 0 if counters_stale else per_ch.get('today', 0)
+                ch_total = 0 if counters_stale else per_ch.get('total', 0)
                 per_ch_limit = getattr(account, 'per_channel_invite_limit', 15)
                 ch_total_limit = getattr(account, 'max_per_channel_total', 200)
                 logger.info(
