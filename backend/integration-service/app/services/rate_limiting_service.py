@@ -75,13 +75,23 @@ class RateLimitingService:
         При allow_locked=True не считаем locked причиной недоступности (вызывающий только что выделил аккаунт).
         """
         if not account.is_active or account.status != 'active':
+            logger.info(
+                f"🔍 RATE_LIMIT: Account {account.id} not available: is_active={getattr(account, 'is_active', None)}, status={getattr(account, 'status', None)}"
+            )
             return False
         now = datetime.utcnow()
-        if getattr(account, 'flood_wait_until', None) and account.flood_wait_until and account.flood_wait_until > now:
+        try:
+            if getattr(account, 'flood_wait_until', None) and account.flood_wait_until and account.flood_wait_until > now:
+                logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: flood_wait_until={account.flood_wait_until} > now")
+                return False
+            if getattr(account, 'blocked_until', None) and account.blocked_until and account.blocked_until > now:
+                logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: blocked_until={account.blocked_until} > now")
+                return False
+        except TypeError as e:
+            logger.warning(f"🔍 RATE_LIMIT: datetime compare error for account {account.id}: {e} (naive/aware?)")
             return False
-        if getattr(account, 'blocked_until', None) and account.blocked_until and account.blocked_until > now:
-            return False
-        if not allow_locked and account.locked:
+        if not allow_locked and getattr(account, 'locked', False):
+            logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: locked=True, allow_locked={allow_locked}")
             return False
         return True
 
@@ -107,6 +117,7 @@ class RateLimitingService:
             Tuple[bool, Dict]: (разрешено, детали лимитов)
         """
         try:
+            logger.info(f"🔍 RATE_LIMIT check_rate_limit: account_id={account_id}, action_type={action_type}, allow_locked={allow_locked}")
             # Получаем аккаунт
             result = await session.execute(
                 select(TelegramSession).where(TelegramSession.id == account_id)
@@ -117,6 +128,7 @@ class RateLimitingService:
                 return False, {"error": "Account not found"}
             
             if not self._account_available_for_action(account, allow_locked=allow_locked):
+                logger.info(f"🔍 RATE_LIMIT: Account {account_id} rejected by _account_available_for_action (see above for reason)")
                 return False, {"error": "Account not available"}
             
             limits = self.telegram_limits.get(action_type, {})
