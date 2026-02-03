@@ -702,11 +702,15 @@ async def proxy_invite_service(request: Request, path: str):
     else:
         target_url = f"{SERVICE_URLS['invite']}/api/v1/{path}"
     
-    # Копирование headers (включая Authorization)
+    # Копирование headers (включая Authorization — явно пробрасываем для авторизации)
     headers = {}
     for name, value in request.headers.items():
         if name.lower() not in ["host", "content-length"]:
             headers[name] = value
+    # Гарантированная передача Authorization в invite-service (JWT для get_current_user_id)
+    auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
+    if auth_header:
+        headers["Authorization"] = auth_header
     
     # Логирование для отладки авторизации
     auth_header = headers.get("authorization", "MISSING")

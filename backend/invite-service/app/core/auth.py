@@ -8,12 +8,20 @@ import jwt
 from typing import Optional
 
 from .config import settings
-security = HTTPBearer()
 
-def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int:
+# auto_error=False — при отсутствии заголовка возвращаем 401 из get_current_user_id, а не 403 от HTTPBearer
+security = HTTPBearer(auto_error=False)
+
+
+def get_current_user_id(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> int:
     """
     Извлечение user_id из JWT токена
     """
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Authorization header"
+        )
     try:
         # Извлекаем токен из заголовка Authorization
         token = credentials.credentials
