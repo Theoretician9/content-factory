@@ -51,6 +51,70 @@ class TelegramAdapter(BasePlatformAdapter):
     def platform_name(self) -> str:
         return "Telegram"
     
+    async def authenticate_with_allocation(
+        self,
+        allocation: Dict[str, Any],
+        api_id: Optional[str] = None,
+        api_hash: Optional[str] = None
+    ) -> bool:
+        """
+        Использовать уже выделенный аккаунт (без повторного вызова allocate).
+        Вызывается из real_parser, когда main уже выделил аккаунт через Account Manager.
+        """
+        try:
+            if self.allocated_account:
+                await self._release_current_account()
+            self.api_id = api_id or os.getenv("TELEGRAM_API_ID")
+            self.api_hash = api_hash or os.getenv("TELEGRAM_API_HASH")
+            if not self.api_id or not self.api_hash:
+                self.logger.error("❌ No API credentials for authenticate_with_allocation")
+                return False
+            self.allocated_account = allocation
+            self.current_account_id = allocation.get("account_id")
+            session_data = allocation.get("session_data")
+            if not session_data:
+                self.logger.error("❌ No session_data in allocation")
+                return False
+            session_string = None
+            if isinstance(session_data, dict) and session_data.get("encrypted_session"):
+                try:
+                    import base64
+                    session_string = base64.b64decode(session_data["encrypted_session"]).decode("utf-8")
+                except Exception as e:
+                    self.logger.error(f"❌ Failed to decode session: {e}")
+                    return False
+            elif isinstance(session_data, str):
+                try:
+                    import base64
+                    session_string = base64.b64decode(session_data).decode("utf-8")
+                except Exception:
+                    session_string = session_data
+            if not session_string:
+                self.logger.error("❌ Could not extract StringSession from allocation")
+                return False
+            from telethon.sessions import StringSession
+            self.client = TelegramClient(
+                session=StringSession(session_string),
+                api_id=int(self.api_id),
+                api_hash=self.api_hash,
+                device_model="Content Factory Parser",
+                system_version="1.0",
+                app_version="1.0",
+            )
+            await self.client.connect()
+            if not await self.client.is_user_authorized():
+                self.logger.error("❌ Session not authorized")
+                return False
+            me = await self.client.get_me()
+            self.logger.info(f"✅ Telegram authenticated with pre-allocated account {self.current_account_id} ({me.first_name})")
+            return True
+        except Exception as e:
+            self.logger.error(f"❌ authenticate_with_allocation failed: {e}")
+            if self.allocated_account:
+                self.allocated_account = None
+                self.current_account_id = None
+            return False
+
     async def authenticate(self, account_id: str, credentials: Dict[str, Any]) -> bool:
         """Authenticate with Telegram using Account Manager for account allocation."""
         try:
