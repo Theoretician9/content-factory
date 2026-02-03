@@ -129,7 +129,7 @@ class RateLimitingService:
                 daily_used = account.used_messages_today
                 daily_limit = limits['daily_limit']
                 
-            elif action_type == ActionType.CONTACT_ADD:
+            elif action_type == ActionType.ADD_CONTACT:
                 daily_used = account.contacts_today
                 daily_limit = limits['daily_limit']
             

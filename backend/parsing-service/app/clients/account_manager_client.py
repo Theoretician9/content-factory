@@ -226,14 +226,22 @@ class AccountManagerClient:
 
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
-                    f"{self.base_url}/limits/check/{account_id}",
+                    f"{self.base_url}/rate-limit/check/{account_id}",
                     json=payload
                 )
 
                 if response.status_code == 200:
                     data = response.json()
-                    logger.info(f"✅ Rate limit check for {account_id}: {data}")
-                    return data
+                    # Integration-service возвращает { allowed, details }; адаптер ожидает should_wait, wait_for_seconds
+                    allowed = data.get("allowed", True)
+                    details = data.get("details") or {}
+                    wait_sec = int(details.get("cooldown_remaining") or details.get("burst_cooldown_remaining") or 0)
+                    out = {"should_wait": not allowed, "wait_for_seconds": wait_sec}
+                    if allowed:
+                        logger.debug(f"Rate limit check for {account_id}: allowed")
+                    else:
+                        logger.info(f"⏳ Rate limit check for {account_id}: wait {wait_sec}s")
+                    return out
                 else:
                     logger.error(f"❌ Rate limit check failed: {response.status_code} - {response.text}")
                     return None
