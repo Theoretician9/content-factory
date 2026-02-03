@@ -109,10 +109,25 @@ class RateLimitingService:
             checks = {}
             
             # 0. Ленивый учёт устаревших дневных счётчиков: если reset_at в прошлом (сброс не выполнялся),
-            #    считаем дневное использование нулём, чтобы не блокировать аккаунты навсегда (например,
-            #    когда Celery Beat с reset_daily_limits не запущен или аккаунт давно не использовался).
-            reset_at = getattr(account, 'reset_at', None)
-            counters_stale = reset_at is not None and now > reset_at
+            #    считаем дневное использование нулём и сбрасываем счётчики в БД для этого аккаунта,
+            #    чтобы не блокировать аккаунты навсегда (например, когда Celery Beat не запущен или аккаунт давно не использовался).
+            reset_at_val = getattr(account, 'reset_at', None)
+            counters_stale = reset_at_val is not None and now > reset_at_val
+            if counters_stale:
+                next_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                await session.execute(
+                    update(TelegramSession)
+                    .where(TelegramSession.id == account_id)
+                    .values(
+                        used_invites_today=0,
+                        used_messages_today=0,
+                        contacts_today=0,
+                        per_channel_invites={},
+                        reset_at=next_midnight
+                    )
+                )
+                await session.flush()
+                logger.info(f"🔄 Lazy reset daily limits for account {account_id} (reset_at was in the past)")
             
             # 1. Проверка дневных лимитов в базе данных
             if action_type == ActionType.INVITE:
