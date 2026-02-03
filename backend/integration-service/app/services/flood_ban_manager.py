@@ -376,7 +376,8 @@ class FloodBanManager:
             target_date = target_date or datetime.utcnow()
             logger.info(f"🔄 Resetting daily limits for date: {target_date.date()}")
             
-            # Сбрасываем лимиты для всех активных аккаунтов
+            # Сбрасываем лимиты для всех активных аккаунтов; reset_at = следующий полночь (когда счётчики снова устареют)
+            next_midnight = target_date.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
             result = await session.execute(
                 update(TelegramSession)
                 .where(TelegramSession.is_active == True)
@@ -385,7 +386,7 @@ class FloodBanManager:
                     used_messages_today=0,
                     contacts_today=0,
                     per_channel_invites={},
-                    last_limit_reset=target_date
+                    reset_at=next_midnight
                 )
             )
             

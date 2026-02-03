@@ -108,16 +108,25 @@ class RateLimitingService:
             now = datetime.utcnow()
             checks = {}
             
+            # 0. Ленивый учёт устаревших дневных счётчиков: если reset_at в прошлом (сброс не выполнялся),
+            #    считаем дневное использование нулём, чтобы не блокировать аккаунты навсегда (например,
+            #    когда Celery Beat с reset_daily_limits не запущен или аккаунт давно не использовался).
+            reset_at = getattr(account, 'reset_at', None)
+            counters_stale = reset_at is not None and now > reset_at
+            
             # 1. Проверка дневных лимитов в базе данных
             if action_type == ActionType.INVITE:
-                daily_used = account.used_invites_today
+                daily_used = 0 if counters_stale else account.used_invites_today
                 daily_limit = limits['daily_limit']
                 
                 # Проверка лимита на канал
                 if target_channel_id:
-                    per_channel_invites = account.per_channel_invites or {}
-                    channel_data = per_channel_invites.get(target_channel_id, {'today': 0})
-                    per_channel_used = channel_data.get('today', 0)
+                    if counters_stale:
+                        per_channel_used = 0
+                    else:
+                        per_channel_invites = account.per_channel_invites or {}
+                        channel_data = per_channel_invites.get(target_channel_id, {'today': 0})
+                        per_channel_used = channel_data.get('today', 0)
                     per_channel_limit = limits['per_channel_daily']
                     
                     if per_channel_used >= per_channel_limit:
@@ -133,11 +142,11 @@ class RateLimitingService:
                     }
                 
             elif action_type == ActionType.MESSAGE:
-                daily_used = account.used_messages_today
+                daily_used = 0 if counters_stale else account.used_messages_today
                 daily_limit = limits['daily_limit']
                 
             elif action_type == ActionType.CONTACT_ADD:
-                daily_used = account.contacts_today
+                daily_used = 0 if counters_stale else account.contacts_today
                 daily_limit = limits['daily_limit']
             
             elif action_type == ActionType.PARSE:
