@@ -58,12 +58,16 @@ class TelegramAdapter(BasePlatformAdapter):
             if self.allocated_account:
                 await self._release_current_account()
             
-            # Выделяем аккаунт через Account Manager
+            # Выделяем аккаунт через Account Manager (передаём preferred_account_id, если уже выбран — например для поиска)
             user_id = credentials.get('user_id', 1)  # Получаем user_id из credentials
+            preferred_id = None
+            if account_id and len(account_id) == 36 and account_id.count("-") == 4:
+                preferred_id = account_id  # UUID-подобный id выбранного аккаунта
             self.allocated_account = await self.account_manager.allocate_account(
                 user_id=user_id,
                 purpose="parsing",
-                timeout_minutes=120  # 2 часа для парсинга
+                timeout_minutes=120,  # 2 часа для парсинга
+                preferred_account_id=preferred_id
             )
             
             if not self.allocated_account:

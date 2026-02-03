@@ -91,9 +91,10 @@ async def search_communities(
                     
                     logger.info(f"🔑 Using Telegram account {session_id} for search")
                     
-                    # Get credentials (same structure as parsing)
+                    # Get credentials (same structure as parsing); user_id нужен для allocate через Account Manager
                     credentials = {
                         'session_id': session_id,
+                        'user_id': user_id,
                         'api_id': selected_account.get('api_id'),
                         'api_hash': selected_account.get('api_hash'),
                         'session_data': selected_account.get('session_data')
