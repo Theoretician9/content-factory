@@ -62,6 +62,7 @@ class RateLimitCheckRequest(BaseModel):
     """Запрос на проверку rate limit"""
     action_type: ActionType = Field(..., description="Тип действия")
     target_channel_id: Optional[str] = Field(None, description="ID целевого канала")
+    allow_locked: Optional[bool] = Field(False, description="Не считать lock причиной недоступности (вызов после allocate)")
 
 class RateLimitRecordRequest(BaseModel):
     """Запрос на запись выполненного действия"""
@@ -514,7 +515,8 @@ async def check_rate_limit(
             session=session,
             account_id=account_id,
             action_type=request.action_type,
-            target_channel_id=request.target_channel_id
+            target_channel_id=request.target_channel_id,
+            allow_locked=request.allow_locked or False
         )
         
         return {

@@ -69,12 +69,29 @@ class RateLimitingService:
             }
         }
     
+    def _account_available_for_action(self, account, allow_locked: bool = False) -> bool:
+        """
+        Доступен ли аккаунт для выполнения действия.
+        При allow_locked=True не считаем locked причиной недоступности (вызывающий только что выделил аккаунт).
+        """
+        if not account.is_active or account.status != 'active':
+            return False
+        now = datetime.utcnow()
+        if getattr(account, 'flood_wait_until', None) and account.flood_wait_until and account.flood_wait_until > now:
+            return False
+        if getattr(account, 'blocked_until', None) and account.blocked_until and account.blocked_until > now:
+            return False
+        if not allow_locked and account.locked:
+            return False
+        return True
+
     async def check_rate_limit(
         self,
         session: AsyncSession,
         account_id: UUID,
         action_type: ActionType,
-        target_channel_id: Optional[str] = None
+        target_channel_id: Optional[str] = None,
+        allow_locked: bool = False
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         Проверить можно ли выполнить действие с учетом лимитов
@@ -84,6 +101,7 @@ class RateLimitingService:
             account_id: ID аккаунта
             action_type: Тип действия
             target_channel_id: ID целевого канала (для приглашений)
+            allow_locked: Если True, не считать аккаунт недоступным из-за lock (вызов после allocate)
         
         Returns:
             Tuple[bool, Dict]: (разрешено, детали лимитов)
@@ -98,7 +116,7 @@ class RateLimitingService:
             if not account:
                 return False, {"error": "Account not found"}
             
-            if not account.is_available:
+            if not self._account_available_for_action(account, allow_locked=allow_locked):
                 return False, {"error": "Account not available"}
             
             limits = self.telegram_limits.get(action_type, {})
