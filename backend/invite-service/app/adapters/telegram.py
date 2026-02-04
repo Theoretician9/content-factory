@@ -254,9 +254,17 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                 )
             
             # Отправка через Integration Service
+            logger.info(
+                f"🔍 TelegramAdapter: вызов send_telegram_invite "
+                f"account_id={account.account_id}, data={telegram_invite_data}"
+            )
             response = await self.integration_client.send_telegram_invite(
                 account_id=account.account_id,
                 invite_data=telegram_invite_data
+            )
+            logger.info(
+                f"✅ TelegramAdapter: успешный ответ от Integration Service "
+                f"для account_id={account.account_id}, raw_response={response}"
             )
             
             # Обработка успешного ответа
@@ -282,16 +290,30 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
             
         except httpx.HTTPStatusError as e:
             # Обработка HTTP ошибок от Integration Service
+            logger.warning(
+                "⚠️ TelegramAdapter: HTTPStatusError при отправке приглашения "
+                f"account_id={account.account_id}, status={e.response.status_code}, "
+                f"body={e.response.text}"
+            )
             return await self._handle_integration_service_error(e, account, start_time)
             
         except Exception as e:
             # Общие ошибки
             e_str = str(e)
             e_low = e_str.lower()
+            logger.error(
+                "❌ TelegramAdapter: Exception при отправке приглашения "
+                f"account_id={account.account_id}, type={type(e).__name__}, "
+                f"message={e_str!r}",
+                exc_info=True
+            )
             # Мягкая обработка IN_PROGRESS, даже если пришло как исключение не HTTP формата
             if "in_progress" in e_low or "in progress" in e_low:
                 retry_after = datetime.utcnow() + timedelta(minutes=2)
-                logger.info("Telegram invite: operation in progress (soft retry)")
+                logger.info(
+                    "Telegram invite: operation in progress (soft retry) "
+                    f"account_id={account.account_id}, exception_type={type(e).__name__}"
+                )
                 return InviteResult(
                     status=InviteResultStatus.RATE_LIMITED,
                     error_message="Operation in progress",
@@ -301,7 +323,6 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                     can_retry=True,
                     retry_after=retry_after,
                 )
-            logger.error(f"Ошибка отправки Telegram приглашения: {e_str}")
             return InviteResult(
                 status=InviteResultStatus.NETWORK_ERROR,
                 error_message=f"Ошибка сети: {e_str}",
