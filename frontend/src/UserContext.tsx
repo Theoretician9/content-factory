@@ -114,8 +114,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           if (res.ok) {
             const data = await res.json();
-            localStorage.setItem('access_token', data.access_token);
-            localStorage.setItem('refresh_token', data.refresh_token);
+            // /api/auth/refresh возвращает только access_token, refresh_token не меняем
+            if (data.access_token) {
+              localStorage.setItem('access_token', data.access_token);
+            }
           } else {
             logout().catch(console.error);
           }

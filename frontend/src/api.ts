@@ -36,8 +36,11 @@ export async function apiFetch(url: string, options: ExtendedRequestInit = {}) {
       });
       if (refreshRes.ok) {
         const data = await refreshRes.json();
-        localStorage.setItem('access_token', data.access_token);
-        localStorage.setItem('refresh_token', data.refresh_token);
+        // backend /api/auth/refresh возвращает только access_token,
+        // refresh_token остается прежним (лежит в cookie и в localStorage)
+        if (data.access_token) {
+          localStorage.setItem('access_token', data.access_token);
+        }
         // Повторить исходный запрос с новым access_token
         const retryHeaders = {
           ...headers,

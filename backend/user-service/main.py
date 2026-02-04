@@ -214,6 +214,12 @@ async def add_metrics(request: Request, call_next):
 
 # Helper function for getting current user
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """
+    Извлекает текущего пользователя по JWT.
+    Поддерживает оба варианта sub:
+    - email (основной вариант, как выдаёт user-service)
+    - user_id (используется api-gateway при refresh токена)
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -228,15 +234,26 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
                     raise credentials_exception
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка при проверке blacklist в Redis: {e}")
-            
+        
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
+        subject: str = payload.get("sub")
+        if subject is None:
             raise credentials_exception
-        # Теперь ищем по email, потому что JWT содержит email
+        
+        # Основной путь: sub содержит email
+        if "@" in subject:
+            user = db.query(User).filter(User.email == subject).first()
+        else:
+            # Альтернативный путь: sub содержит user_id (строкой)
+            try:
+                user_id = int(subject)
+            except (TypeError, ValueError):
+                logger.warning(f"⚠️ Невалидное значение sub в JWT: {subject}")
+                raise credentials_exception
+            user = db.query(User).filter(User.id == user_id).first()
     except JWTError:
         raise credentials_exception
-    user = db.query(User).filter(User.email == email).first()
+    
     if user is None:
         raise credentials_exception
     return user
