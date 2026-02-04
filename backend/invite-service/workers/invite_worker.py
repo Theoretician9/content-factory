@@ -445,26 +445,34 @@ async def _process_batch_async(
         current_account_allocation = None
         had_in_progress_soft = False
 
-        # Построим очередь кандидатов из summary (приоритет AM) под конкретный паблик
+        # Очередь кандидатов: только аккаунты, прошедшие check-admin-rights (allowed_account_ids),
+        # иначе — из summary AM под конкретный паблик
         preferred_queue: List[str] = []
-        try:
-            group_id = task.settings.get('group_id') if task.settings else None
-            summary = await account_manager.get_accounts_summary(
-                user_id=task.user_id,
-                purpose="invite_campaign",
-                target_channel_id=group_id,
-                limit=1000,
-                include_unavailable=False,
-            )
-            if summary and isinstance(summary.get("accounts", []), list):
-                seen = set()
-                for acc in summary["accounts"]:
-                    acc_id = acc.get("account_id")
-                    if acc_id and acc_id not in seen:
-                        seen.add(acc_id)
-                        preferred_queue.append(acc_id)
-        except Exception as e:
-            logger.warning(f"⚠️ Не удалось получить accounts summary из Account Manager: {e}")
+        allowed_ids = None
+        if task.settings and isinstance(task.settings.get("allowed_account_ids"), list):
+            allowed_ids = [str(aid).strip() for aid in task.settings["allowed_account_ids"] if aid]
+        if allowed_ids:
+            preferred_queue = list(allowed_ids)
+            logger.info(f"🔒 Кампания ограничена аккаунтами, прошедшими проверку прав: {preferred_queue}")
+        else:
+            try:
+                group_id = task.settings.get('group_id') if task.settings else None
+                summary = await account_manager.get_accounts_summary(
+                    user_id=task.user_id,
+                    purpose="invite_campaign",
+                    target_channel_id=group_id,
+                    limit=1000,
+                    include_unavailable=False,
+                )
+                if summary and isinstance(summary.get("accounts", []), list):
+                    seen = set()
+                    for acc in summary["accounts"]:
+                        acc_id = acc.get("account_id")
+                        if acc_id and acc_id not in seen:
+                            seen.add(acc_id)
+                            preferred_queue.append(acc_id)
+            except Exception as e:
+                logger.warning(f"⚠️ Не удалось получить accounts summary из Account Manager: {e}")
         
         for target in targets:
             # Проверка статуса задачи (может быть отменена)
@@ -500,7 +508,7 @@ async def _process_batch_async(
                 # ✅ ПЕРЕРАБОТАНО: Запрос аккаунта через Account Manager с учётом приоритета AM
                 if not current_account_allocation:
                     allocation: Optional[Dict[str, Any]] = None
-                    # 1) Пробуем приоритетные аккаунты через preferred_account_id
+                    # 1) Пробуем приоритетные аккаунты через preferred_account_id (allowed_account_ids или summary)
                     while preferred_queue and allocation is None:
                         pid = preferred_queue.pop(0)
                         allocation = await account_manager.allocate_account(
@@ -510,16 +518,16 @@ async def _process_batch_async(
                             timeout_minutes=60,
                             target_channel_id=task.settings.get('group_id') if task.settings else None,
                         )
-                    # 2) Если приоритетных нет/не дали — общий аллокейт под кампанию
-                    if allocation is None:
+                    # 2) Fallback только если кампания НЕ ограничена проверенными аккаунтами
+                    restrict_to_verified = bool(allowed_ids)
+                    if allocation is None and not restrict_to_verified:
                         allocation = await account_manager.allocate_account(
                             user_id=task.user_id,
                             purpose="invite_campaign",
                             timeout_minutes=60,
                             target_channel_id=task.settings.get('group_id') if task.settings else None,
                         )
-                    # 3) Финальный fallback: general
-                    if allocation is None:
+                    if allocation is None and not restrict_to_verified:
                         allocation = await account_manager.allocate_account(
                             user_id=task.user_id,
                             purpose="general",
@@ -529,9 +537,12 @@ async def _process_batch_async(
                     current_account_allocation = allocation
                     
                     if not current_account_allocation:
-                        logger.error(f"❌ AccountManager: Нет доступных аккаунтов для задачи {task.id}")
-                        target.status = TargetStatus.FAILED
-                        target.error_message = "Нет доступных аккаунтов через Account Manager"
+                        if restrict_to_verified:
+                            logger.error(f"❌ AccountManager: Нет доступного аккаунта с правами приглашения для задачи {task.id} (кампания ограничена проверенными аккаунтами)")
+                            target.error_message = "Нет доступного аккаунта с правами приглашения. Используются только аккаунты, прошедшие проверку прав."
+                        else:
+                            logger.error(f"❌ AccountManager: Нет доступных аккаунтов для задачи {task.id}")
+                            target.error_message = "Нет доступных аккаунтов через Account Manager"
                         target.attempt_count += 1
                         target.updated_at = datetime.utcnow()
                         db.commit()
