@@ -512,18 +512,32 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
             )
         
         elif error.response.status_code == 403:
-            # Privacy restrictions
+            # Ограничения прав / приватность
             detail = error_data.get("detail", {})
             
-            if isinstance(detail, dict) and detail.get("error") == "privacy_restricted":
-                return InviteResult(
-                    status=InviteResultStatus.PRIVACY_RESTRICTED,
-                    error_message="Настройки приватности запрещают приглашения",
-                    error_code="privacy_restricted",
-                    execution_time=execution_time,
-                    account_id=account.account_id,
-                    can_retry=False
-                )
+            if isinstance(detail, dict):
+                error_type = detail.get("error")
+                message = str(detail.get("message", "")).lower()
+                
+                if error_type == "privacy_restricted":
+                    return InviteResult(
+                        status=InviteResultStatus.PRIVACY_RESTRICTED,
+                        error_message="Настройки приватности запрещают приглашения",
+                        error_code="privacy_restricted",
+                        execution_time=execution_time,
+                        account_id=account.account_id,
+                        can_retry=False
+                    )
+                # У аккаунта нет прав писать/приглашать в чат
+                if error_type == "chat_write_forbidden" or "you can't write in this chat" in message:
+                    return InviteResult(
+                        status=InviteResultStatus.PERMISSION_DENIED,
+                        error_message="У аккаунта нет прав писать или приглашать в этот чат",
+                        error_code="chat_write_forbidden",
+                        execution_time=execution_time,
+                        account_id=account.account_id,
+                        can_retry=False
+                    )
         
         elif error.response.status_code == 400:
             # Bad request - различные ошибки

@@ -6,7 +6,7 @@ API endpoints для Telegram приглашений через Integration Serv
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from telethon.errors import FloodWaitError, PeerFloodError, UserNotMutualContactError
+from telethon.errors import FloodWaitError, PeerFloodError, UserNotMutualContactError, ChatWriteForbiddenError
 # Убрал PrivacyRestrictedError - не существует в этой версии telethon
 from telethon.tl.functions.channels import InviteToChannelRequest
 from telethon.tl.functions.messages import AddChatUserRequest
@@ -508,6 +508,22 @@ async def send_telegram_invite_by_account(
     except Exception as e:
         # Обработка ошибок приватности и других общих ошибок
         error_msg = str(e).lower()
+        
+        # Специальная обработка: у аккаунта нет прав писать/приглашать в этот чат
+        if isinstance(e, ChatWriteForbiddenError) or "you can't write in this chat" in error_msg:
+            target_info = invite_data.target_username or invite_data.target_phone or invite_data.target_user_id
+            logger.info(
+                f"ChatWriteForbidden для аккаунта {account_id}, цель {target_info}: {str(e)}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "chat_write_forbidden",
+                    "message": "У аккаунта нет прав писать или приглашать в этот чат",
+                    "target": target_info,
+                    "group": invite_data.group_id
+                }
+            )
         
         if "privacy" in error_msg or "restricted" in error_msg:
             target_info = invite_data.target_username or invite_data.target_phone or invite_data.target_user_id
