@@ -246,6 +246,11 @@ class RateLimitingService:
             hourly_limit = limits['hourly_limit']
             
             if hourly_used >= hourly_limit:
+                logger.info(
+                    f"📊 RATE_LIMIT Hourly limit exceeded: account_id={account_id}, action_type={action_type}, "
+                    f"hourly_used={hourly_used}, hourly_limit={hourly_limit}, "
+                    f"key=hourly:{account_id}:{action_type}:{now.strftime('%Y-%m-%d-%H')}"
+                )
                 return False, {
                     "error": "Hourly limit exceeded",
                     "hourly_used": hourly_used,
