@@ -58,9 +58,13 @@ async def _send_single_invite_via_account_manager(
         
         logger.info(f"🔄 AccountManager: Отправка приглашения для цели {target.id} через аккаунт {account_id}")
         
-        # Обновляем статус цели на IN_PROGRESS
-        target.status = TargetStatus.IN_PROGRESS
-        target.attempt_count += 1
+        # Обновляем попытку отправки приглашения
+        # Статус оставляем PENDING до фактического результата,
+        # чтобы не использовать несуществующий enum IN_PROGRESS.
+        target.attempt_count = (target.attempt_count or 0) + 1
+        # В модели InviteTarget есть поле last_attempt_at вместо completed_at/in_progress
+        if hasattr(target, "last_attempt_at"):
+            target.last_attempt_at = datetime.utcnow()
         target.updated_at = datetime.utcnow()
         db.commit()
         
@@ -112,9 +116,16 @@ async def _send_single_invite_via_account_manager(
         # Обрабатываем результат
         if result.is_success:
             logger.info(f"✅ AccountManager: Успешное приглашение для цели {target.id} через аккаунт {account_id}")
-            target.status = TargetStatus.COMPLETED
-            target.completed_at = datetime.utcnow()
+            # В модели InviteTarget успешная отправка помечается как INVITED
+            target.status = TargetStatus.INVITED
+            # Используем invite_sent_at вместо несуществующего completed_at
+            if hasattr(target, "invite_sent_at"):
+                target.invite_sent_at = datetime.utcnow()
             target.error_message = None
+            if hasattr(target, "error_code"):
+                target.error_code = None
+            if hasattr(target, "sent_from_account_id"):
+                target.sent_from_account_id = account_id
         else:
             # Мягкие отказы (в т.ч. IN_PROGRESS из Integration Service) обрабатываем как ретрай, не помечая цель FAILED
             msg_lower = (result.error_message or "").lower()
