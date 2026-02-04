@@ -95,6 +95,20 @@ async def _send_single_invite_via_account_manager(
         # Выполняем приглашение через адаптер с аккаунтом от Account Manager
         result = await adapter.send_invite(account_for_adapter, target_data, invite_data)
         
+        # Детальное логирование результата адаптера
+        try:
+            logger.info(
+                "🔍 AccountManager: Результат отправки приглашения "
+                f"target_id={target.id}, account_id={account_id}, "
+                f"status={getattr(result, 'status', None)}, "
+                f"is_success={getattr(result, 'is_success', None)}, "
+                f"error_code={getattr(result, 'error_code', None)}, "
+                f"error_message={getattr(result, 'error_message', None)}"
+            )
+        except Exception:
+            # Никогда не ломаем основной поток из‑за логирования
+            logger.warning("⚠️ AccountManager: Ошибка при логировании результата InviteResult", exc_info=True)
+        
         # Обрабатываем результат
         if result.is_success:
             logger.info(f"✅ AccountManager: Успешное приглашение для цели {target.id} через аккаунт {account_id}")
@@ -105,6 +119,12 @@ async def _send_single_invite_via_account_manager(
             # Мягкие отказы (в т.ч. IN_PROGRESS из Integration Service) обрабатываем как ретрай, не помечая цель FAILED
             msg_lower = (result.error_message or "").lower()
             in_progress = (result.error_code == "in_progress") or ("in_progress" in msg_lower) or ("in progress" in msg_lower)
+            if in_progress:
+                logger.info(
+                    "⏳ AccountManager: Детали in_progress для цели "
+                    f"{target.id}: status={result.status}, error_code={result.error_code}, "
+                    f"error_message={result.error_message}"
+                )
             if result.status == InviteResultStatus.RATE_LIMITED and in_progress:
                 logger.info(f"⏳ AccountManager: Операция в процессе для цели {target.id} (in_progress). Планируем повтор")
                 target.status = TargetStatus.PENDING
