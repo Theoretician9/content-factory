@@ -330,26 +330,15 @@ async def _execute_task_async(task: InviteTask, adapter, db: Session) -> str:
         batch_size = 1
         total_batches = (len(targets) + batch_size - 1) // batch_size
         
-        logger.info(f"📦 Разбиваем {len(targets)} целей на {total_batches} батчей по {batch_size} целей (лимиты управляются Account Manager)")
+        logger.info(f"📦 Разбиваем {len(targets)} целей на {total_batches} батчей по {batch_size} целей (строгая очередь с паузой между батчами)")
         
-        # Запуск батчей - все задержки управляются Account Manager
-        for i in range(0, len(targets), batch_size):
-            batch_targets = targets[i:i + batch_size]
-            batch_number = (i // batch_size) + 1
-            
-            # Создание задачи для батча с Account Manager
-            target_ids = [target.id for target in batch_targets]
-            process_target_batch.delay(task.id, target_ids, batch_number)
-            
-            logger.info(f"🚀 Запущен батч {batch_number}/{total_batches} с {len(batch_targets)} целями через Account Manager")
-            
-            # ✅ ИСПРАВЛЕНО: Задержки между батчами управляются Account Manager, не Invite Service
-            if i + batch_size < len(targets):
-                logger.info(f"⏱️ Задержки между батчами управляются Account Manager согласно ТЗ")
-                # Минимальная пауза для предотвращения перегрузки системы, основные паузы - в Account Manager
-                await asyncio.sleep(10)
+        # Запускаем только первый батч. Следующие батчи планируются по цепочке после завершения предыдущего + пауза.
+        first_batch_targets = targets[0:batch_size]
+        first_target_ids = [t.id for t in first_batch_targets]
+        process_target_batch.delay(task.id, first_target_ids, 1)
+        logger.info(f"🚀 Запущен батч 1/{total_batches}; следующие батчи пойдут по очереди с паузой после каждого")
         
-        return f"Запущено {total_batches} батчей для {len(targets)} целей через Account Manager"
+        return f"Запущено 1-й батч из {total_batches} для {len(targets)} целей (очередь с паузой между батчами)"
         
     except Exception as e:
         logger.error(f"Ошибка в _execute_task_async для задачи {task.id}: {str(e)}")
@@ -649,6 +638,20 @@ async def _process_batch_async(
             f"✅ AccountManager: Батч {batch_number} задачи {task.id} завершен через Account Manager: "
             f"обработано {processed_count}, успешно {success_count}, ошибок {failed_count}"
         )
+        
+        # Строгая очередь: планируем следующий батч только после завершения текущего + пауза (несколько секунд)
+        BATCH_PAUSE_SECONDS = 5
+        db.refresh(task)
+        if task.status not in [TaskStatus.CANCELLED, TaskStatus.FAILED]:
+            all_targets_ordered = db.query(InviteTarget).filter(InviteTarget.task_id == task.id).order_by(InviteTarget.id).all()
+            total_batches = len(all_targets_ordered)
+            if batch_number < total_batches:
+                next_target_ids = [all_targets_ordered[batch_number].id]
+                process_target_batch.apply_async(
+                    (task.id, next_target_ids, batch_number + 1),
+                    countdown=BATCH_PAUSE_SECONDS
+                )
+                logger.info(f"⏱️ Запланирован батч {batch_number + 1}/{total_batches} через {BATCH_PAUSE_SECONDS} с")
         
         return f"Батч {batch_number}: {processed_count} обработано, {success_count} успешно (через Account Manager)"
         
