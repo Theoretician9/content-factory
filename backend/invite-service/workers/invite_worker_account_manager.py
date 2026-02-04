@@ -177,29 +177,11 @@ async def _send_single_invite_via_account_manager(
         
     except Exception as e:
         e_str = str(e)
-        e_low = e_str.lower()
-        # Мягкая обработка IN_PROGRESS из Integration Service, даже если прилетело как исключение
-        if "in_progress" in e_low or "in progress" in e_low:
-            logger.info(f"⏳ AccountManager: Исключение IN_PROGRESS для цели {target.id} — трактуем как мягкий ретрай")
-            target.status = TargetStatus.PENDING
-            target.error_message = "in_progress"
-            target.updated_at = datetime.utcnow()
-            try:
-                db.commit()
-            except Exception as db_error:
-                logger.error(f"❌ Ошибка сохранения состояния (in_progress) в БД для цели {target.id}: {str(db_error)}")
-                db.rollback()
-            # Не репортим в AM
-            return InviteResult(
-                status=InviteResultStatus.RATE_LIMITED,
-                error_message="Operation in progress",
-                error_code="in_progress",
-                account_id=account_allocation['account_id'] if account_allocation else None,
-                execution_time=(datetime.utcnow() - start_time).total_seconds(),
-                can_retry=True
-            )
-
-        logger.error(f"❌ AccountManager: Ошибка при отправке приглашения для цели {target.id}: {e_str}")
+        logger.error(
+            "❌ AccountManager: Исключение при отправке приглашения "
+            f"для цели {target.id}: type={type(e).__name__}, message={e_str!r}",
+            exc_info=True
+        )
         
         # Обновляем цель как неудачную
         target.status = TargetStatus.FAILED
@@ -215,6 +197,7 @@ async def _send_single_invite_via_account_manager(
         # Уведомляем Account Manager об ошибке
         if account_allocation:
             try:
+                e_low = e_str.lower()
                 am_error_type = _map_error_type_for_am(e_str) or ("blocked" if "blocked" in e_low else None)
                 if am_error_type:
                     await account_manager.handle_error(
