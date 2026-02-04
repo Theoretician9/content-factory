@@ -507,86 +507,98 @@ async def _process_batch_async(
                 continue
             
             try:
-                # ✅ ПЕРЕРАБОТАНО: Запрос аккаунта через Account Manager с учётом приоритета AM
-                if not current_account_allocation:
-                    allocation: Optional[Dict[str, Any]] = None
-                    # 1) Пробуем приоритетные аккаунты через preferred_account_id (allowed_account_ids или summary)
-                    while preferred_queue and allocation is None:
-                        pid = preferred_queue.pop(0)
-                        allocation = await account_manager.allocate_account(
-                            user_id=task.user_id,
-                            purpose="invite_campaign",
-                            preferred_account_id=pid,
-                            timeout_minutes=60,
-                            target_channel_id=task.settings.get('group_id') if task.settings else None,
-                        )
-                    # 2) Fallback только если кампания НЕ ограничена проверенными аккаунтами
-                    if allocation is None and not restrict_to_verified:
-                        allocation = await account_manager.allocate_account(
-                            user_id=task.user_id,
-                            purpose="invite_campaign",
-                            timeout_minutes=60,
-                            target_channel_id=task.settings.get('group_id') if task.settings else None,
-                        )
-                    if allocation is None and not restrict_to_verified:
-                        allocation = await account_manager.allocate_account(
-                            user_id=task.user_id,
-                            purpose="general",
-                            timeout_minutes=60,
-                            target_channel_id=task.settings.get('group_id') if task.settings else None,
-                        )
-                    current_account_allocation = allocation
-                    
+                # Для одной цели пробуем аккаунты по очереди, пока не отправим или не кончатся варианты
+                account_handled = False
+                while not account_handled:
+                    # ✅ Запрос аккаунта через Account Manager с учётом приоритета AM
                     if not current_account_allocation:
-                        if restrict_to_verified:
-                            logger.error(f"❌ AccountManager: Нет доступного аккаунта с правами приглашения для задачи {task.id} (кампания ограничена проверенными аккаунтами)")
-                            target.error_message = "Нет доступного аккаунта с правами приглашения. Используются только аккаунты, прошедшие проверку прав."
+                        allocation: Optional[Dict[str, Any]] = None
+                        # 1) Пробуем приоритетные аккаунты через preferred_account_id (allowed_account_ids или summary)
+                        while preferred_queue and allocation is None:
+                            pid = preferred_queue.pop(0)
+                            allocation = await account_manager.allocate_account(
+                                user_id=task.user_id,
+                                purpose="invite_campaign",
+                                preferred_account_id=pid,
+                                timeout_minutes=60,
+                                target_channel_id=task.settings.get('group_id') if task.settings else None,
+                            )
+                        # 2) Fallback только если кампания НЕ ограничена проверенными аккаунтами
+                        if allocation is None and not restrict_to_verified:
+                            allocation = await account_manager.allocate_account(
+                                user_id=task.user_id,
+                                purpose="invite_campaign",
+                                timeout_minutes=60,
+                                target_channel_id=task.settings.get('group_id') if task.settings else None,
+                            )
+                        if allocation is None and not restrict_to_verified:
+                            allocation = await account_manager.allocate_account(
+                                user_id=task.user_id,
+                                purpose="general",
+                                timeout_minutes=60,
+                                target_channel_id=task.settings.get('group_id') if task.settings else None,
+                            )
+                        current_account_allocation = allocation
+                        
+                        if not current_account_allocation:
+                            if restrict_to_verified:
+                                logger.error(f"❌ AccountManager: Нет доступного аккаунта с правами приглашения для задачи {task.id} (кампания ограничена проверенными аккаунтами)")
+                                target.error_message = "Нет доступного аккаунта с правами приглашения. Используются только аккаунты, прошедшие проверку прав."
+                            else:
+                                logger.error(f"❌ AccountManager: Нет доступных аккаунтов для задачи {task.id}")
+                                target.error_message = "Нет доступных аккаунтов через Account Manager"
+                            target.status = TargetStatus.PENDING
+                            target.attempt_count += 1
+                            target.updated_at = datetime.utcnow()
+                            db.commit()
+                            account_handled = True
+                            continue
+                        
+                        logger.info(f"✅ AccountManager: Выделен аккаунт {current_account_allocation['account_id']} для батча {batch_number}")
+                    
+                    # Проверка лимитов через Account Manager перед каждым приглашением
+                    rate_limit_check = await account_manager.check_rate_limit(
+                        current_account_allocation['account_id'],
+                        action_type="invite",
+                        target_channel_id=task.settings.get('group_id') if task.settings else None,
+                        allow_locked=True
+                    )
+                    
+                    if not rate_limit_check.get('allowed', False):
+                        details = rate_limit_check.get('details') or {}
+                        reason = rate_limit_check.get('reason') or details.get('error', 'unknown')
+                        cooldown_remaining = details.get('cooldown_remaining')
+                        if cooldown_remaining is not None:
+                            try:
+                                last_cooldown_remaining = int(cooldown_remaining)
+                            except (TypeError, ValueError):
+                                last_cooldown_remaining = 900
                         else:
-                            logger.error(f"❌ AccountManager: Нет доступных аккаунтов для задачи {task.id}")
-                            target.error_message = "Нет доступных аккаунтов через Account Manager"
-                        target.attempt_count += 1
+                            last_cooldown_remaining = 900
+                        logger.warning(
+                            f"⚠️ AccountManager: Лимиты превышены для аккаунта {current_account_allocation['account_id']}: {reason} | "
+                            f"details: hourly_used={details.get('hourly_used')}, hourly_limit={details.get('hourly_limit')}, "
+                            f"cooldown_remaining={cooldown_remaining}, daily_used={details.get('daily_used')}"
+                        )
+                        # Возвращаем аккаунт в очередь (попробуем другой или тот же позже) и освобождаем
+                        preferred_queue.append(current_account_allocation['account_id'])
+                        try:
+                            await account_manager.release_account(
+                                current_account_allocation['account_id'],
+                                {'invites_sent': 0, 'success': False, 'rate_limit_block': reason}
+                            )
+                            logger.info(f"🔓 AccountManager: Освобождён аккаунт {current_account_allocation['account_id']} после блокировки по лимиту ({reason}), пробуем другой аккаунт из очереди")
+                        except Exception as release_err:
+                            logger.error(f"❌ Ошибка освобождения аккаунта после rate limit: {release_err}")
+                        current_account_allocation = None
+                        target.status = TargetStatus.PENDING
+                        target.error_message = "rate_limited"
                         target.updated_at = datetime.utcnow()
                         db.commit()
-                        failed_count += 1
+                        # Продолжаем цикл while — попробуем следующий аккаунт из preferred_queue
                         continue
                     
-                    logger.info(f"✅ AccountManager: Выделен аккаунт {current_account_allocation['account_id']} для батча {batch_number}")
-                
-                # Проверка лимитов через Account Manager перед каждым приглашением
-                # allow_locked=True: аккаунт только что выделен этим воркером, lock не должен блокировать проверку
-                rate_limit_check = await account_manager.check_rate_limit(
-                    current_account_allocation['account_id'],
-                    action_type="invite",
-                    target_channel_id=task.settings.get('group_id') if task.settings else None,
-                    allow_locked=True
-                )
-                
-                if not rate_limit_check.get('allowed', False):
-                    details = rate_limit_check.get('details') or {}
-                    reason = rate_limit_check.get('reason') or details.get('error', 'unknown')
-                    logger.warning(
-                        f"⚠️ AccountManager: Лимиты превышены для аккаунта {current_account_allocation['account_id']}: {reason} | "
-                        f"details: hourly_used={details.get('hourly_used')}, hourly_limit={details.get('hourly_limit')}, "
-                        f"cooldown_remaining={details.get('cooldown_remaining')}, daily_used={details.get('daily_used')}"
-                    )
-                    # При блокировке по лимиту (hourly/cooldown/daily) освобождаем аккаунт — не держим лок на аккаунте, который не можем использовать
-                    try:
-                        await account_manager.release_account(
-                            current_account_allocation['account_id'],
-                            {'invites_sent': 0, 'success': False, 'rate_limit_block': reason}
-                        )
-                        logger.info(f"🔓 AccountManager: Освобождён аккаунт {current_account_allocation['account_id']} после блокировки по лимиту ({reason})")
-                    except Exception as release_err:
-                        logger.error(f"❌ Ошибка освобождения аккаунта после rate limit: {release_err}")
-                    current_account_allocation = None
-                    target.status = TargetStatus.PENDING
-                    target.error_message = "rate_limited"
-                    target.updated_at = datetime.utcnow()
-                    db.commit()
-                    # had_in_progress_soft НЕ ставим — это только для "in_progress" от отправки; при блоке по лимиту аккаунт освобождён
-                    continue
-                
-                # Выполнение приглашения через Account Manager
+                    # Выполнение приглашения через Account Manager
                 result = await _send_single_invite_via_account_manager(
                     task, target, current_account_allocation, account_manager, adapter, db
                 )
@@ -627,7 +639,9 @@ async def _process_batch_async(
                         target_channel_id=task.settings.get('group_id') if task.settings else None,
                         success=result.is_success
                     )
-                
+                account_handled = True
+                # конец while not account_handled
+            
             except Exception as e:
                 logger.error(f"Ошибка обработки цели {target.id}: {str(e)}")
                 failed_count += 1
@@ -663,8 +677,12 @@ async def _process_batch_async(
             f"обработано {processed_count}, успешно {success_count}, ошибок {failed_count}"
         )
         
-        # Строгая очередь: планируем следующий батч только после завершения текущего + пауза (несколько секунд)
+        # Строгая очередь: если нет доступного аккаунта (rate limit) — ставим следующий батч через cooldown, иначе через 5 с
         BATCH_PAUSE_SECONDS = 5
+        next_batch_countdown = BATCH_PAUSE_SECONDS
+        if processed_count == 0 and last_cooldown_remaining is not None and last_cooldown_remaining > 0:
+            next_batch_countdown = min(int(last_cooldown_remaining) + 1, 901)
+            logger.info(f"⏱️ Нет доступного аккаунта (лимит): следующий батч через {next_batch_countdown} с (cooldown_remaining={last_cooldown_remaining})")
         db.refresh(task)
         if task.status not in [TaskStatus.CANCELLED, TaskStatus.FAILED]:
             all_targets_ordered = db.query(InviteTarget).filter(InviteTarget.task_id == task.id).order_by(InviteTarget.id).all()
@@ -673,9 +691,9 @@ async def _process_batch_async(
                 next_target_ids = [all_targets_ordered[batch_number].id]
                 process_target_batch.apply_async(
                     (task.id, next_target_ids, batch_number + 1),
-                    countdown=BATCH_PAUSE_SECONDS
+                    countdown=next_batch_countdown
                 )
-                logger.info(f"⏱️ Запланирован батч {batch_number + 1}/{total_batches} через {BATCH_PAUSE_SECONDS} с")
+                logger.info(f"⏱️ Запланирован батч {batch_number + 1}/{total_batches} через {next_batch_countdown} с")
         
         return f"Батч {batch_number}: {processed_count} обработано, {success_count} успешно (через Account Manager)"
         
