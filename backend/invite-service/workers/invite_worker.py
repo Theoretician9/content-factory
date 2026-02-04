@@ -550,16 +550,28 @@ async def _process_batch_async(
                 )
                 
                 if not rate_limit_check.get('allowed', False):
+                    details = rate_limit_check.get('details') or {}
+                    reason = rate_limit_check.get('reason') or details.get('error', 'unknown')
                     logger.warning(
-                        f"⚠️ AccountManager: Лимиты превышены для аккаунта {current_account_allocation['account_id']}: {rate_limit_check.get('reason')}"
+                        f"⚠️ AccountManager: Лимиты превышены для аккаунта {current_account_allocation['account_id']}: {reason} | "
+                        f"details: hourly_used={details.get('hourly_used')}, hourly_limit={details.get('hourly_limit')}, "
+                        f"cooldown_remaining={details.get('cooldown_remaining')}, daily_used={details.get('daily_used')}"
                     )
-                    # Мягкая пауза: не освобождаем аккаунт, оставляем лок и ставим цель в ожидание
+                    # При блокировке по лимиту (hourly/cooldown/daily) освобождаем аккаунт — не держим лок на аккаунте, который не можем использовать
+                    try:
+                        await account_manager.release_account(
+                            current_account_allocation['account_id'],
+                            {'invites_sent': 0, 'success': False, 'rate_limit_block': reason}
+                        )
+                        logger.info(f"🔓 AccountManager: Освобождён аккаунт {current_account_allocation['account_id']} после блокировки по лимиту ({reason})")
+                    except Exception as release_err:
+                        logger.error(f"❌ Ошибка освобождения аккаунта после rate limit: {release_err}")
+                    current_account_allocation = None
                     target.status = TargetStatus.PENDING
                     target.error_message = "rate_limited"
                     target.updated_at = datetime.utcnow()
                     db.commit()
-                    had_in_progress_soft = True
-                    # Пропускаем попытку отправки сейчас, повтор будет позже
+                    # had_in_progress_soft НЕ ставим — это только для "in_progress" от отправки; при блоке по лимиту аккаунт освобождён
                     continue
                 
                 # Выполнение приглашения через Account Manager

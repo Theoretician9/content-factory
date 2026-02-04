@@ -228,6 +228,10 @@ class RateLimitingService:
                 daily_limit = limits['daily_limit']
             
             if action_type != ActionType.PARSE and daily_used >= daily_limit:
+                logger.info(
+                    f"📊 RATE_LIMIT Daily limit exceeded: account_id={account_id}, action_type={action_type}, "
+                    f"daily_used={daily_used}, daily_limit={daily_limit}"
+                )
                 return False, {
                     "error": "Daily limit exceeded",
                     "daily_used": daily_used,
@@ -283,6 +287,10 @@ class RateLimitingService:
                 time_passed = (now - last_action).total_seconds()
                 
                 if time_passed < cooldown_seconds:
+                    logger.info(
+                        f"📊 RATE_LIMIT Cooldown active: account_id={account_id}, action_type={action_type}, "
+                        f"cooldown_remaining={int(cooldown_seconds - time_passed)}s, last_action={last_action_time}"
+                    )
                     return False, {
                         "error": "Cooldown period active",
                         "cooldown_remaining": int(cooldown_seconds - time_passed),
