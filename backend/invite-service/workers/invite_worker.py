@@ -509,13 +509,16 @@ async def _process_batch_async(
             try:
                 # Для одной цели пробуем аккаунты по очереди, пока не отправим или не кончатся варианты
                 account_handled = False
+                tried_accounts_for_target: set = set()  # аккаунты, для которых уже получили rate limit по этой цели
                 while not account_handled:
                     # ✅ Запрос аккаунта через Account Manager с учётом приоритета AM
                     if not current_account_allocation:
                         allocation: Optional[Dict[str, Any]] = None
-                        # 1) Пробуем приоритетные аккаунты через preferred_account_id (allowed_account_ids или summary)
+                        # 1) Пробуем приоритетные аккаунты (пропускаем уже проверенные с rate limit)
                         while preferred_queue and allocation is None:
                             pid = preferred_queue.pop(0)
+                            if pid in tried_accounts_for_target:
+                                continue
                             allocation = await account_manager.allocate_account(
                                 user_id=task.user_id,
                                 purpose="invite_campaign",
@@ -580,22 +583,27 @@ async def _process_batch_async(
                             f"details: hourly_used={details.get('hourly_used')}, hourly_limit={details.get('hourly_limit')}, "
                             f"cooldown_remaining={cooldown_remaining}, daily_used={details.get('daily_used')}"
                         )
-                        # Возвращаем аккаунт в очередь (попробуем другой или тот же позже) и освобождаем
-                        preferred_queue.append(current_account_allocation['account_id'])
                         try:
                             await account_manager.release_account(
                                 current_account_allocation['account_id'],
                                 {'invites_sent': 0, 'success': False, 'rate_limit_block': reason}
                             )
-                            logger.info(f"🔓 AccountManager: Освобождён аккаунт {current_account_allocation['account_id']} после блокировки по лимиту ({reason}), пробуем другой аккаунт из очереди")
+                            logger.info(f"🔓 AccountManager: Освобождён аккаунт {current_account_allocation['account_id']} после блокировки по лимиту ({reason})")
                         except Exception as release_err:
                             logger.error(f"❌ Ошибка освобождения аккаунта после rate limit: {release_err}")
+                        aid = current_account_allocation['account_id']
                         current_account_allocation = None
                         target.status = TargetStatus.PENDING
                         target.error_message = "rate_limited"
                         target.updated_at = datetime.utcnow()
                         db.commit()
-                        # Продолжаем цикл while — попробуем следующий аккаунт из preferred_queue
+                        tried_accounts_for_target.add(aid)
+                        # Если в очереди ещё есть аккаунты, не попробованные для этой цели — возвращаем этот в конец и пробуем следующий
+                        if preferred_queue:
+                            preferred_queue.append(aid)
+                            logger.info(f"🔄 AccountManager: Пробуем другой аккаунт из очереди ({len(preferred_queue)} в очереди)")
+                            continue
+                        account_handled = True
                         continue
                     
                     # Выполнение приглашения через Account Manager
