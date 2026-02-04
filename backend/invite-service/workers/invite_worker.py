@@ -448,11 +448,11 @@ async def _process_batch_async(
         # Очередь кандидатов: только аккаунты, прошедшие check-admin-rights (allowed_account_ids),
         # иначе — из summary AM под конкретный паблик
         preferred_queue: List[str] = []
-        allowed_ids = None
-        if task.settings and isinstance(task.settings.get("allowed_account_ids"), list):
+        restrict_to_verified = False
+        if task.settings and "allowed_account_ids" in task.settings and isinstance(task.settings.get("allowed_account_ids"), list):
             allowed_ids = [str(aid).strip() for aid in task.settings["allowed_account_ids"] if aid]
-        if allowed_ids:
             preferred_queue = list(allowed_ids)
+            restrict_to_verified = True
             logger.info(f"🔒 Кампания ограничена аккаунтами, прошедшими проверку прав: {preferred_queue}")
         else:
             try:
@@ -519,7 +519,6 @@ async def _process_batch_async(
                             target_channel_id=task.settings.get('group_id') if task.settings else None,
                         )
                     # 2) Fallback только если кампания НЕ ограничена проверенными аккаунтами
-                    restrict_to_verified = bool(allowed_ids)
                     if allocation is None and not restrict_to_verified:
                         allocation = await account_manager.allocate_account(
                             user_id=task.user_id,
