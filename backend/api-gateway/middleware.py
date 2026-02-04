@@ -73,12 +73,12 @@ class RefreshTokenMiddleware(BaseHTTPMiddleware):
             try:
                 jwt.decode(token, self.jwt_secret, algorithms=["HS256"])
             except jwt.ExpiredSignatureError:
-                # Если JWT истек, генерируем новый
+                # Если JWT истек, генерируем новый (30 минут жизни, как в user-service)
                 try:
                     new_token = jwt.encode(
                         {
                             "sub": user_id.decode() if hasattr(user_id, 'decode') else str(user_id),
-                            "exp": datetime.utcnow() + timedelta(minutes=15)
+                            "exp": datetime.utcnow() + timedelta(minutes=30)
                         },
                         self.jwt_secret,
                         algorithm="HS256"

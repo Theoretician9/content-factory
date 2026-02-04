@@ -266,11 +266,11 @@ async def refresh_token(request: Request):
         logger.error(json.dumps({"event": "redis_error", "ip": request.client.host, "error": str(e)}))
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
         
-    # Generate new JWT token
+    # Generate new JWT token (30 минут жизни, как в user-service)
     new_token = jwt.encode(
         {
             "sub": user_id,
-            "exp": datetime.utcnow() + timedelta(minutes=15)
+            "exp": datetime.utcnow() + timedelta(minutes=30)
         },
         JWT_SECRET_KEY,
         algorithm="HS256"
