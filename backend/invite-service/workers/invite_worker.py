@@ -444,6 +444,8 @@ async def _process_batch_async(
         failed_count = 0
         current_account_allocation = None
         had_in_progress_soft = False
+        # Если батч завершился из-за rate limit без отправки — планируем следующий батч через cooldown_remaining
+        last_cooldown_remaining: Optional[int] = None
 
         # Очередь кандидатов: только аккаунты, прошедшие check-admin-rights (allowed_account_ids),
         # иначе — из summary AM под конкретный паблик
