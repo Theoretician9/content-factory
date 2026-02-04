@@ -1,6 +1,16 @@
 """
 Rate Limiting System
-Управление лимитами Telegram API и предотвращение нарушений
+Управление лимитами Telegram API и предотвращение нарушений.
+
+Лимиты для приглашений (INVITE):
+- daily_limit: 30 в день на аккаунт
+- hourly_limit: 2 в час
+- per_channel_daily: 15 в день на один канал/паблик
+- cooldown_seconds: 900 (15 минут между приглашениями)
+- burst_limit: 3 подряд, burst_cooldown: 900 с
+
+Данные хранятся в Redis: db = REDIS_DB + 3 (при REDIS_DB=0 это DB 3).
+Очистка только rate-limit: redis-cli -n 3 FLUSHDB (если REDIS_DB=0).
 """
 import logging
 import asyncio
