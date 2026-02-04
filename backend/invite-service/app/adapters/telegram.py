@@ -189,8 +189,18 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
         
         start_time = datetime.utcnow()
         
-        # Проверка возможности отправки
-        if not account.can_send_invite():
+        # Проверка возможности отправки (если аккаунт поддерживает локальные лимиты).
+        # Для аккаунтов, пришедших из Account Manager, локальные счётчики могут отсутствовать,
+        # в этом случае полагаемся только на лимиты Integration Service / Account Manager.
+        can_send = True
+        try:
+            can_send = account.can_send_invite()
+        except AttributeError:
+            logger.info(
+                "🔍 TelegramAdapter: account.can_send_invite отсутствует, "
+                "используем только лимиты Account Manager/Integration Service"
+            )
+        if not can_send:
             return InviteResult(
                 status=InviteResultStatus.RATE_LIMITED,
                 error_message="Аккаунт достиг лимита приглашений",
@@ -283,8 +293,14 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                 platform_response=response
             )
             
-            # Обновление статистики аккаунта
-            await self.update_account_stats(account, result)
+            # Обновление статистики аккаунта (если у аккаунта есть локальные счётчики).
+            try:
+                await self.update_account_stats(account, result)
+            except AttributeError:
+                logger.info(
+                    "🔍 TelegramAdapter: пропускаем локальное обновление статистики "
+                    "для аккаунта без счётчиков (лимитами управляет Account Manager)"
+                )
             
             return result
             
@@ -341,8 +357,16 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
         
         start_time = datetime.utcnow()
         
-        # Проверка возможности отправки
-        if not account.can_send_message():
+        # Проверка возможности отправки сообщения (если аккаунт поддерживает локальные лимиты).
+        can_send_msg = True
+        try:
+            can_send_msg = account.can_send_message()
+        except AttributeError:
+            logger.info(
+                "🔍 TelegramAdapter: account.can_send_message отсутствует, "
+                "используем только лимиты Account Manager/Integration Service"
+            )
+        if not can_send_msg:
             return InviteResult(
                 status=InviteResultStatus.RATE_LIMITED,
                 error_message="Аккаунт достиг лимита сообщений",
