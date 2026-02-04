@@ -509,14 +509,15 @@ async def _process_batch_async(
             try:
                 # Для одной цели пробуем аккаунты по очереди, пока не отправим или не кончатся варианты
                 account_handled = False
-                tried_accounts_for_target: set = set()  # аккаунты, для которых уже получили rate limit по этой цели
+                tried_accounts_for_target: set = set()
+                queue_for_target: List[str] = list(preferred_queue)  # копия очереди для этой цели, не мутируем preferred_queue
                 while not account_handled:
                     # ✅ Запрос аккаунта через Account Manager с учётом приоритета AM
                     if not current_account_allocation:
                         allocation: Optional[Dict[str, Any]] = None
-                        # 1) Пробуем приоритетные аккаунты (пропускаем уже проверенные с rate limit)
-                        while preferred_queue and allocation is None:
-                            pid = preferred_queue.pop(0)
+                        # 1) Пробуем приоритетные аккаунты (пропускаем уже проверенные с rate limit по этой цели)
+                        while queue_for_target and allocation is None:
+                            pid = queue_for_target.pop(0)
                             if pid in tried_accounts_for_target:
                                 continue
                             allocation = await account_manager.allocate_account(
@@ -598,10 +599,10 @@ async def _process_batch_async(
                         target.updated_at = datetime.utcnow()
                         db.commit()
                         tried_accounts_for_target.add(aid)
-                        # Если в очереди ещё есть аккаунты, не попробованные для этой цели — возвращаем этот в конец и пробуем следующий
-                        if preferred_queue:
-                            preferred_queue.append(aid)
-                            logger.info(f"🔄 AccountManager: Пробуем другой аккаунт из очереди ({len(preferred_queue)} в очереди)")
+                        queue_for_target.append(aid)
+                        # Если в очереди ещё есть непробованные для этой цели — пробуем следующий
+                        if any(pid not in tried_accounts_for_target for pid in queue_for_target):
+                            logger.info(f"🔄 AccountManager: Пробуем другой аккаунт из очереди ({len(queue_for_target)} в очереди)")
                             continue
                         account_handled = True
                         continue
