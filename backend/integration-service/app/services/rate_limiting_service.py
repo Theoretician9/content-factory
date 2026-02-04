@@ -72,7 +72,8 @@ class RateLimitingService:
     def _account_available_for_action(self, account, allow_locked: bool = False) -> bool:
         """
         Доступен ли аккаунт для выполнения действия.
-        При allow_locked=True не считаем locked причиной недоступности (вызывающий только что выделил аккаунт).
+        ВНИМАНИЕ: DB-флаг locked больше НЕ используется как причина недоступности.
+        Блокировки аккаунтов реализованы только через Redis locks в AccountManager.
         """
         if not account.is_active or account.status != 'active':
             logger.info(
@@ -98,9 +99,17 @@ class RateLimitingService:
         except Exception as e:
             logger.warning(f"🔍 RATE_LIMIT: datetime check error for account {account.id}: {e}")
             return False
-        if not allow_locked and getattr(account, 'locked', False):
-            logger.info(f"🔍 RATE_LIMIT: Account {account.id} not available: locked=True, allow_locked={allow_locked}")
-            return False
+
+        # DB-поле locked считаем устаревшим: оно могло быть выставлено старой версией кода
+        # и не отражает актуальные Redis-локи. Для диагностики просто логируем его значение,
+        # но НЕ используем как причину отказа.
+        locked_flag = getattr(account, 'locked', None)
+        if locked_flag:
+            logger.info(
+                f"🔍 RATE_LIMIT: Account {account.id} has locked={locked_flag} in DB, "
+                f"но DB-флаг игнорируется, используем только Redis locks в AccountManager"
+            )
+
         return True
 
     async def check_rate_limit(
