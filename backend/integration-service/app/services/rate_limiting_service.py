@@ -371,7 +371,28 @@ class RateLimitingService:
         try:
             now = datetime.utcnow()
             
-            # 1. Обновляем дневные лимиты в базе данных (только для действий записи, не для парсинга)
+            # Неудачные попытки не влияют на лимиты: не обновляем daily/hourly/cooldown/burst.
+            # Cooldown засчитывается только для удачной попытки.
+            if not success:
+                # Только логируем и сбрасываем error_count не трогаем (оставляем как есть)
+                await self.log_service.log_integration_action(
+                    session=session,
+                    user_id=0,
+                    integration_type="telegram",
+                    action=f"rate_limit_{action_type}_recorded",
+                    status="error",
+                    details={
+                        "account_id": str(account_id),
+                        "action_type": action_type,
+                        "target_channel_id": target_channel_id,
+                        "success": False,
+                        "note": "failed attempt, limits not updated"
+                    }
+                )
+                logger.debug(f"📊 Recorded failed {action_type} for account {account_id}, limits unchanged")
+                return True
+            
+            # 1. Обновляем дневные лимиты в базе данных (только при успехе)
             update_values = {}
             
             if action_type == ActionType.INVITE:
@@ -399,19 +420,15 @@ class RateLimitingService:
             elif action_type == ActionType.ADD_CONTACT:
                 update_values['contacts_today'] = TelegramSession.contacts_today + 1
             
-            # Для парсинга не обновляем дневные лимиты в БД, так как это чтение данных
-            # Но обновляем last_used_at для всех типов действий
             if action_type != ActionType.PARSE:
                 update_values['last_used_at'] = now
             else:
-                # Для парсинга только обновляем last_used_at без изменения счетчиков
                 update_values['last_used_at'] = now
             
-            if success:
-                # Сбрасываем счетчик ошибок при успешном действии
-                update_values['error_count'] = 0
+            # Сбрасываем счетчик ошибок при успешном действии
+            update_values['error_count'] = 0
             
-            # Применяем обновления в базе данных (только если есть что обновлять)
+            # Применяем обновления в базе данных
             if update_values:
                 await session.execute(
                     update(TelegramSession)
@@ -420,12 +437,12 @@ class RateLimitingService:
                 )
                 await session.commit()
             
-            # 2. Обновляем часовые лимиты в Redis
+            # 2. Обновляем часовые лимиты в Redis (только при успехе)
             hourly_key = f"hourly:{account_id}:{action_type}:{now.strftime('%Y-%m-%d-%H')}"
             self.redis_client.incr(hourly_key)
-            self.redis_client.expire(hourly_key, 3600)  # Истекает через час
+            self.redis_client.expire(hourly_key, 3600)
             
-            # 3. Обновляем cooldown
+            # 3. Обновляем cooldown (только при успехе)
             cooldown_key = f"cooldown:{account_id}:{action_type}"
             limits = self.telegram_limits[action_type]
             self.redis_client.setex(
@@ -434,7 +451,7 @@ class RateLimitingService:
                 now.isoformat()
             )
             
-            # 4. Обновляем burst tracking
+            # 4. Обновляем burst tracking (только при успехе)
             burst_key = f"burst:{account_id}:{action_type}"
             burst_data = self.redis_client.get(burst_key)
             
@@ -442,7 +459,6 @@ class RateLimitingService:
                 burst_info = json.loads(burst_data)
                 burst_start = datetime.fromisoformat(burst_info['start_time'])
                 
-                # Если прошло много времени, начинаем новый burst
                 if (now - burst_start).total_seconds() > limits['burst_cooldown']:
                     burst_info = {'count': 1, 'start_time': now.isoformat()}
                 else:
