@@ -152,14 +152,24 @@ class RateLimitingService:
             if not limits:
                 return False, {"error": f"Unknown action type: {action_type}"}
             
-            now = datetime.utcnow()
+            # Всегда работаем с timezone-aware UTC, чтобы избежать ошибок
+            # "can't compare offset-naive and offset-aware datetimes"
+            now = datetime.now(timezone.utc)
             checks = {}
             
             # 0. Ленивый учёт устаревших дневных счётчиков: если reset_at в прошлом (сброс не выполнялся),
             #    считаем дневное использование нулём и сбрасываем счётчики в БД для этого аккаунта,
             #    чтобы не блокировать аккаунты навсегда (например, когда Celery Beat не запущен или аккаунт давно не использовался).
             reset_at_val = getattr(account, 'reset_at', None)
-            counters_stale = reset_at_val is not None and now > reset_at_val
+            reset_at = None
+            if isinstance(reset_at_val, datetime):
+                # Приводим reset_at к UTC-aware datetime
+                if reset_at_val.tzinfo is None:
+                    reset_at = reset_at_val.replace(tzinfo=timezone.utc)
+                else:
+                    reset_at = reset_at_val.astimezone(timezone.utc)
+
+            counters_stale = reset_at is not None and now > reset_at
             if counters_stale:
                 next_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
                 await session.execute(
@@ -253,7 +263,17 @@ class RateLimitingService:
             last_action_time = self.redis_client.get(cooldown_key)
             
             if last_action_time:
-                last_action = datetime.fromisoformat(last_action_time)
+                try:
+                    parsed = datetime.fromisoformat(last_action_time)
+                    if parsed.tzinfo is None:
+                        last_action = parsed.replace(tzinfo=timezone.utc)
+                    else:
+                        last_action = parsed.astimezone(timezone.utc)
+                except Exception:
+                    # Если формат некорректный или неожиданный — игнорируем cooldown
+                    last_action = None
+
+            if last_action_time and last_action is not None:
                 cooldown_seconds = limits['cooldown_seconds']
                 time_passed = (now - last_action).total_seconds()
                 
@@ -274,10 +294,29 @@ class RateLimitingService:
             burst_key = f"burst:{account_id}:{action_type}"
             burst_data = self.redis_client.get(burst_key)
             
+            burst_info = None
             if burst_data:
-                burst_info = json.loads(burst_data)
+                try:
+                    tmp_info = json.loads(burst_data)
+                    burst_start_raw = tmp_info.get('start_time')
+                    if burst_start_raw:
+                        parsed_start = datetime.fromisoformat(burst_start_raw)
+                        if parsed_start.tzinfo is None:
+                            burst_start = parsed_start.replace(tzinfo=timezone.utc)
+                        else:
+                            burst_start = parsed_start.astimezone(timezone.utc)
+                    else:
+                        burst_start = None
+                    burst_info = {
+                        'count': tmp_info.get('count', 0),
+                        'start_time': burst_start
+                    }
+                except Exception:
+                    burst_info = None
+            
+            if burst_info and burst_info['start_time'] is not None:
                 burst_count = burst_info.get('count', 0)
-                burst_start = datetime.fromisoformat(burst_info.get('start_time'))
+                burst_start = burst_info['start_time']
                 burst_limit = limits['burst_limit']
                 burst_cooldown = limits['burst_cooldown']
                 
@@ -293,7 +332,7 @@ class RateLimitingService:
                         }
             
             checks['burst'] = {
-                'count': burst_info.get('count', 0) if burst_data else 0,
+                'count': burst_info.get('count', 0) if burst_info else 0,
                 'limit': limits['burst_limit'],
                 'within_limit': True
             }
