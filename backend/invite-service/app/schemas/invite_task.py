@@ -38,6 +38,8 @@ class TaskSettingsSchema(BaseModel):
     # Настройки для Telegram приглашений
     group_id: Optional[str] = Field(None, description="ID группы/канала для приглашений")
     invite_type: Optional[str] = Field("group_invite", description="Тип приглашения")
+    # Только аккаунты, прошедшие check-admin-rights (могут приглашать в эту группу)
+    allowed_account_ids: Optional[List[str]] = Field(None, description="Список account_id, прошедших проверку прав администратора")
     
     class Config:
         extra = "allow"  # Позволяет дополнительные поля

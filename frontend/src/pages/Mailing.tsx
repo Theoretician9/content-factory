@@ -422,7 +422,9 @@ const Mailing = () => {
           fallback_to_messages: createForm.settings.fallback_to_messages,
           // Добавляем group_id для проверки админских прав
           group_id: calculatedGroupId,
-          invite_type: createForm.task_type === 'invite_to_group' ? 'group_invite' : 'message'
+          invite_type: createForm.task_type === 'invite_to_group' ? 'group_invite' : 'message',
+          // Ограничиваем кампанию только аккаунтами, прошедшими check-admin-rights
+          allowed_account_ids: adminCheckResult?.ready_accounts?.map((a: any) => a.account_id) ?? []
         }
       });
 
