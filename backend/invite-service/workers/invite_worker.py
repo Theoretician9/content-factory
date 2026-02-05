@@ -686,12 +686,18 @@ async def _process_batch_async(
             f"обработано {processed_count}, успешно {success_count}, ошибок {failed_count}"
         )
         
-        # Строгая очередь: если нет доступного аккаунта (rate limit) — ставим следующий батч через cooldown, иначе через 5 с
+        # Строгая очередь: если был rate limit (есть last_cooldown_remaining) —
+        # следующий батч ставим через cooldown, а не «каждые 5 секунд»
         BATCH_PAUSE_SECONDS = 5
         next_batch_countdown = BATCH_PAUSE_SECONDS
-        if processed_count == 0 and last_cooldown_remaining is not None and last_cooldown_remaining > 0:
+        if last_cooldown_remaining is not None and last_cooldown_remaining > 0:
+            # Даже если в этом батче были успешные приглашения, но хотя бы один аккаунт упёрся в cooldown,
+            # даём аккаунту(ам) отстояться, чтобы не крутить бесконечные проверки лимитов.
             next_batch_countdown = min(int(last_cooldown_remaining) + 1, 901)
-            logger.info(f"⏱️ Нет доступного аккаунта (лимит): следующий батч через {next_batch_countdown} с (cooldown_remaining={last_cooldown_remaining})")
+            logger.info(
+                f"⏱️ Нет доступного аккаунта или достигнут cooldown: "
+                f"следующий батч через {next_batch_countdown} с (cooldown_remaining={last_cooldown_remaining})"
+            )
         db.refresh(task)
         if task.status not in [TaskStatus.CANCELLED, TaskStatus.FAILED]:
             all_targets_ordered = db.query(InviteTarget).filter(InviteTarget.task_id == task.id).order_by(InviteTarget.id).all()
