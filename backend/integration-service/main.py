@@ -22,6 +22,11 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+
+# Урезаем шум от Telethon (частые внутренние flood wait'ы и reconnect'ы)
+logging.getLogger("telethon.client.users").setLevel(logging.WARNING)
+logging.getLogger("telethon.client.updates").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
