@@ -5,7 +5,7 @@ API endpoints для Telegram приглашений через Integration Serv
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from telethon.errors import FloodWaitError, PeerFloodError, UserNotMutualContactError, ChatWriteForbiddenError
 # Убрал PrivacyRestrictedError - не существует в этой версии telethon
 from telethon.tl.functions.channels import InviteToChannelRequest
@@ -1028,6 +1028,54 @@ async def get_user_telegram_accounts(
     user_id = await get_user_id_from_request(request)
     
     accounts = await telegram_service.get_user_sessions(session, user_id, active_only=True)
+
+    # 🔄 Ленивая нормализация статусов аккаунтов и расчёт remaining-времени
+    now = datetime.utcnow()
+    normalized = []
+    for acc in accounts:
+        status_val = str(getattr(acc, "status", "active") or "active").lower()
+        flood_until = getattr(acc, "flood_wait_until", None)
+        blocked_until = getattr(acc, "blocked_until", None)
+        need_update = False
+        update_values = {}
+
+        # Если аккаунт отмечен как flood_wait, но время уже прошло — переводим в active
+        if status_val == "flood_wait":
+            if not flood_until or (isinstance(flood_until, datetime) and flood_until <= now):
+                update_values["status"] = "active"
+                update_values["flood_wait_until"] = None
+                need_update = True
+
+        # Если аккаунт отмечен как blocked, но время блокировки уже прошло — тоже переводим в active
+        if status_val == "blocked" and blocked_until and isinstance(blocked_until, datetime):
+            if blocked_until <= now:
+                update_values["status"] = "active"
+                update_values["blocked_until"] = None
+                need_update = True
+
+        if need_update:
+            await session.execute(
+                update(TelegramSession)
+                .where(TelegramSession.id == acc.id)
+                .values(**update_values)
+            )
+            await session.commit()
+            for k, v in update_values.items():
+                setattr(acc, k, v)
+            status_val = "active"
+            flood_until = getattr(acc, "flood_wait_until", None)
+            blocked_until = getattr(acc, "blocked_until", None)
+            logger.info(f"🔄 TELEGRAM_ACCOUNTS: Нормализован статус аккаунта {acc.id} в БД: {update_values}")
+
+        flood_remaining = None
+        if flood_until and isinstance(flood_until, datetime) and flood_until > now:
+            flood_remaining = int((flood_until - now).total_seconds())
+
+        blocked_remaining = None
+        if blocked_until and isinstance(blocked_until, datetime) and blocked_until > now:
+            blocked_remaining = int((blocked_until - now).total_seconds())
+
+        normalized.append((acc, status_val, flood_remaining, blocked_remaining))
     
     return [
         {
@@ -1036,15 +1084,21 @@ async def get_user_telegram_accounts(
             "phone": acc.phone,
             "first_name": getattr(acc, 'first_name', None),
             "last_name": getattr(acc, 'last_name', None),
-            "status": "active" if acc.is_active else "inactive",
+            # Реальный статус аккаунта из БД (после нормализации)
+            "status": status_val,
+            "is_active": acc.is_active,
             "created_at": acc.created_at,
             "last_activity": acc.updated_at,
+            "flood_wait_until": getattr(acc, "flood_wait_until", None),
+            "blocked_until": getattr(acc, "blocked_until", None),
+            "flood_wait_remaining_seconds": flood_remaining,
+            "blocked_remaining_seconds": blocked_remaining,
             "daily_limits": {
                 "invites": 50,
                 "messages": 40
             }
         }
-        for acc in accounts
+        for acc, status_val, flood_remaining, blocked_remaining in normalized
     ]
 
 
