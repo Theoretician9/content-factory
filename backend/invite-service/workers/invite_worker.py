@@ -692,17 +692,48 @@ async def _process_batch_async(
             f"обработано {processed_count}, успешно {success_count}, ошибок {failed_count}"
         )
         
-        # Строгая очередь: если был rate limit (есть last_cooldown_remaining) —
-        # следующий батч ставим через cooldown, а не «каждые 5 секунд»
+        # Строгая очередь батчей:
+        # 1) Если Account Manager / RateLimitingService вернули cooldown_remaining —
+        #    ОРИЕНТИРУЕМСЯ НА НЕГО (он жёстче любых локальных задержек).
+        # 2) Если cooldown_remaining нет, но в батче были успешные приглашения —
+        #    включаем защиту от спама на уровне воркера: между УСПЕШНЫМИ приглашениями
+        #    выдерживаем паузу не меньше, чем delay_between_invites из настроек задачи
+        #    (а если он не задан — используем безопасный дефолт).
         BATCH_PAUSE_SECONDS = 5
         next_batch_countdown = BATCH_PAUSE_SECONDS
+
+        # Защита на уровне Account Manager / RateLimitingService (приоритетная)
         if last_cooldown_remaining is not None and last_cooldown_remaining > 0:
             # Даже если в этом батче были успешные приглашения, но хотя бы один аккаунт упёрся в cooldown,
             # даём аккаунту(ам) отстояться, чтобы не крутить бесконечные проверки лимитов.
             next_batch_countdown = min(int(last_cooldown_remaining) + 1, 901)
             logger.info(
-                f"⏱️ Нет доступного аккаунта или достигнут cooldown: "
+                f"⏱️ Нет доступного аккаунта или достигнут cooldown (из Account Manager): "
                 f"следующий батч через {next_batch_countdown} с (cooldown_remaining={last_cooldown_remaining})"
+            )
+        # Локальная защита от спама на уровне воркера:
+        # даже если Account Manager решил, что можно продолжать, после ЛЮБОГО успешного инвайта
+        # мы не запускаем следующий батч быстрее, чем через delay_between_invites.
+        elif success_count > 0:
+            delay_between_invites = None
+            try:
+                if task.settings and isinstance(task.settings.get("delay_between_invites"), (int, float)):
+                    delay_between_invites = int(task.settings.get("delay_between_invites") or 0)
+            except Exception:
+                delay_between_invites = None
+
+            # Безопасный дефолт, если в задаче не задано ничего вменяемого.
+            if delay_between_invites is None or delay_between_invites <= 0:
+                delay_between_invites = 60
+
+            # Никогда не делаем паузу меньше, чем указано в настройках / дефолте.
+            if delay_between_invites > next_batch_countdown:
+                next_batch_countdown = delay_between_invites
+
+            logger.info(
+                f"⏱️ Защита от спама воркера: в батче были успешные инвайты, "
+                f"следующий батч через {next_batch_countdown} с "
+                f"(delay_between_invites={delay_between_invites})"
             )
         db.refresh(task)
         if task.status not in [TaskStatus.CANCELLED, TaskStatus.FAILED]:
