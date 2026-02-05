@@ -556,6 +556,26 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                         can_retry=False
                     )
         
+        elif error.response.status_code == 500:
+            # Специальная обработка invite_failed, когда пользователь уже в слишком большом количестве каналов/групп.
+            # Это не техническая, а бизнес‑ошибка, повторные попытки бессмысленны и только засоряют логи.
+            detail = error_data.get("detail", {})
+            
+            if isinstance(detail, dict):
+                error_type = detail.get("error", "unknown")
+                message = str(detail.get("message", "") or "")
+                
+                # Сообщение от Telethon: "One of the users you tried to add is already in too many channels/supergroups"
+                if error_type == "invite_failed" and "too many channels/supergroups" in message.lower():
+                    return InviteResult(
+                        status=InviteResultStatus.FAILED,
+                        error_message=message or "Пользователь уже состоит в слишком большом количестве каналов/групп",
+                        error_code="invite_failed_too_many_channels",
+                        execution_time=execution_time,
+                        account_id=account.account_id,
+                        can_retry=False
+                    )
+        
         # Общая ошибка
         return InviteResult(
             status=InviteResultStatus.FAILED,
