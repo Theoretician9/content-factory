@@ -607,10 +607,10 @@ async def _process_batch_async(
                         account_handled = True
                         continue
                     
-                    # Выполнение приглашения через Account Manager
-                result = await _send_single_invite_via_account_manager(
-                    task, target, current_account_allocation, account_manager, adapter, db
-                )
+                    # Выполнение приглашения через Account Manager (попадаем сюда ТОЛЬКО если rate_limit_check.allowed == True)
+                    result = await _send_single_invite_via_account_manager(
+                        task, target, current_account_allocation, account_manager, adapter, db
+                    )
                 
                 # Не считаем мягкий in_progress как ошибку и не увеличиваем processed_count — цель остаётся PENDING для повтора
                 msg_low = (result.error_message or "").lower()
