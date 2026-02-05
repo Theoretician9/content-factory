@@ -16,6 +16,11 @@ interface TelegramAccount {
   phone: string;
   session_metadata: any;
   is_active: boolean;
+  status?: string;
+  flood_wait_until?: string | null;
+  blocked_until?: string | null;
+  flood_wait_remaining_seconds?: number | null;
+  blocked_remaining_seconds?: number | null;
 }
 
 interface IntegrationLog {
@@ -110,6 +115,43 @@ const Integrations = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  const getTelegramAccountStatusInfo = (account: TelegramAccount) => {
+    const status = (account.status || '').toLowerCase();
+    const floodLeft = account.flood_wait_remaining_seconds || 0;
+    const blockLeft = account.blocked_remaining_seconds || 0;
+
+    if (!account.is_active || status === 'disabled') {
+      return {
+        text: 'Отключен',
+        dotClass: 'bg-gray-400',
+        pillClass: 'bg-gray-100 text-gray-800',
+      };
+    }
+
+    if ((status === 'flood_wait' || floodLeft > 0)) {
+      const mins = Math.max(1, Math.ceil(floodLeft / 60));
+      return {
+        text: `Флуд-ожидание (~${mins} мин)`,
+        dotClass: 'bg-yellow-500',
+        pillClass: 'bg-yellow-100 text-yellow-800',
+      };
+    }
+
+    if ((status === 'blocked' || blockLeft > 0)) {
+      return {
+        text: 'Временный блок',
+        dotClass: 'bg-red-500',
+        pillClass: 'bg-red-100 text-red-800',
+      };
+    }
+
+    return {
+      text: 'Активен',
+      dotClass: 'bg-green-500',
+      pillClass: 'bg-green-100 text-green-800',
+    };
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -1040,31 +1082,44 @@ const Integrations = () => {
                         <p className="text-gray-500">Нет подключенных аккаунтов</p>
                       ) : (
                         <div className="space-y-3">
-                          {telegramAccounts.map(account => (
-                            <div key={account.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                              <div className="flex items-center gap-3">
-                                <div className={`w-3 h-3 rounded-full ${account.is_active ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                <div>
-                                  <div className="font-medium">{account.phone}</div>
-                                  <div className="text-sm text-gray-500">
-                                    Подключен: {formatDate(account.created_at)}
+                          {telegramAccounts.map(account => {
+                            const statusInfo = getTelegramAccountStatusInfo(account);
+                            return (
+                              <div key={account.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-3 h-3 rounded-full ${statusInfo.dotClass}`}></div>
+                                  <div>
+                                    <div className="font-medium">{account.phone}</div>
+                                    <div className="text-sm text-gray-500">
+                                      Подключен: {formatDate(account.created_at)}
+                                    </div>
                                   </div>
                                 </div>
+                                <div className="flex flex-col items-end gap-1">
+                                  <span className={`px-2 py-1 text-xs rounded-full ${statusInfo.pillClass}`}>
+                                    {statusInfo.text}
+                                  </span>
+                                  {account.flood_wait_until && (
+                                    <span className="text-[11px] text-gray-500">
+                                      Флуд до: {new Date(account.flood_wait_until).toLocaleString('ru-RU')}
+                                    </span>
+                                  )}
+                                  {!account.flood_wait_until && account.blocked_until && (
+                                    <span className="text-[11px] text-gray-500">
+                                      Блок до: {new Date(account.blocked_until).toLocaleString('ru-RU')}
+                                    </span>
+                                  )}
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => handleDisconnectAccount(account.id)}
+                                  >
+                                    Отключить
+                                  </Button>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className={`px-2 py-1 text-xs rounded-full ${account.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                  {account.is_active ? 'Активен' : 'Неактивен'}
-                                </span>
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => handleDisconnectAccount(account.id)}
-                                >
-                                  Отключить
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
