@@ -31,6 +31,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // Последняя активность пользователя (для скользящего окна 30 минут)
+  const [lastActivity, setLastActivity] = useState<number>(() => Date.now());
   const navigate = useNavigate();
 
   // Объявляем logout ПЕРЕД его использованием
@@ -63,6 +65,18 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearError = useCallback(() => {
     setError('');
+  }, []);
+
+  // Трекаем активность пользователя на странице
+  useEffect(() => {
+    const handleActivity = () => {
+      setLastActivity(Date.now());
+    };
+    const events = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
+    events.forEach((event) => window.addEventListener(event, handleActivity));
+    return () => {
+      events.forEach((event) => window.removeEventListener(event, handleActivity));
+    };
   }, []);
 
   const fetchProfile = useCallback(async () => {
@@ -105,6 +119,14 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const interval = setInterval(async () => {
       const refreshToken = localStorage.getItem('refresh_token');
       if (refreshToken) {
+        // Обновляем токен только если была активность за последние 30 минут
+        const now = Date.now();
+        const idleMs = now - lastActivity;
+        // Если пользователь бездействует > 30 минут, не продлеваем сессию автоматически
+        if (idleMs > 30 * 60 * 1000) {
+          return;
+        }
+
         try {
           const res = await fetch('/api/auth/refresh', {
             method: 'POST',
@@ -127,7 +149,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }, 10 * 60 * 1000); // 10 минут
     return () => clearInterval(interval);
-  }, [logout]); // Добавляем logout в зависимости
+  }, [logout, lastActivity]); // Учитываем последнюю активность
 
   return (
     <UserContext.Provider value={{ user, loading, error, logout, refreshProfile: fetchProfile, clearError }}>

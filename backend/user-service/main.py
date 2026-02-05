@@ -59,8 +59,10 @@ except Exception as e:
     raise RuntimeError(f"Не удалось получить JWT секрет из Vault: {e}")
 
 ALGORITHM = "HS256"
+# Время жизни access токена фиксировано 30 минут
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-REFRESH_TOKEN_EXPIRE_DAYS = 30
+# Время жизни refresh токена (и, по сути, всей сессии) — 30 минут неактивности
+REFRESH_TOKEN_EXPIRE_MINUTES = 30
 
 # Используем bcrypt_sha256 (решает ограничение 72 байт у bcrypt) с fallback на bcrypt для совместимости
 pwd_context = CryptContext(
@@ -182,8 +184,8 @@ def create_refresh_token(user_id: int) -> str:
     
     if redis_client:
         try:
-            # Сохраняем в Redis с TTL в секундах
-            ttl_seconds = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+            # Сохраняем в Redis с TTL в секундах (30 минут)
+            ttl_seconds = REFRESH_TOKEN_EXPIRE_MINUTES * 60
             redis_client.setex(f"refresh_token:{refresh_token}", ttl_seconds, str(user_id))
             logger.info(f"🔑 Refresh токен создан для пользователя {user_id}")
         except Exception as e:

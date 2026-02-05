@@ -262,10 +262,18 @@ async def refresh_token(request: Request):
         if not user_id:
             logger.warning(json.dumps({"event": "invalid_refresh_token", "ip": request.client.host}))
             raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+        # Продлеваем жизнь refresh токена (скользящее окно 30 минут неактивности)
+        try:
+            redis_client.expire(f"refresh_token:{refresh_token}", 30 * 60)
+        except Exception as e:
+            logger.error(json.dumps({"event": "redis_expire_error", "ip": request.client.host, "error": str(e)}))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(json.dumps({"event": "redis_error", "ip": request.client.host, "error": str(e)}))
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
-        
+
     # Generate new JWT token (30 минут жизни, как в user-service)
     new_token = jwt.encode(
         {
@@ -340,7 +348,8 @@ async def login(request: Request, body: LoginRequest):
                 response.set_cookie(
                     key="refresh_token",
                     value=response_data["refresh_token"],
-                    max_age=30 * 24 * 60 * 60,  # 30 дней
+                    # 30 минут жизни refresh токена (скользящее окно неактивности)
+                    max_age=30 * 60,
                     httponly=True,
                     secure=True,
                     samesite="strict",
