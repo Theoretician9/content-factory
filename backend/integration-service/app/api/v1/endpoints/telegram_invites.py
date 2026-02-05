@@ -10,6 +10,7 @@ from telethon.errors import FloodWaitError, PeerFloodError, UserNotMutualContact
 # Убрал PrivacyRestrictedError - не существует в этой версии telethon
 from telethon.tl.functions.channels import InviteToChannelRequest
 from telethon.tl.functions.messages import AddChatUserRequest
+from telethon.tl.functions.contacts import AddContactRequest, DeleteContactsRequest
 from typing import Dict, Any, Optional
 from datetime import datetime
 from uuid import UUID
