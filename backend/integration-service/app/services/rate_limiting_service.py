@@ -82,12 +82,26 @@ class RateLimitingService:
     def _account_available_for_action(self, account, allow_locked: bool = False) -> bool:
         """
         Доступен ли аккаунт для выполнения действия.
-        ВНИМАНИЕ: DB-флаг locked больше НЕ используется как причина недоступности.
-        Блокировки аккаунтов реализованы только через Redis locks в AccountManager.
+        
+        ВАЖНО:
+        - Статус 'disabled' всегда делает аккаунт недоступным.
+        - Статусы 'flood_wait' / 'blocked' рассматриваются только совместно с полями
+          flood_wait_until / blocked_until. Если время уже прошло — аккаунт СЧИТАЕМ
+          доступным (как «вышедший из флуда/блока»), даже если статус в БД ещё не
+          был обновлён обратно на 'active'.
+        - DB-флаг locked больше НЕ используется как причина недоступности.
         """
-        if not account.is_active or account.status != 'active':
+        is_active = getattr(account, 'is_active', None)
+        status = str(getattr(account, 'status', 'active') or 'active').lower()
+        if not is_active:
             logger.info(
-                f"🔍 RATE_LIMIT: Account {account.id} not available: is_active={getattr(account, 'is_active', None)}, status={getattr(account, 'status', None)}"
+                f"🔍 RATE_LIMIT: Account {account.id} not available: is_active={is_active}, status={status}"
+            )
+            return False
+        # Жёстко блокируем только явно отключённые аккаунты
+        if status == 'disabled':
+            logger.info(
+                f"🔍 RATE_LIMIT: Account {account.id} not available: status=disabled"
             )
             return False
         now = datetime.now(timezone.utc)

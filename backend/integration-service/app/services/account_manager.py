@@ -443,10 +443,33 @@ class AccountManagerService:
                 logger.debug(f"🔒 Preferred account {preferred_account_id} is locked by another service, bypass пропущен")
 
         # Базовые условия для доступности аккаунта (НЕ проверяем locked поля в БД!)
+        # Логика статусов:
+        # - ACTIVE: всегда допустим, если нет актуального flood_wait_until/blocked_until.
+        # - FLOOD_WAIT: допустим ТОЛЬКО если flood_wait_until отсутствует или уже в прошлом
+        #   (аккаунт «вышел из флуда», даже если статус ещё не обновлён).
+        # - BLOCKED: допустим ТОЛЬКО если blocked_until отсутствует или уже в прошлом
+        #   (временная блокировка закончилась).
+        # - DISABLED: никогда не берём.
         conditions = [
             TelegramSession.user_id == user_id,
             TelegramSession.is_active == True,
-            TelegramSession.status == AccountStatus.ACTIVE.value,
+            or_(
+                TelegramSession.status == AccountStatus.ACTIVE.value,
+                and_(
+                    TelegramSession.status == AccountStatus.FLOOD_WAIT.value,
+                    or_(
+                        TelegramSession.flood_wait_until.is_(None),
+                        TelegramSession.flood_wait_until <= now
+                    )
+                ),
+                and_(
+                    TelegramSession.status == AccountStatus.BLOCKED.value,
+                    or_(
+                        TelegramSession.blocked_until.is_(None),
+                        TelegramSession.blocked_until <= now
+                    )
+                )
+            ),
             or_(
                 TelegramSession.flood_wait_until.is_(None),
                 TelegramSession.flood_wait_until <= now
