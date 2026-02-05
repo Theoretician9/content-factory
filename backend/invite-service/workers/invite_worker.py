@@ -654,6 +654,27 @@ async def _process_batch_async(
                         target_channel_id=task.settings.get('group_id') if task.settings else None,
                         success=result.is_success
                     )
+
+                # 🔒 ЛОКАЛЬНАЯ ЗАЩИТА ОТ СПАМА ВНУТРИ БАТЧА
+                # Даже если Account Manager ещё не включил cooldown, внутри одного батча
+                # мы не шлём инвайты подряд быстрее, чем delay_between_invites.
+                # ВАЖНО: это защита поверх AM, чтобы даже при ошибке/задержке в rate limit
+                # аккаунт физически не мог настрелять пачку запросов.
+                if not is_in_progress_soft:
+                    per_invite_delay = None
+                    try:
+                        if task.settings and isinstance(task.settings.get("delay_between_invites"), (int, float)):
+                            per_invite_delay = int(task.settings.get("delay_between_invites") or 0)
+                    except Exception:
+                        per_invite_delay = None
+                    if per_invite_delay is None or per_invite_delay <= 0:
+                        per_invite_delay = 60
+                    logger.info(
+                        f"⏱️ Локальная защита внутри батча: пауза {per_invite_delay} с перед следующим invite "
+                        f"для цели {target.id} (account_id={current_account_allocation.get('account_id') if current_account_allocation else 'N/A'})"
+                    )
+                    await asyncio.sleep(per_invite_delay)
+
                 account_handled = True
                 # конец while not account_handled
             
