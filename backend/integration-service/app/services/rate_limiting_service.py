@@ -496,43 +496,16 @@ class RateLimitingService:
         success: bool = True
     ) -> bool:
         """
-        Записать выполненное действие и обновить лимиты
+        Записать выполненное действие и обновить лимиты.
         
-        Args:
-            session: Database session
-            account_id: ID аккаунта
-            action_type: Тип действия
-            target_channel_id: ID целевого канала
-            success: Успешность действия
-        
-        Returns:
-            bool: Успешность записи
+        ВАЖНО: Telegram учитывает ЛЮБУЮ попытку (успешную или с бизнес‑ошибкой)
+        в своих антиспам‑лимитах. Поэтому мы считаем любую попытку INVITE/MESSAGE/ADD_CONTACT
+        потреблением лимита и выставляем cooldown, чтобы не было серий 4xx/5xx без пауз.
         """
         try:
             now = datetime.utcnow()
             
-            # Неудачные попытки не влияют на лимиты: не обновляем daily/hourly/cooldown/burst.
-            # Cooldown засчитывается только для удачной попытки.
-            if not success:
-                # Только логируем и сбрасываем error_count не трогаем (оставляем как есть)
-                await self.log_service.log_integration_action(
-                    session=session,
-                    user_id=0,
-                    integration_type="telegram",
-                    action=f"rate_limit_{action_type}_recorded",
-                    status="error",
-                    details={
-                        "account_id": str(account_id),
-                        "action_type": action_type,
-                        "target_channel_id": target_channel_id,
-                        "success": False,
-                        "note": "failed attempt, limits not updated"
-                    }
-                )
-                logger.debug(f"📊 Recorded failed {action_type} for account {account_id}, limits unchanged")
-                return True
-            
-            # 1. Обновляем дневные лимиты в базе данных (только при успехе)
+            # 1. Обновляем дневные лимиты в базе данных (для любой попытки, не только success=True)
             update_values = {}
             
             if action_type == ActionType.INVITE:
