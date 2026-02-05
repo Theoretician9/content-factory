@@ -145,6 +145,39 @@ class RateLimitingService:
         """
         try:
             logger.info(f"🔍 RATE_LIMIT check_rate_limit: account_id={account_id}, action_type={action_type}, allow_locked={allow_locked}")
+            # 🔒 Защита от слишком частых вызовов check_rate_limit для одного и того же аккаунта/действия.
+            # Если тот же (account_id, action_type) дергается чаще, чем раз в 1 секунду,
+            # возвращаем синтетический cooldown на 1 секунду, чтобы разорвать возможный tight-loop на клиенте.
+            try:
+                now_ts = datetime.now(timezone.utc).timestamp()
+                freq_key = f"rlcheck:last_call:{account_id}:{action_type}"
+                last_ts_raw = self.redis_client.get(freq_key)
+                if last_ts_raw is not None:
+                    try:
+                        last_ts = float(last_ts_raw)
+                        if now_ts - last_ts < 1.0:
+                            cooldown_remaining = 1
+                            logger.warning(
+                                "📊 RATE_LIMIT check_rate_limit THROTTLED: "
+                                f"account_id={account_id}, action_type={action_type}, "
+                                f"dt={now_ts - last_ts:.3f}s < 1.0s; returning synthetic cooldown {cooldown_remaining}s"
+                            )
+                            return False, {
+                                "error": "Check throttled",
+                                "cooldown_remaining": cooldown_remaining,
+                                "next_allowed_at": (
+                                    datetime.fromtimestamp(now_ts, tz=timezone.utc) + timedelta(seconds=cooldown_remaining)
+                                ).isoformat()
+                            }
+                    except (TypeError, ValueError):
+                        # Некорректное значение в Redis — просто перезапишем ниже
+                        pass
+                # Обновляем отметку времени последнего вызова; TTL небольшой, чтобы ключи не копились
+                self.redis_client.set(freq_key, str(now_ts), ex=5)
+            except Exception as freq_err:
+                # Никогда не ломаем основную логику rate limiting из‑за диагностики частоты
+                logger.debug(f"RATE_LIMIT check_rate_limit frequency guard error for account {account_id}: {freq_err}")
+
             # Получаем аккаунт
             result = await session.execute(
                 select(TelegramSession).where(TelegramSession.id == account_id)
