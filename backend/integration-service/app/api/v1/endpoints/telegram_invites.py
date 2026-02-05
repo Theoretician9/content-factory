@@ -346,59 +346,103 @@ async def send_telegram_invite_by_account(
             is_channel_or_megagroup = isinstance(group, Channel)
             
             logger.info(f"🔍 Определение типа чата: {type(group).__name__}, is_channel_or_megagroup: {is_channel_or_megagroup}")
-            
-            if is_channel_or_megagroup:
-                # Каналы и мегагруппы
-                logger.info(f"📤 Используем InviteToChannelRequest для {group.title if hasattr(group, 'title') else group.id}")
-                
-                # Детальное логирование перед отправкой приглашения
-                logger.info(f"🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПЕРЕД ПРИГЛАШЕНИЕМ:")
-                logger.info(f"   - Группа: {group.title} (ID: {group.id})")
-                logger.info(f"   - Пользователь: {user.username if hasattr(user, 'username') else 'N/A'} (ID: {user.id})")
-                logger.info(f"   - Аккаунт: {account_id}")
-                logger.info(f"   - Тип группы: {type(group).__name__}")
-                logger.info(f"   - Участников в группе: {getattr(group, 'participants_count', 'N/A')}")
-                
+
+            async def _invite_with_optional_contact_workaround() -> Any:
+                """
+                Пытаемся отправить инвайт, а если Telegram требует mutual contact —
+                временно добавляем пользователя в контакты, повторяем инвайт и затем
+                удаляем контакт.
+                """
+                nonlocal user, group
+
+                async def _do_invite() -> Any:
+                    if is_channel_or_megagroup:
+                        logger.info(
+                            f"📤 Используем InviteToChannelRequest для "
+                            f"{getattr(group, 'title', None) or group.id}"
+                        )
+                        return await client(InviteToChannelRequest(
+                            channel=group,
+                            users=[user]
+                        ))
+                    else:
+                        logger.info(
+                            f"📤 Используем AddChatUserRequest для "
+                            f"{getattr(group, 'title', None) or group.id}"
+                        )
+                        return await client(AddChatUserRequest(
+                            chat_id=group.id,
+                            user_id=user.id,
+                            fwd_limit=10
+                        ))
+
                 try:
-                    result_data = await client(InviteToChannelRequest(
-                        channel=group,
-                        users=[user]
-                    ))
-                    logger.info(f"✅ Приглашение отправлено успешно")
-                except Exception as invite_error:
-                    logger.error(f"❌ ДЕТАЛЬНАЯ ОШИБКА ПРИГЛАШЕНИЯ:")
-                    logger.error(f"   - Тип ошибки: {type(invite_error).__name__}")
-                    logger.error(f"   - Сообщение: {str(invite_error)}")
-                    logger.error(f"   - Код ошибки: {getattr(invite_error, 'code', 'N/A')}")
-                    logger.error(f"   - Детали: {getattr(invite_error, 'message', 'N/A')}")
-                    raise invite_error
-            
-            else:
-                # Обычные группы
-                logger.info(f"📤 Используем AddChatUserRequest для {group.title if hasattr(group, 'title') else group.id}")
-                
-                # Детальное логирование перед отправкой приглашения
-                logger.info(f"🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПЕРЕД ПРИГЛАШЕНИЕМ:")
-                logger.info(f"   - Группа: {group.title} (ID: {group.id})")
-                logger.info(f"   - Пользователь: {user.username if hasattr(user, 'username') else 'N/A'} (ID: {user.id})")
-                logger.info(f"   - Аккаунт: {account_id}")
-                logger.info(f"   - Тип группы: {type(group).__name__}")
-                logger.info(f"   - Участников в группе: {getattr(group, 'participants_count', 'N/A')}")
-                
-                try:
-                    result_data = await client(AddChatUserRequest(
-                        chat_id=group.id,
-                        user_id=user.id,
-                        fwd_limit=10
-                    ))
-                    logger.info(f"✅ Приглашение отправлено успешно")
-                except Exception as invite_error:
-                    logger.error(f"❌ ДЕТАЛЬНАЯ ОШИБКА ПРИГЛАШЕНИЯ:")
-                    logger.error(f"   - Тип ошибки: {type(invite_error).__name__}")
-                    logger.error(f"   - Сообщение: {str(invite_error)}")
-                    logger.error(f"   - Код ошибки: {getattr(invite_error, 'code', 'N/A')}")
-                    logger.error(f"   - Детали: {getattr(invite_error, 'message', 'N/A')}")
-                    raise invite_error
+                    # Первая попытка инвайта — как раньше
+                    return await _do_invite()
+                except UserNotMutualContactError:
+                    logger.info(
+                        "🔁 UserNotMutualContactError: пробуем добавить пользователя в контакты, "
+                        "отправить приглашение и удалить из контактов"
+                    )
+                    added_to_contacts = False
+                    try:
+                        # Пытаемся добавить пользователя в контакты
+                        first_name = getattr(user, "first_name", "") or " "
+                        last_name = getattr(user, "last_name", "") or ""
+                        phone = invite_data.target_phone or ""
+                        await client(AddContactRequest(
+                            id=user,
+                            first_name=first_name,
+                            last_name=last_name,
+                            phone=phone,
+                            add_phone_privacy_exception=False
+                        ))
+                        added_to_contacts = True
+                        logger.info(
+                            f"✅ Пользователь {getattr(user, 'id', 'unknown')} временно добавлен в контакты "
+                            f"для инвайта в {invite_data.group_id}"
+                        )
+                        # Повторная попытка приглашения уже как mutual contact
+                        return await _do_invite()
+                    except Exception as add_err:
+                        logger.warning(
+                            "⚠️ Не удалось добавить пользователя во временные контакты: "
+                            f"type={type(add_err).__name__}, message={add_err}"
+                        )
+                        # Сохраняем прежнее поведение: отдаём бизнес-ошибку наружу
+                        raise UserNotMutualContactError(request=getattr(add_err, "request", None))
+                    finally:
+                        if added_to_contacts:
+                            try:
+                                await client(DeleteContactsRequest(id=[user]))
+                                logger.info(
+                                    f"🧹 Пользователь {getattr(user, 'id', 'unknown')} удалён из временных контактов "
+                                    f"после инвайта в {invite_data.group_id}"
+                                )
+                            except Exception as del_err:
+                                logger.warning(
+                                    "⚠️ Не удалось удалить пользователя из временных контактов: "
+                                    f"type={type(del_err).__name__}, message={del_err}"
+                                )
+
+            # Детальное логирование перед отправкой приглашения
+            logger.info("🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА ПЕРЕД ПРИГЛАШЕНИЕМ:")
+            logger.info(f"   - Группа: {getattr(group, 'title', None)} (ID: {getattr(group, 'id', None)})")
+            logger.info(f"   - Пользователь: {getattr(user, 'username', None) or 'N/A'} (ID: {getattr(user, 'id', None)})")
+            logger.info(f"   - Аккаунт: {account_id}")
+            logger.info(f"   - Тип группы: {type(group).__name__}")
+            logger.info(f"   - Участников в группе: {getattr(group, 'participants_count', 'N/A')}")
+
+            try:
+                result_data = await _invite_with_optional_contact_workaround()
+                logger.info("✅ Приглашение отправлено успешно (с учётом возможного добавления в контакты)")
+            except Exception as invite_error:
+                logger.error("❌ ДЕТАЛЬНАЯ ОШИБКА ПРИГЛАШЕНИЯ:")
+                logger.error(f"   - Тип ошибки: {type(invite_error).__name__}")
+                logger.error(f"   - Сообщение: {str(invite_error)}")
+                logger.error(f"   - Код ошибки: {getattr(invite_error, 'code', 'N/A')}")
+                logger.error(f"   - Детали: {getattr(invite_error, 'message', 'N/A')}")
+                raise invite_error
         
         elif invite_data.invite_type == "direct_message":
             # Прямое сообщение
