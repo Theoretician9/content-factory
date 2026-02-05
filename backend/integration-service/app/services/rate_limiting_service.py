@@ -498,14 +498,34 @@ class RateLimitingService:
         """
         Записать выполненное действие и обновить лимиты.
         
-        ВАЖНО: Telegram учитывает ЛЮБУЮ попытку (успешную или с бизнес‑ошибкой)
-        в своих антиспам‑лимитах. Поэтому мы считаем любую попытку INVITE/MESSAGE/ADD_CONTACT
-        потреблением лимита и выставляем cooldown, чтобы не было серий 4xx/5xx без пауз.
+        ВАЖНО по ТЗ:
+        - 15‑минутный cooldown для INVITE включается ТОЛЬКО после успешного инвайта.
+        - Неуспешные попытки не двигают cooldown и счётчики, но логируются.
         """
         try:
             now = datetime.utcnow()
             
-            # 1. Обновляем дневные лимиты в базе данных (для любой попытки, не только success=True)
+            # Неудачные попытки не влияют на лимиты: не обновляем daily/hourly/cooldown/burst.
+            # Cooldown засчитывается только при успехе.
+            if not success:
+                await self.log_service.log_integration_action(
+                    session=session,
+                    user_id=0,
+                    integration_type="telegram",
+                    action=f"rate_limit_{action_type}_recorded",
+                    status="error",
+                    details={
+                        "account_id": str(account_id),
+                        "action_type": action_type,
+                        "target_channel_id": target_channel_id,
+                        "success": False,
+                        "note": "failed attempt, limits not updated"
+                    }
+                )
+                logger.debug(f"📊 Recorded failed {action_type} for account {account_id}, limits unchanged")
+                return True
+            
+            # 1. Обновляем дневные лимиты в базе данных (только при успехе)
             update_values = {}
             
             if action_type == ActionType.INVITE:
