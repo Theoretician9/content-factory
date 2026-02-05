@@ -503,6 +503,43 @@ class AccountManagerService:
         for i, account in enumerate(accounts):
             logger.info(f"🔍 ДИАГНОСТИКА: Аккаунт {i+1}: id={account.id}, status='{account.status}', is_active={account.is_active}")
             logger.info(f"🔍 ДИАГНОСТИКА: flood_wait_until={account.flood_wait_until}, blocked_until={account.blocked_until}")
+
+            # 🔄 ЛЕНИВОЕ ВОССТАНОВЛЕНИЕ СТАТУСА:
+            # Если статус FLOOD_WAIT/BLOCKED, но время уже прошло — сразу обновляем запись в БД,
+            # чтобы Account Manager всегда видел актуальный статус.
+            try:
+                status_val = str(getattr(account, "status", AccountStatus.ACTIVE.value) or AccountStatus.ACTIVE.value)
+                flood_until = getattr(account, "flood_wait_until", None)
+                blocked_until = getattr(account, "blocked_until", None)
+                need_update = False
+                update_values = {}
+
+                if status_val == AccountStatus.FLOOD_WAIT.value:
+                    if not flood_until or (isinstance(flood_until, datetime) and flood_until <= now):
+                        update_values["status"] = AccountStatus.ACTIVE.value
+                        update_values["flood_wait_until"] = None
+                        need_update = True
+
+                if status_val == AccountStatus.BLOCKED.value and blocked_until and isinstance(blocked_until, datetime):
+                    if blocked_until <= now:
+                        update_values["status"] = AccountStatus.ACTIVE.value
+                        update_values["blocked_until"] = None
+                        need_update = True
+
+                if need_update:
+                    await session.execute(
+                        update(TelegramSession)
+                        .where(TelegramSession.id == account.id)
+                        .values(**update_values)
+                    )
+                    await session.commit()
+                    for k, v in update_values.items():
+                        setattr(account, k, v)
+                    logger.info(
+                        f"🔄 AccountManager: Нормализован статус аккаунта {account.id} в БД: {update_values}"
+                    )
+            except Exception as norm_err:
+                logger.warning(f"⚠️ AccountManager: Ошибка нормализации статуса аккаунта {account.id}: {norm_err}")
             
             # ПРОВЕРЯЕМ REDIS LOCKS - главное отличие от старой логики!
             lock_key = f"account_lock:{account.id}"

@@ -202,6 +202,57 @@ class RateLimitingService:
             
             if not account:
                 return False, {"error": "Account not found"}
+
+            # 🔄 ЛЕНИВОЕ ВОССТАНОВЛЕНИЕ СТАТУСА:
+            # Если статус flood_wait/blocked, но время уже прошло — сразу обновляем запись в БД
+            # (status → active, сбрасываем соответствующее *_until), чтобы в БД всегда был
+            # актуальный статус аккаунта.
+            try:
+                now_norm = datetime.now(timezone.utc)
+                status_val = str(getattr(account, "status", "active") or "active").lower()
+                flood_until = getattr(account, "flood_wait_until", None)
+                blocked_until = getattr(account, "blocked_until", None)
+                need_update = False
+                update_values = {}
+
+                if status_val == "flood_wait":
+                    if not flood_until or (
+                        isinstance(flood_until, datetime)
+                        and (flood_until.tzinfo or timezone.utc) <= now_norm
+                    ):
+                        update_values["status"] = "active"
+                        update_values["flood_wait_until"] = None
+                        need_update = True
+
+                if status_val == "blocked":
+                    if blocked_until and isinstance(blocked_until, datetime):
+                        blocked_norm = (
+                            blocked_until.replace(tzinfo=timezone.utc)
+                            if blocked_until.tzinfo is None
+                            else blocked_until.astimezone(timezone.utc)
+                        )
+                        if blocked_norm <= now_norm:
+                            update_values["status"] = "active"
+                            update_values["blocked_until"] = None
+                            need_update = True
+
+                if need_update:
+                    await session.execute(
+                        update(TelegramSession)
+                        .where(TelegramSession.id == account_id)
+                        .values(**update_values)
+                    )
+                    await session.commit()
+                    # Обновляем объект в памяти, чтобы дальнейшая логика видела новый статус
+                    for k, v in update_values.items():
+                        setattr(account, k, v)
+                    logger.info(
+                        f"🔄 RATE_LIMIT: Account {account_id} status normalized in DB: {update_values}"
+                    )
+            except Exception as norm_err:
+                logger.warning(
+                    f"⚠️ RATE_LIMIT: error normalizing account status for {account_id}: {norm_err}"
+                )
             
             if not self._account_available_for_action(account, allow_locked=allow_locked):
                 # Аккаунт недоступен из‑за flood_wait/blocked/неактивного статуса.
