@@ -276,7 +276,11 @@ async def refresh_token(request: Request):
         algorithm="HS256"
     )
     logger.info(json.dumps({"event": "refresh_token_success", "user_id": user_id.decode() if hasattr(user_id, 'decode') else str(user_id), "ip": request.client.host}))
-    return {"access_token": new_token}
+    # Возвращаем access_token и текущий refresh_token (для совместимости с фронтендом)
+    return {
+        "access_token": new_token,
+        "refresh_token": refresh_token
+    }
 
 class LoginRequest(BaseModel):
     username: str = None
@@ -321,11 +325,15 @@ async def login(request: Request, body: LoginRequest):
             # Получаем ответ от user-service
             response_data = resp.json()
             
-            # Создаем JSONResponse для установки cookies
-            response = JSONResponse(content={
+            # Создаем JSONResponse для установки cookies и возврата токенов
+            body = {
                 "access_token": response_data["access_token"],
                 "token_type": response_data["token_type"]
-            })
+            }
+            if "refresh_token" in response_data:
+                body["refresh_token"] = response_data["refresh_token"]
+            
+            response = JSONResponse(content=body)
             
             # Устанавливаем refresh token в httpOnly cookie, если он есть
             if "refresh_token" in response_data:
