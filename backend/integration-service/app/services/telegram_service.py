@@ -39,6 +39,12 @@ _GLOBAL_AUTH_SESSIONS: Dict[str, Dict] = {}
 # Глобальное хранилище QR клиентов для правильного QR workflow
 _GLOBAL_QR_SESSIONS: Dict[str, Dict] = {}
 
+# Глобальное хранилище боевых Telegram клиентов по ID сессии.
+# ВАЖНО: это позволяет переиспользовать MTProto-соединение между HTTP-запросами,
+# чтобы не создавать новый клиент и не дергать лишние GetUsersRequest на каждый
+# инвайт/проверку админ‑прав (что и приводило к частым mini‑FloodWait 3s).
+_GLOBAL_TELEGRAM_CLIENTS: Dict[str, TelegramClient] = {}
+
 class TelegramService:
     """Сервис для работы с Telegram интеграцией"""
     
@@ -1051,8 +1057,19 @@ class TelegramService:
         return client
     
     async def get_client(self, telegram_session: TelegramSession) -> TelegramClient:
-        """Получение Telegram клиента для сессии"""
+        """
+        Получение (и переиспользование) Telegram‑клиента для сессии.
+        
+        Раньше на КАЖДЫЙ HTTP‑запрос (инвайт, check-admin и т.п.) создавался новый
+        клиент и новое MTProto‑соединение → Telethon на каждом connect дергал
+        кучу внутренних GetUsersRequest и попадал в mini‑FloodWait 3s.
+        
+        Теперь клиенты кешируются в глобальном `_GLOBAL_TELEGRAM_CLIENTS` и
+        переиспользуются между запросами, что резко снижает частоту GetUsersRequest.
+        """
         try:
+            global _GLOBAL_TELEGRAM_CLIENTS
+
             # Проверяем что сессия активна
             if not telegram_session.is_active:
                 raise ValueError(f"Telegram сессия {telegram_session.id} не активна")
@@ -1060,15 +1077,37 @@ class TelegramService:
             # Проверяем наличие данных сессии
             if not telegram_session.session_data or 'encrypted_session' not in telegram_session.session_data:
                 raise ValueError(f"Telegram сессия {telegram_session.id} не содержит данных для подключения")
-            
+
+            key = str(telegram_session.id)
+
+            # Пытаемся переиспользовать уже созданный клиент
+            client = _GLOBAL_TELEGRAM_CLIENTS.get(key)
+            if client is not None:
+                try:
+                    if await client.is_user_authorized():
+                        # Убедимся, что соединение живое; при необходимости переподключим
+                        if not client.is_connected():
+                            await client.connect()
+                        logger.info(f"✅ Переиспользуем Telegram клиент для сессии {telegram_session.id}")
+                        return client
+                except Exception as check_err:
+                    logger.warning(f"⚠️ get_client: cached client for {telegram_session.id} невалиден, пересоздаём: {check_err}")
+                    try:
+                        await client.disconnect()
+                    except Exception:
+                        pass
+                    _GLOBAL_TELEGRAM_CLIENTS.pop(key, None)
+                    client = None
+
             # Расшифровываем данные сессии
             encrypted_session = telegram_session.session_data['encrypted_session']
             session_string = await self._decrypt_session_data(encrypted_session)
             
-            # Создаем клиента
+            # Создаем нового клиента и сразу подключаем
             client = await self._create_client_from_session(session_string)
+            _GLOBAL_TELEGRAM_CLIENTS[key] = client
             
-            logger.info(f"✅ Получен Telegram клиент для сессии {telegram_session.id}")
+            logger.info(f"✅ Создан и закеширован новый Telegram клиент для сессии {telegram_session.id}")
             return client
             
         except Exception as e:
