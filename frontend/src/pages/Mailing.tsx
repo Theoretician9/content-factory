@@ -90,6 +90,8 @@ interface Account {
   daily_invite_limit: number;
   daily_invites_used: number;
   flood_wait_until?: string;
+  blocked_until?: string;
+  account_status?: string;
 }
 
 interface ParseTask {
@@ -1084,11 +1086,34 @@ const Mailing = () => {
                               <div className="mt-2">
                                 <div className="text-sm font-medium mb-1">Готовые аккаунты:</div>
                                 <div className="space-y-1">
-                                  {adminCheckResult.ready_accounts.map((acc: any) => (
-                                    <div key={acc.account_id} className="text-xs bg-green-50 px-2 py-1 rounded">
-                                      @{acc.username} ({acc.available_invites} приглашений доступно)
-                                    </div>
-                                  ))}
+                                  {adminCheckResult.ready_accounts.map((acc: Account) => {
+                                    const status = (acc.account_status || acc.status || '').toLowerCase();
+                                    const floodInfo = acc.flood_wait_until
+                                      ? `, флуд до ${new Date(acc.flood_wait_until).toLocaleString('ru-RU')}`
+                                      : '';
+                                    const blockInfo = !acc.flood_wait_until && acc.blocked_until
+                                      ? `, блок до ${new Date(acc.blocked_until).toLocaleString('ru-RU')}`
+                                      : '';
+                                    const statusLabel =
+                                      status === 'flood_wait'
+                                        ? 'флуд-ожидание'
+                                        : status === 'blocked'
+                                          ? 'временный блок'
+                                          : status === 'active' || status === 'ready'
+                                            ? 'активен'
+                                            : status || 'неизвестно';
+
+                                    return (
+                                      <div key={acc.account_id} className="text-xs bg-green-50 px-2 py-1 rounded">
+                                        @{acc.username}{' '}
+                                        <span className="text-gray-600">
+                                          — статус: {statusLabel}
+                                          {floodInfo}
+                                          {blockInfo}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             )}
