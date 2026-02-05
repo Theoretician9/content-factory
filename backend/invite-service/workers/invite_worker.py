@@ -640,12 +640,6 @@ async def _process_batch_async(
                     task.failed_count += 1
                     processed_count += 1
                 
-                # ✅ ИСПРАВЛЕНО: Все задержки управляются только Account Manager согласно ТЗ
-                # Invite Service не определяет собственные задержки - они устанавливаются Account Manager
-                if processed_count < len(targets):
-                    # Account Manager сам определяет необходимые паузы при check_rate_limit
-                    logger.info(f"⏱️ AccountManager: Паузы между приглашениями управляются Account Manager согласно ТЗ")
-                
                 # Записываем действие в Account Manager, кроме in_progress soft
                 if not is_in_progress_soft and current_account_allocation:
                     await account_manager.record_action(
@@ -655,25 +649,27 @@ async def _process_batch_async(
                         success=result.is_success
                     )
 
-                # 🔒 ЛОКАЛЬНАЯ ЗАЩИТА ОТ СПАМА ВНУТРИ БАТЧА
-                # Даже если Account Manager ещё не включил cooldown, внутри одного батча
-                # мы не шлём инвайты подряд быстрее, чем delay_between_invites.
-                # ВАЖНО: это защита поверх AM, чтобы даже при ошибке/задержке в rate limit
-                # аккаунт физически не мог настрелять пачку запросов.
-                if not is_in_progress_soft:
+                # 🔒 ЖЁСТКАЯ ЛОКАЛЬНАЯ ЗАЩИТА ОТ СПАМА ВНУТРИ БАТЧА
+                # ТРЕБОВАНИЕ ТЗ:
+                # - Между КАЖДЫМ запросом к Telegram от ОДНОГО аккаунта минимум 10 секунд
+                #   при любом раскладе (успех, неуспех, in_progress и т.п.)
+                # - Дополнительно можно увеличить паузу через delay_between_invites, но никогда < 10 сек.
+                per_invite_delay = None
+                try:
+                    if task.settings and isinstance(task.settings.get("delay_between_invites"), (int, float)):
+                        per_invite_delay = int(task.settings.get("delay_between_invites") or 0)
+                except Exception:
                     per_invite_delay = None
-                    try:
-                        if task.settings and isinstance(task.settings.get("delay_between_invites"), (int, float)):
-                            per_invite_delay = int(task.settings.get("delay_between_invites") or 0)
-                    except Exception:
-                        per_invite_delay = None
-                    if per_invite_delay is None or per_invite_delay <= 0:
-                        per_invite_delay = 60
-                    logger.info(
-                        f"⏱️ Локальная защита внутри батча: пауза {per_invite_delay} с перед следующим invite "
-                        f"для цели {target.id} (account_id={current_account_allocation.get('account_id') if current_account_allocation else 'N/A'})"
-                    )
-                    await asyncio.sleep(per_invite_delay)
+
+                # Минимум 10 секунд при любом значении настроек
+                if per_invite_delay is None or per_invite_delay < 10:
+                    per_invite_delay = 10
+
+                logger.info(
+                    f"⏱️ Локальная защита внутри батча: пауза {per_invite_delay} с перед следующим invite "
+                    f"для цели {target.id} (account_id={current_account_allocation.get('account_id') if current_account_allocation else 'N/A'})"
+                )
+                await asyncio.sleep(per_invite_delay)
 
                 account_handled = True
                 # конец while not account_handled
