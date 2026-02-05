@@ -806,6 +806,7 @@ async def check_admin_rights(
         )
 
         candidate_ids = []
+        accounts_meta: Dict[str, Any] = {}
         if summary and summary.get("success"):
             # Берем ВСЕ аккаунты из summary, далее AM сам решит, можно ли аллоцировать конкретный preferred_id
             seen = set()
@@ -814,6 +815,8 @@ async def check_admin_rights(
                 if acc_id and acc_id not in seen:
                     seen.add(acc_id)
                     candidate_ids.append(acc_id)
+                    # Сохраняем мета‑информацию аккаунта по account_id, чтобы отразить реальные статусы/ограничения во фронте
+                    accounts_meta[str(acc_id)] = acc
             # Безопасный предел количества точечных проверок
             max_candidates = 100
             if len(candidate_ids) > max_candidates:
@@ -858,13 +861,22 @@ async def check_admin_rights(
                 check_resp = await integration_client.check_admin_rights(account_id, group_link)
                 is_admin = bool(check_resp.get("is_admin", False))
                 permissions = check_resp.get("permissions", [])
+
+                # Дополнительные статусы/ограничения аккаунта
+                meta = accounts_meta.get(str(account_id), {})
+                account_status = meta.get("status") or check_resp.get("account_status")
+                flood_wait_until = meta.get("flood_wait_until") or check_resp.get("flood_wait_until")
+                blocked_until = meta.get("blocked_until") or check_resp.get("blocked_until")
                 if is_admin:
                     admin_accounts_count += 1
                     ready_accounts.append({
                         "account_id": account_id,
                         "username": username,
                         "status": "ready",
-                        "permissions": permissions
+                        "permissions": permissions,
+                        "account_status": account_status,
+                        "flood_wait_until": flood_wait_until,
+                        "blocked_until": blocked_until,
                     })
                     admin_found = True
                 else:
@@ -873,7 +885,10 @@ async def check_admin_rights(
                         "username": username,
                         "status": "not_admin",
                         "reason": "no_admin_permissions",
-                        "permissions": permissions
+                        "permissions": permissions,
+                        "account_status": account_status,
+                        "flood_wait_until": flood_wait_until,
+                        "blocked_until": blocked_until,
                     })
             except Exception as check_error:
                 unavailable_accounts.append({
@@ -959,16 +974,24 @@ async def check_admin_rights(
 
                 try:
                     # Integration client returns a dict: {"is_admin": bool, "permissions": [...]}
-                    check_resp = await integration_client.check_admin_rights(account_id, group_link)
-                    is_admin = bool(check_resp.get("is_admin", False))
-                    permissions = check_resp.get("permissions", [])
+                check_resp = await integration_client.check_admin_rights(account_id, group_link)
+                is_admin = bool(check_resp.get("is_admin", False))
+                permissions = check_resp.get("permissions", [])
+
+                meta = accounts_meta.get(str(account_id), {})
+                account_status = meta.get("status") or check_resp.get("account_status")
+                flood_wait_until = meta.get("flood_wait_until") or check_resp.get("flood_wait_until")
+                blocked_until = meta.get("blocked_until") or check_resp.get("blocked_until")
                     if is_admin:
                         admin_accounts_count += 1
                         ready_accounts.append({
                             "account_id": account_id,
                             "username": username,
-                            "status": "ready",
-                            "permissions": permissions
+                        "status": "ready",
+                        "permissions": permissions,
+                        "account_status": account_status,
+                        "flood_wait_until": flood_wait_until,
+                        "blocked_until": blocked_until,
                         })
                         # Немедленный возврат результата при первом найденном админе в fallback
                         logger.info("DEBUG_MARK: early-return-fallback")
@@ -994,7 +1017,10 @@ async def check_admin_rights(
                             "username": username,
                             "status": "not_admin",
                             "reason": "no_admin_permissions",
-                            "permissions": permissions
+                        "permissions": permissions,
+                        "account_status": account_status,
+                        "flood_wait_until": flood_wait_until,
+                        "blocked_until": blocked_until,
                         })
                 except Exception as check_error:
                     unavailable_accounts.append({

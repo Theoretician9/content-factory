@@ -302,6 +302,40 @@ async def check_account_admin_rights(
             detail="Telegram аккаунт не найден или нет доступа"
         )
     
+    # 🔄 Ленивая нормализация статуса аккаунта при запросе с фронта:
+    # если статус flood_wait/blocked, но время уже прошло — сразу переводим в active и очищаем *_until.
+    try:
+        now = datetime.utcnow()
+        status_val = str(getattr(telegram_session, "status", "active") or "active").lower()
+        flood_until = getattr(telegram_session, "flood_wait_until", None)
+        blocked_until = getattr(telegram_session, "blocked_until", None)
+        update_values = {}
+        need_update = False
+
+        if status_val == "flood_wait":
+            if not flood_until or (isinstance(flood_until, datetime) and flood_until <= now):
+                update_values["status"] = "active"
+                update_values["flood_wait_until"] = None
+                need_update = True
+
+        if status_val == "blocked" and blocked_until and isinstance(blocked_until, datetime):
+            if blocked_until <= now:
+                update_values["status"] = "active"
+                update_values["blocked_until"] = None
+                need_update = True
+
+        if need_update:
+            await telegram_service.session_service.update(
+                session,
+                session_uuid,
+                update_values
+            )
+            for k, v in update_values.items():
+                setattr(telegram_session, k, v)
+            logger.info(f"🔄 TELEGRAM_CHECK_ADMIN: Нормализован статус аккаунта {telegram_session.id} в БД: {update_values}")
+    except Exception as norm_err:
+        logger.warning(f"⚠️ TELEGRAM_CHECK_ADMIN: Ошибка нормализации статуса аккаунта {session_uuid}: {norm_err}")
+    
     group_id = check_data.get("group_id")
     required_permissions = check_data.get("required_permissions", [])
     
@@ -427,13 +461,29 @@ async def check_account_admin_rights(
             has_required_permissions = all(perm in permissions for perm in required_permissions)
             
             logger.info(f"✅ Аккаунт {session_id} - админ: {is_admin}, права: {permissions}")
+
+            # Дополнительная диагностическая информация о статусе аккаунта для фронта/Invite Service
+            flood_wait_remaining = None
+            if getattr(telegram_session, "flood_wait_until", None) and isinstance(telegram_session.flood_wait_until, datetime):
+                if telegram_session.flood_wait_until > datetime.utcnow():
+                    flood_wait_remaining = int((telegram_session.flood_wait_until - datetime.utcnow()).total_seconds())
+
+            blocked_remaining = None
+            if getattr(telegram_session, "blocked_until", None) and isinstance(telegram_session.blocked_until, datetime):
+                if telegram_session.blocked_until > datetime.utcnow():
+                    blocked_remaining = int((telegram_session.blocked_until - datetime.utcnow()).total_seconds())
             
             return {
                 "is_admin": is_admin,
                 "permissions": permissions,
                 "has_required_permissions": has_required_permissions,
                 "group_title": getattr(group, 'title', str(group_id)),
-                "message": f"Аккаунт {'является' if is_admin else 'не является'} администратором"
+                "message": f"Аккаунт {'является' if is_admin else 'не является'} администратором",
+                "account_status": getattr(telegram_session, "status", None),
+                "flood_wait_until": getattr(telegram_session, "flood_wait_until", None),
+                "blocked_until": getattr(telegram_session, "blocked_until", None),
+                "flood_wait_remaining_seconds": flood_wait_remaining,
+                "blocked_remaining_seconds": blocked_remaining,
             }
             
         except Exception as e:
