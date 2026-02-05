@@ -188,8 +188,25 @@ class RateLimitingService:
                 return False, {"error": "Account not found"}
             
             if not self._account_available_for_action(account, allow_locked=allow_locked):
-                logger.info(f"🔍 RATE_LIMIT: Account {account_id} rejected by _account_available_for_action (see above for reason)")
-                return False, {"error": "Account not available"}
+                # Аккаунт недоступен из‑за flood_wait/blocked/неактивного статуса.
+                # Возвращаем расширенные диагностические данные, чтобы клиент (Invite Service) видел реальную причину.
+                details = {
+                    "error": "Account not available",
+                    "status": getattr(account, "status", None),
+                    "is_active": getattr(account, "is_active", None),
+                    "flood_wait_until": getattr(account, "flood_wait_until", None).isoformat()
+                    if getattr(account, "flood_wait_until", None) else None,
+                    "blocked_until": getattr(account, "blocked_until", None).isoformat()
+                    if getattr(account, "blocked_until", None) else None,
+                    "locked": getattr(account, "locked", None),
+                }
+                logger.info(
+                    f"🔍 RATE_LIMIT: Account {account_id} rejected by _account_available_for_action "
+                    f"(status={details['status']}, is_active={details['is_active']}, "
+                    f"flood_wait_until={details['flood_wait_until']}, blocked_until={details['blocked_until']}, "
+                    f"locked={details['locked']})"
+                )
+                return False, details
             
             limits = self.telegram_limits.get(action_type, {})
             if not limits:

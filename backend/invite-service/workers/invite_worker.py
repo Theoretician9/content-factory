@@ -579,10 +579,16 @@ async def _process_batch_async(
                                 last_cooldown_remaining = 900
                         else:
                             last_cooldown_remaining = 900
+                        # Логируем как технические лимиты, так и бизнес‑состояние аккаунта (status/flood_wait и т.п.),
+                        # если Account Manager/RateLimitingService их вернули.
                         logger.warning(
-                            f"⚠️ AccountManager: Лимиты превышены для аккаунта {current_account_allocation['account_id']}: {reason} | "
-                            f"details: hourly_used={details.get('hourly_used')}, hourly_limit={details.get('hourly_limit')}, "
-                            f"cooldown_remaining={cooldown_remaining}, daily_used={details.get('daily_used')}"
+                            "⚠️ AccountManager: Лимиты или доступность превышены для аккаунта "
+                            f"{current_account_allocation['account_id']}: {reason} | "
+                            f"hourly_used={details.get('hourly_used')}, hourly_limit={details.get('hourly_limit')}, "
+                            f"cooldown_remaining={cooldown_remaining}, daily_used={details.get('daily_used')}, "
+                            f"status={details.get('status')}, is_active={details.get('is_active')}, "
+                            f"flood_wait_until={details.get('flood_wait_until')}, "
+                            f"blocked_until={details.get('blocked_until')}, locked={details.get('locked')}"
                         )
                         try:
                             await account_manager.release_account(
