@@ -610,9 +610,13 @@ async def get_task_status(
     ).group_by(InviteTarget.status).all()
     
     # Преобразование в словарь
+    # В БД InviteTarget.status хранится как строка ENUM ('PENDING', 'INVITED', и т.д.),
+    # поэтому stat.status уже строка, а не объект TargetStatus.
     status_counts = {status.value: 0 for status in TargetStatus}
     for stat in targets_stats:
-        status_counts[stat.status.value] = stat.count
+        # stat.status здесь строка Enum'а ('PENDING', ...), поэтому используем её напрямую.
+        status_key = stat.status if isinstance(stat.status, str) else stat.status.value
+        status_counts[status_key] = stat.count
     
     # Вычисление процента выполнения
     total_targets = sum(status_counts.values())
