@@ -1497,7 +1497,15 @@ const Mailing = () => {
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Пропущены:</span>
-                                <span className="font-medium text-gray-600">{statsData.targets_statistics.skipped_targets}</span>
+                                <span className="font-medium text-gray-600">
+                                  {Math.max(
+                                    0,
+                                    (statsData.targets.total || 0) -
+                                      ((statsData.targets.pending || 0) +
+                                        (statsData.targets.invited || 0) +
+                                        (statsData.targets.failed || 0))
+                                  )}
+                                </span>
                               </div>
                               <div className="border-t pt-3 mt-3">
                                 <div className="flex justify-between font-semibold">
