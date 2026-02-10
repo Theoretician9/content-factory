@@ -1557,7 +1557,7 @@ const Mailing = () => {
 
                         {/* Краткая лента приглашений в формате: 
                             Задача №, время, пользователь "юзернейм" добавлен (добавлено/всего)
-                           Основано на успешных попытках INVITE_SENT с result_status=SUCCESS */}
+                           Основано на успешных попытках INVITE_SUCCESSFUL с result_status=SUCCESS */}
                         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                           <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-3">
                             📈 Краткая лента приглашений
@@ -1567,7 +1567,7 @@ const Mailing = () => {
                             const invited = statsData.targets.invited || 0;
                             const successLogs = executionLogs.filter((log) => {
                               const status = (log.details?.result_status || '').toString().toUpperCase();
-                              return log.action_type === 'INVITE_SENT' && status === 'SUCCESS';
+                              return log.action_type === 'INVITE_SUCCESSFUL' && status === 'SUCCESS';
                             });
 
                             if (successLogs.length === 0) {
@@ -1617,24 +1617,76 @@ const Mailing = () => {
                                   </tr>
                                 </thead>
                                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                  {executionLogs.slice(0, 10).map((log, index) => (
-                                    <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                                      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                                        {formatDate(log.created_at)}
-                                      </td>
-                                      <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
-                                        {log.action_type}
-                                      </td>
-                                      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                                        {log.account_id}
-                                      </td>
-                                      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                                        {typeof log.details === 'object'
-                                          ? JSON.stringify(log.details).substring(0, 50) + '...'
-                                          : log.details}
-                                      </td>
-                                    </tr>
-                                  ))}
+                                  {executionLogs.slice(0, 10).map((log, index) => {
+                                    const status = (log.details?.result_status || '').toString().toUpperCase();
+                                    const targetName =
+                                      log.details?.target_username ||
+                                      log.details?.username ||
+                                      log.details?.target ||
+                                      log.details?.target_user_id ||
+                                      log.details?.target_phone ||
+                                      `id:${log.target_id}`;
+
+                                    const groupName =
+                                      log.details?.group ||
+                                      log.details?.group_id ||
+                                      statsData?.settings?.group_id ||
+                                      'группа';
+
+                                    let actionText = '';
+                                    if (log.action_type === 'INVITE_SUCCESSFUL') {
+                                      actionText = 'Успешное приглашение';
+                                    } else if (log.action_type === 'INVITE_FAILED') {
+                                      actionText = 'Ошибка приглашения';
+                                    } else if (log.action_type === 'ERROR_OCCURRED') {
+                                      actionText = 'Системная ошибка';
+                                    } else {
+                                      actionText = log.action_type;
+                                    }
+
+                                    let detailsText = '';
+                                    if (log.action_type === 'INVITE_SUCCESSFUL' && status === 'SUCCESS') {
+                                      detailsText = `Пользователь "${targetName}" успешно добавлен в "${groupName}".`;
+                                    } else if (log.action_type === 'INVITE_FAILED') {
+                                      const humanMessage =
+                                        log.details?.message ||
+                                        log.details?.error_message ||
+                                        log.details?.original_error ||
+                                        'Причина не указана';
+                                      detailsText = `Не удалось пригласить пользователя "${targetName}". Причина: ${humanMessage}`;
+                                    } else if (log.action_type === 'ERROR_OCCURRED') {
+                                      const humanMessage =
+                                        log.message ||
+                                        log.details?.message ||
+                                        log.details?.error_message ||
+                                        log.details?.original_error ||
+                                        'Внутренняя ошибка при обработке приглашения.';
+                                      detailsText = humanMessage;
+                                    } else if (typeof log.details === 'object') {
+                                      detailsText =
+                                        log.details?.message ||
+                                        JSON.stringify(log.details).substring(0, 120) + '...';
+                                    } else {
+                                      detailsText = log.details || '';
+                                    }
+
+                                    return (
+                                      <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                        <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                          {formatDate(log.created_at)}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                                          {actionText}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                          {log.account_id || '—'}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                          {detailsText}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
                                 </tbody>
                               </table>
                             </div>
