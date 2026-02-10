@@ -355,26 +355,31 @@ async def send_telegram_invite_by_account(
                 """
                 nonlocal user, group
 
-                async def _check_membership(label: str) -> None:
+                async def _check_membership(label: str) -> bool:
                     """
                     Проверка фактического членства пользователя в группе/канале.
                     
                     Для Channel: через GetParticipantRequest.
                     Для обычных Chat: через get_participants и поиск user.id.
                     """
+                    is_member: bool = False
                     try:
                         from telethon.tl.types import Channel, Chat
                         if isinstance(group, Channel):
                             # Канал/мегагруппа — используем GetParticipantRequest
                             from telethon.tl.functions.channels import GetParticipantRequest
                             try:
-                                participant_info = await client(GetParticipantRequest(
-                                    channel=group,
-                                    participant=user
-                                ))
+                                participant_info = await client(
+                                    GetParticipantRequest(
+                                        channel=group,
+                                        participant=user,
+                                    )
+                                )
                                 participant = participant_info.participant
                                 is_member = participant is not None
-                                participant_type = type(participant).__name__ if participant else "None"
+                                participant_type = (
+                                    type(participant).__name__ if participant else "None"
+                                )
                             except Exception as gp_err:
                                 # Если Telegram вернул NotParticipant и т.п. — считаем, что не участник
                                 is_member = False
@@ -388,14 +393,16 @@ async def send_telegram_invite_by_account(
                             # Обычная группа — берём список участников и ищем user.id
                             try:
                                 participants = await client.get_participants(group)
-                                uid = getattr(user, 'id', None)
-                                is_member = any(getattr(p, 'id', None) == uid for p in participants)
+                                uid = getattr(user, "id", None)
+                                is_member = any(
+                                    getattr(p, "id", None) == uid for p in participants
+                                )
                                 total = len(participants) if participants is not None else 0
                             except Exception as gp_err:
                                 is_member = False
                                 total = -1
                                 logger.warning(
-                                    "⚠️ FACT [{label}]: не удалось получить список участников Chat: "
+                                    f"⚠️ FACT [{label}]: не удалось получить список участников Chat: "
                                     f"type={type(gp_err).__name__}, message={gp_err}"
                                 )
                             logger.info(
@@ -413,31 +420,66 @@ async def send_telegram_invite_by_account(
                             f"⚠️ FACT [{label}]: ошибка проверки членства: "
                             f"type={type(fact_err).__name__}, message={fact_err}"
                         )
+                        is_member = False
+
+                    return is_member
 
                 async def _do_invite() -> Any:
                     # Перед реальным инвайтом фиксируем факт членства "до"
-                    await _check_membership("before_invite")
+                    before_member = await _check_membership("before_invite")
+                    logger.info(
+                        f"🔍 FACT SUMMARY [before_invite]: user_id={getattr(user, 'id', None)}, "
+                        f"group_id={getattr(group, 'id', None)}, is_member={before_member}"
+                    )
                     if is_channel_or_megagroup:
                         logger.info(
                             f"📤 Используем InviteToChannelRequest для "
                             f"{getattr(group, 'title', None) or group.id}"
                         )
-                        result_local = await client(InviteToChannelRequest(
-                            channel=group,
-                            users=[user]
-                        ))
+                        result_local = await client(
+                            InviteToChannelRequest(channel=group, users=[user])
+                        )
                     else:
                         logger.info(
                             f"📤 Используем AddChatUserRequest для "
                             f"{getattr(group, 'title', None) or group.id}"
                         )
-                        result_local = await client(AddChatUserRequest(
-                            chat_id=group.id,
-                            user_id=user.id,
-                            fwd_limit=10
-                        ))
+                        result_local = await client(
+                            AddChatUserRequest(
+                                chat_id=group.id,
+                                user_id=user.id,
+                                fwd_limit=10,
+                            )
+                        )
                     # После успешного запроса фиксируем факт членства "после"
-                    await _check_membership("after_invite")
+                    after_member = await _check_membership("after_invite")
+                    logger.info(
+                        f"🔍 FACT SUMMARY [after_invite]: user_id={getattr(user, 'id', None)}, "
+                        f"group_id={getattr(group, 'id', None)}, is_member={after_member}"
+                    )
+
+                    # Жёсткое требование ТЗ: если после Invite пользователь ФАКТИЧЕСКИ
+                    # не является участником — считаем приглашение неуспешным.
+                    if after_member is False:
+                        target_info = (
+                            invite_data.target_username
+                            or invite_data.target_user_id
+                            or invite_data.target_phone
+                        )
+                        logger.warning(
+                            "⚠️ FACT CHECK FAILED: пользователь не найден среди участников после успешного Invite. "
+                            f"user_id={getattr(user, 'id', None)}, group_id={getattr(group, 'id', None)}, "
+                            f"target={target_info}"
+                        )
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail={
+                                "error": "not_in_members_after_invite",
+                                "message": "Пользователь не находится среди участников после попытки приглашения",
+                                "target": target_info,
+                            },
+                        )
+
                     return result_local
 
                 try:
