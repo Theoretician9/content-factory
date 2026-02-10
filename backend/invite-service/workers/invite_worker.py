@@ -618,60 +618,61 @@ async def _process_batch_async(
                         task, target, current_account_allocation, account_manager, adapter, db
                     )
                 
-                # Не считаем мягкий in_progress как ошибку и не увеличиваем processed_count — цель остаётся PENDING для повтора
-                msg_low = (result.error_message or "").lower()
-                is_in_progress_soft = (
-                    result.status == InviteResultStatus.RATE_LIMITED and (
-                        (getattr(result, 'error_code', None) == 'in_progress') or
-                        ('in_progress' in msg_low) or ('in progress' in msg_low)
+                    # Не считаем мягкий in_progress как ошибку и не увеличиваем processed_count — цель остаётся PENDING для повтора
+                    msg_low = (result.error_message or "").lower()
+                    is_in_progress_soft = (
+                        result.status == InviteResultStatus.RATE_LIMITED and (
+                            (getattr(result, 'error_code', None) == 'in_progress') or
+                            ('in_progress' in msg_low) or ('in progress' in msg_low)
+                        )
                     )
-                )
-                if is_in_progress_soft:
-                    logger.info(f"⏳ AccountManager: Цель {target.id} помечена как PENDING (in_progress), оставляем текущий аккаунт заблокированным для этой задачи")
-                    # Не освобождаем аккаунт: пусть остаётся залочен AM за текущей задачей/сервисом
-                    # Не инкрементим failed/success/processed — повтор пойдёт позже
-                    had_in_progress_soft = True
-                elif result.is_success:
-                    success_count += 1
-                    task.completed_count += 1
-                    processed_count += 1
-                else:
-                    failed_count += 1
-                    task.failed_count += 1
-                    processed_count += 1
-                
-                # Записываем действие в Account Manager, кроме in_progress soft
-                if not is_in_progress_soft and current_account_allocation:
-                    await account_manager.record_action(
-                        current_account_allocation['account_id'],
-                        action_type="invite",
-                        target_channel_id=task.settings.get('group_id') if task.settings else None,
-                        success=result.is_success
-                    )
+                    if is_in_progress_soft:
+                        logger.info(f"⏳ AccountManager: Цель {target.id} помечена как PENDING (in_progress), оставляем текущий аккаунт заблокированным для этой задачи")
+                        # Не освобождаем аккаунт: пусть остаётся залочен AM за текущей задачей/сервисом
+                        # Не инкрементим failed/success/processed — повтор пойдёт позже
+                        had_in_progress_soft = True
+                    elif result.is_success:
+                        success_count += 1
+                        task.completed_count += 1
+                        processed_count += 1
+                    else:
+                        failed_count += 1
+                        task.failed_count += 1
+                        processed_count += 1
+                    
+                    # Записываем действие в Account Manager, кроме in_progress soft
+                    if not is_in_progress_soft and current_account_allocation:
+                        await account_manager.record_action(
+                            current_account_allocation['account_id'],
+                            action_type="invite",
+                            target_channel_id=task.settings.get('group_id') if task.settings else None,
+                            success=result.is_success
+                        )
 
-                # 🔒 ЖЁСТКАЯ ЛОКАЛЬНАЯ ЗАЩИТА ОТ СПАМА ВНУТРИ БАТЧА
-                # ТРЕБОВАНИЕ ТЗ:
-                # - Между КАЖДЫМ запросом к Telegram от ОДНОГО аккаунта минимум 10 секунд
-                #   при любом раскладе (успех, неуспех, in_progress и т.п.)
-                # - Дополнительно можно увеличить паузу через delay_between_invites, но никогда < 10 сек.
-                per_invite_delay = None
-                try:
-                    if task.settings and isinstance(task.settings.get("delay_between_invites"), (int, float)):
-                        per_invite_delay = int(task.settings.get("delay_between_invites") or 0)
-                except Exception:
+                    # 🔒 ЖЁСТКАЯ ЛОКАЛЬНАЯ ЗАЩИТА ОТ СПАМА ВНУТРИ БАТЧА
+                    # ТРЕБОВАНИЕ ТЗ:
+                    # - Между КАЖДЫМ запросом к Telegram от ОДНОГО аккаунта минимум 10 секунд
+                    #   при любом раскладе (успех, неуспех, in_progress и т.п.)
+                    # - Дополнительно можно увеличить паузу через delay_between_invites, но никогда < 10 сек.
                     per_invite_delay = None
+                    try:
+                        if task.settings and isinstance(task.settings.get("delay_between_invites"), (int, float)):
+                            per_invite_delay = int(task.settings.get("delay_between_invites") or 0)
+                    except Exception:
+                        per_invite_delay = None
 
-                # Минимум 10 секунд при любом значении настроек
-                if per_invite_delay is None or per_invite_delay < 10:
-                    per_invite_delay = 10
+                    # Минимум 10 секунд при любом значении настроек
+                    if per_invite_delay is None or per_invite_delay < 10:
+                        per_invite_delay = 10
 
-                logger.info(
-                    f"⏱️ Локальная защита внутри батча: пауза {per_invite_delay} с перед следующим invite "
-                    f"для цели {target.id} (account_id={current_account_allocation.get('account_id') if current_account_allocation else 'N/A'})"
-                )
-                await asyncio.sleep(per_invite_delay)
+                    logger.info(
+                        f"⏱️ Локальная защита внутри батча: пауза {per_invite_delay} с перед следующим invite "
+                        f"для цели {target.id} (account_id={current_account_allocation.get('account_id') if current_account_allocation else 'N/A'})"
+                    )
+                    await asyncio.sleep(per_invite_delay)
 
-                account_handled = True
+                    # После одного invite для данной цели выходим из цикла по аккаунтам
+                    account_handled = True
                 # конец while not account_handled
             
             except Exception as e:
