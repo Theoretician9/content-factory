@@ -368,6 +368,14 @@ async def send_telegram_invite_by_account(
                         if isinstance(group, Channel):
                             # Канал/мегагруппа — используем GetParticipantRequest
                             from telethon.tl.functions.channels import GetParticipantRequest
+                            # Типы участников, которых считаем ФАКТИЧЕСКИ состоящими в канале
+                            from telethon.tl.types import (
+                                ChannelParticipant,
+                                ChannelParticipantAdmin,
+                                ChannelParticipantCreator,
+                                ChannelParticipantBanned,
+                                ChannelParticipantLeft,
+                            )
                             try:
                                 participant_info = await client(
                                     GetParticipantRequest(
@@ -376,10 +384,18 @@ async def send_telegram_invite_by_account(
                                     )
                                 )
                                 participant = participant_info.participant
-                                is_member = participant is not None
                                 participant_type = (
                                     type(participant).__name__ if participant else "None"
                                 )
+                                # Более жёсткая логика:
+                                # участником считаем только "живые" статусы, исключая Left/Banned.
+                                if isinstance(participant, (ChannelParticipantLeft, ChannelParticipantBanned)):
+                                    is_member = False
+                                else:
+                                    is_member = isinstance(
+                                        participant,
+                                        (ChannelParticipant, ChannelParticipantAdmin, ChannelParticipantCreator),
+                                    )
                             except Exception as gp_err:
                                 # Если Telegram вернул NotParticipant и т.п. — считаем, что не участник
                                 is_member = False
