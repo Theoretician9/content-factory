@@ -50,30 +50,22 @@ interface CreateTaskForm {
 
 interface TaskStats {
   task_id: number;
-  task_name: string;
-  task_status: string;
-  targets_statistics: {
-    total_targets: number;
-    pending_targets: number;
-    invited_targets: number;
-    failed_targets: number;
-    skipped_targets: number;
-    progress_percentage: number;
-    success_rate: number;
+  status: string;
+  progress_percentage: number;
+  targets: {
+    total: number;
+    pending: number;
+    invited: number;
+    failed: number;
   };
-  execution_statistics: {
-    total_attempts: number;
-    successful_invites: number;
-    failed_invites: number;
-    rate_limited: number;
-    flood_wait: number;
-    avg_execution_time: number;
+  timing: {
+    created_at: string;
+    started_at: string | null;
+    ended_at: string | null;
+    execution_time_seconds: number | null;
   };
-  time_statistics?: {
-    first_execution: string | null;
-    last_execution: string | null;
-    total_duration: number;
-  };
+  settings?: any;
+  error_message?: string | null;
 }
 
 interface ExecutionLog {
@@ -1422,14 +1414,28 @@ const Mailing = () => {
                         {/* Заголовок задачи и кнопка назад */}
                         <div className="flex items-center justify-between">
                           <div>
-                            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                              {statsData.task_name}
-                            </h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                              Статус: <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(statsData.task_status)}`}>
-                                {statsData.task_status}
-                              </span>
-                            </p>
+                            {(() => {
+                              const currentTask = tasks.find(
+                                (t) => t.id === Number(selectedTaskForStats)
+                              );
+                              return (
+                                <>
+                                  <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                                    {currentTask?.title || `Задача №${statsData.task_id}`}
+                                  </h3>
+                                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    Статус:{' '}
+                                    <span
+                                      className={`px-2 py-1 rounded-full text-xs ${getStatusColor(
+                                        (currentTask?.status || statsData.status || '').toLowerCase()
+                                      )}`}
+                                    >
+                                      {currentTask?.status || statsData.status}
+                                    </span>
+                                  </p>
+                                </>
+                              );
+                            })()}
                           </div>
                           <button
                             onClick={() => setSelectedTaskForStats('')}
@@ -1442,26 +1448,28 @@ const Mailing = () => {
                         {/* Общая статистика */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                              {statsData.targets_statistics.total_targets}
+                          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                              {statsData.targets.total}
                             </div>
                             <div className="text-sm text-gray-500 dark:text-gray-400">Всего целей</div>
                           </div>
                           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                             <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                              {statsData.targets_statistics.invited_targets}
+                              {statsData.targets.invited}
                             </div>
                             <div className="text-sm text-gray-500 dark:text-gray-400">Приглашено</div>
                           </div>
                           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                             <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-                              {statsData.targets_statistics.failed_targets}
+                              {statsData.targets.failed}
                             </div>
                             <div className="text-sm text-gray-500 dark:text-gray-400">Неудачно</div>
                           </div>
                           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                             <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                              {statsData.targets_statistics.success_rate.toFixed(1)}%
+                              {statsData.targets.total > 0
+                                ? ((statsData.targets.invited / statsData.targets.total) * 100).toFixed(1)
+                                : '0.0'}
                             </div>
                             <div className="text-sm text-gray-500 dark:text-gray-400">Успешность</div>
                           </div>
@@ -1477,15 +1485,15 @@ const Mailing = () => {
                             <div className="space-y-3">
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Ожидают:</span>
-                                <span className="font-medium">{statsData.targets_statistics.pending_targets}</span>
+                                <span className="font-medium">{statsData.targets.pending}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Приглашены:</span>
-                                <span className="font-medium text-green-600">{statsData.targets_statistics.invited_targets}</span>
+                                <span className="font-medium text-green-600">{statsData.targets.invited}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Неудачно:</span>
-                                <span className="font-medium text-red-600">{statsData.targets_statistics.failed_targets}</span>
+                                <span className="font-medium text-red-600">{statsData.targets.failed}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Пропущены:</span>
@@ -1494,12 +1502,12 @@ const Mailing = () => {
                               <div className="border-t pt-3 mt-3">
                                 <div className="flex justify-between font-semibold">
                                   <span>Прогресс:</span>
-                                  <span>{statsData.targets_statistics.progress_percentage.toFixed(1)}%</span>
+                                  <span>{statsData.progress_percentage.toFixed(1)}%</span>
                                 </div>
                                 <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2 mt-2">
                                   <div
                                     className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                    style={{ width: `${statsData.targets_statistics.progress_percentage}%` }}
+                                    style={{ width: `${statsData.progress_percentage}%` }}
                                   ></div>
                                 </div>
                               </div>
@@ -1513,29 +1521,25 @@ const Mailing = () => {
                             </h4>
                             <div className="space-y-3">
                               <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Всего попыток:</span>
-                                <span className="font-medium">{statsData.execution_statistics.total_attempts}</span>
+                                <span className="text-gray-600 dark:text-gray-400">Всего целей:</span>
+                                <span className="font-medium">{statsData.targets.total}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Успешных:</span>
-                                <span className="font-medium text-green-600">{statsData.execution_statistics.successful_invites}</span>
+                                <span className="font-medium text-green-600">{statsData.targets.invited}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-600 dark:text-gray-400">Неудачных:</span>
-                                <span className="font-medium text-red-600">{statsData.execution_statistics.failed_invites}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Rate Limited:</span>
-                                <span className="font-medium text-orange-600">{statsData.execution_statistics.rate_limited}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Flood Wait:</span>
-                                <span className="font-medium text-yellow-600">{statsData.execution_statistics.flood_wait}</span>
+                                <span className="font-medium text-red-600">{statsData.targets.failed}</span>
                               </div>
                               <div className="border-t pt-3 mt-3">
                                 <div className="flex justify-between">
-                                  <span className="text-gray-600 dark:text-gray-400">Среднее время:</span>
-                                  <span className="font-medium">{statsData.execution_statistics.avg_execution_time.toFixed(2)}с</span>
+                                  <span className="text-gray-600 dark:text-gray-400">Время выполнения:</span>
+                                  <span className="font-medium">
+                                    {statsData.timing.execution_time_seconds != null
+                                      ? `${statsData.timing.execution_time_seconds.toFixed(1)}с`
+                                      : '—'}
+                                  </span>
                                 </div>
                               </div>
                             </div>
@@ -1550,8 +1554,8 @@ const Mailing = () => {
                             📈 Краткая лента приглашений
                           </h4>
                           {(() => {
-                            const total = statsData.targets_statistics.total_targets || 0;
-                            const invited = statsData.targets_statistics.invited_targets || 0;
+                            const total = statsData.targets.total || 0;
+                            const invited = statsData.targets.invited || 0;
                             const successLogs = executionLogs.filter((log) => {
                               const status = (log.details?.result_status || '').toString().toUpperCase();
                               return log.action_type === 'INVITE_SENT' && status === 'SUCCESS';
@@ -1616,7 +1620,9 @@ const Mailing = () => {
                                         {log.account_id}
                                       </td>
                                       <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                                        {typeof log.details === 'object' ? JSON.stringify(log.details).substring(0, 50) + '...' : log.details}
+                                        {typeof log.details === 'object'
+                                          ? JSON.stringify(log.details).substring(0, 50) + '...'
+                                          : log.details}
                                       </td>
                                     </tr>
                                   ))}
@@ -1632,43 +1638,7 @@ const Mailing = () => {
                           )}
                         </div>
 
-                        {/* Статистика по аккаунтам */}
-                        {statsData.accounts_statistics.length > 0 && (
-                          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-                            <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-                              👥 Статистика по аккаунтам
-                            </h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {statsData.accounts_statistics.map((account, index) => (
-                                <div key={index} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
-                                  <div className="font-medium text-gray-900 dark:text-gray-100 mb-2">
-                                    {account.username || account.account_id}
-                                  </div>
-                                  <div className="space-y-1 text-sm">
-                                    <div className="flex justify-between">
-                                      <span className="text-gray-600 dark:text-gray-400">Отправлено:</span>
-                                      <span className="font-medium">{account.sent || 0}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-gray-600 dark:text-gray-400">Успешно:</span>
-                                      <span className="font-medium text-green-600">{account.success || 0}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-gray-600 dark:text-gray-400">Ошибки:</span>
-                                      <span className="font-medium text-red-600">{account.errors || 0}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="text-gray-600 dark:text-gray-400">Статус:</span>
-                                      <span className={`px-1 py-0.5 rounded text-xs ${getStatusColor(account.status || 'active')}`}>
-                                        {account.status || 'active'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                      {/* Статистика по аккаунтам — будет добавлена, когда backend начнет возвращать accounts_statistics */}
                       </div>
                     ) : (
                       <div className="text-center py-12 text-gray-500 dark:text-gray-400">
