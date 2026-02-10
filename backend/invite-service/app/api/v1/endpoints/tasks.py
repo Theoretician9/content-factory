@@ -620,7 +620,11 @@ async def get_task_status(
     
     # Вычисление процента выполнения
     total_targets = sum(status_counts.values())
-    completed_targets = status_counts.get('invited', 0) + status_counts.get('failed', 0)
+    # Завершёнными считаем INVITED + FAILED (ACCEPTED отдельно пока не считаем, так как пока не используем)
+    completed_targets = (
+        status_counts.get(TargetStatus.INVITED.value, 0)
+        + status_counts.get(TargetStatus.FAILED.value, 0)
+    )
     progress_percentage = (completed_targets / total_targets * 100) if total_targets > 0 else 0
     
     # Время выполнения
@@ -638,9 +642,9 @@ async def get_task_status(
         "progress_percentage": round(progress_percentage, 2),
         "targets": {
             "total": total_targets,
-            "pending": status_counts.get('pending', 0),
-            "invited": status_counts.get('invited', 0),
-            "failed": status_counts.get('failed', 0)
+            "pending": status_counts.get(TargetStatus.PENDING.value, 0),
+            "invited": status_counts.get(TargetStatus.INVITED.value, 0),
+            "failed": status_counts.get(TargetStatus.FAILED.value, 0)
         },
         "timing": {
             "created_at": task.created_at.isoformat(),
