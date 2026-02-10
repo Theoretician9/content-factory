@@ -540,46 +540,103 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                     )
         
         elif error.response.status_code == 400:
-            # Bad request - различные ошибки
+            # Bad request - различные бизнес‑ошибки, которые не нужно ретраить
             detail = error_data.get("detail", {})
             
             if isinstance(detail, dict):
                 error_type = detail.get("error", "unknown")
-                
+                message = str(detail.get("message", "") or "")
+
+                # Пользователь должен быть в контактах
                 if error_type == "not_mutual_contact":
                     return InviteResult(
                         status=InviteResultStatus.NOT_MUTUAL_CONTACT,
-                        error_message="Пользователь должен быть в контактах",
+                        error_message=message or "Пользователь должен быть в ваших контактах",
                         error_code="not_mutual_contact",
+                        execution_time=execution_time,
+                        account_id=account.account_id,
+                        can_retry=False
+                    )
+
+                # После инвайта пользователь фактически не оказался в участниках
+                if error_type == "not_in_members_after_invite":
+                    return InviteResult(
+                        status=InviteResultStatus.FAILED,
+                        error_message=message or "Пользователь не появился среди участников после приглашения",
+                        error_code="not_in_members_after_invite",
+                        execution_time=execution_time,
+                        account_id=account.account_id,
+                        can_retry=False
+                    )
+
+                # Приватность / права / некорректные идентификаторы и т.п. — используем текст от Integration Service
+                if error_type in {
+                    "invalid_username",
+                    "user_not_found",
+                    "privacy_restricted",
+                    "already_participant",
+                    "group_restriction",
+                }:
+                    return InviteResult(
+                        status=InviteResultStatus.FAILED,
+                        error_message=message or "Невозможно пригласить пользователя из‑за ограничений или некорректных данных",
+                        error_code=error_type,
                         execution_time=execution_time,
                         account_id=account.account_id,
                         can_retry=False
                     )
         
         elif error.response.status_code == 500:
-            # Специальная обработка invite_failed, когда пользователь уже в слишком большом количестве каналов/групп.
-            # Это не техническая, а бизнес‑ошибка, повторные попытки бессмысленны и только засоряют логи.
+            # Детальная обработка invite_failed с использованием расшифровки из Integration Service
             detail = error_data.get("detail", {})
             
             if isinstance(detail, dict):
-                error_type = detail.get("error", "unknown")
+                error_type = detail.get("error", "invite_failed")
                 message = str(detail.get("message", "") or "")
+                original_error = str(detail.get("original_error", "") or "")
+                combined_text = (message or "") + " " + (original_error or "")
                 
-                # Сообщение от Telethon: "One of the users you tried to add is already in too many channels/supergroups"
-                if error_type == "invite_failed" and "too many channels/supergroups" in message.lower():
+                # Специальная обработка: пользователь уже состоит в слишком большом количестве каналов/групп.
+                if error_type == "invite_failed" and "too many channels/supergroups" in combined_text.lower():
+                    human_msg = (
+                        "Пользователь уже состоит в слишком большом количестве каналов/групп, "
+                        "Telegram запрещает добавлять его ещё."
+                    )
                     return InviteResult(
                         status=InviteResultStatus.FAILED,
-                        error_message=message or "Пользователь уже состоит в слишком большом количестве каналов/групп",
+                        error_message=human_msg,
                         error_code="invite_failed_too_many_channels",
                         execution_time=execution_time,
                         account_id=account.account_id,
                         can_retry=False
                     )
+
+                # Если Integration Service уже дал человекочитаемое сообщение — используем его
+                if message:
+                    return InviteResult(
+                        status=InviteResultStatus.FAILED,
+                        error_message=message,
+                        error_code=error_type,
+                        execution_time=execution_time,
+                        account_id=account.account_id,
+                        can_retry=True  # 5xx — теоретически можно повторить позже
+                    )
+
+                # Если сообщение пустое, но есть оригинальный текст Telethon
+                if original_error:
+                    return InviteResult(
+                        status=InviteResultStatus.FAILED,
+                        error_message=f"Сбой Telegram: {original_error}",
+                        error_code=error_type,
+                        execution_time=execution_time,
+                        account_id=account.account_id,
+                        can_retry=True
+                    )
         
-        # Общая ошибка
+        # Общая ошибка (fallback), если не удалось корректно разобрать detail
         return InviteResult(
             status=InviteResultStatus.FAILED,
-            error_message=f"Ошибка Integration Service: {error_data.get('detail', str(error))}",
+            error_message="Неизвестная ошибка при обращении к Integration Service. Попробуйте повторить позже.",
             error_code=f"http_{error.response.status_code}",
             execution_time=execution_time,
             account_id=account.account_id,
