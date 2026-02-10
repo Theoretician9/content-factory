@@ -444,8 +444,9 @@ async def _process_batch_async(
         failed_count = 0
         current_account_allocation = None
         had_in_progress_soft = False
-        # Если батч завершился из-за rate limit без отправки — планируем следующий батч через cooldown_remaining
+        # Если батч завершился из-за rate limit без отправки — планируем повтор именно ЭТОГО батча через cooldown_remaining
         last_cooldown_remaining: Optional[int] = None
+        had_hard_rate_limit_block: bool = False
 
         # Очередь кандидатов: только аккаунты, прошедшие check-admin-rights (allowed_account_ids),
         # иначе — из summary AM под конкретный паблик
@@ -600,16 +601,22 @@ async def _process_batch_async(
                             logger.error(f"❌ Ошибка освобождения аккаунта после rate limit: {release_err}")
                         aid = current_account_allocation['account_id']
                         current_account_allocation = None
+                        # Цель остаётся PENDING, так как фактическая попытка инвайта не выполнялась —
+                        # мы всего лишь упёрлись в глобальный лимит аккаунта.
                         target.status = TargetStatus.PENDING
                         target.error_message = "rate_limited"
                         target.updated_at = datetime.utcnow()
                         db.commit()
                         tried_accounts_for_target.add(aid)
                         queue_for_target.append(aid)
-                        # Если в очереди ещё есть непробованные для этой цели — пробуем следующий
+                        # Если в очереди ещё есть непробованные для этой цели — пробуем следующий аккаунт
                         if any(pid not in tried_accounts_for_target for pid in queue_for_target):
                             logger.info(f"🔄 AccountManager: Пробуем другой аккаунт из очереди ({len(queue_for_target)} в очереди)")
                             continue
+
+                        # Иначе для этой цели не нашлось ни одного аккаунта, способного сейчас отправить инвайт.
+                        # Фиксируем, что батч упёрся в жёсткий лимит и должен быть ПОВТОРЁН позже, а не пропущен.
+                        had_hard_rate_limit_block = True
                         account_handled = True
                         continue
                     
@@ -722,9 +729,27 @@ async def _process_batch_async(
 
         # Защита на уровне Account Manager / RateLimitingService (приоритетная)
         if last_cooldown_remaining is not None and last_cooldown_remaining > 0:
-            # Даже если в этом батче были успешные приглашения, но хотя бы один аккаунт упёрся в cooldown,
-            # даём аккаунту(ам) отстояться, чтобы не крутить бесконечные проверки лимитов.
             next_batch_countdown = min(int(last_cooldown_remaining) + 1, 901)
+
+            # Если в батче НЕ было ни одной фактической попытки (processed_count == 0),
+            # и мы упёрлись в лимиты аккаунта, то этот батч нельзя считать обработанным.
+            # Перезапускаем ИМЕННО ЭТОТ батч после cooldown, не переходим к следующему.
+            if had_hard_rate_limit_block and processed_count == 0 and success_count == 0 and failed_count == 0:
+                logger.info(
+                    f"⏱️ Нет доступного аккаунта для батча {batch_number} (hourly limit / cooldown). "
+                    f"Повтор данного батча через {next_batch_countdown} с (cooldown_remaining={last_cooldown_remaining})"
+                )
+                # Повторно планируем этот же батч с теми же целями
+                process_target_batch.apply_async(
+                    (task.id, [t.id for t in targets], batch_number),
+                    countdown=next_batch_countdown
+                )
+                return (
+                    f"Батч {batch_number}: 0 обработано, 0 успешно — повтор через {next_batch_countdown} с "
+                    f"(hourly/cooldown)"
+                )
+
+            # Стандартный случай: были какие‑то попытки/результаты в батче — ждём и двигаемся дальше по очереди батчей.
             logger.info(
                 f"⏱️ Нет доступного аккаунта или достигнут cooldown (из Account Manager): "
                 f"следующий батч через {next_batch_countdown} с (cooldown_remaining={last_cooldown_remaining})"
