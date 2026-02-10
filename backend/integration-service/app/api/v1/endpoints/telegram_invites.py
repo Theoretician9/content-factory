@@ -673,14 +673,18 @@ async def send_telegram_invite_by_account(
         )
     
     except Exception as e:
-        # Обработка ошибок приватности и других общих ошибок
-        error_msg = str(e).lower()
-        
+        """
+        Общий перехват ошибок, которые не попали под более специфичные обработчики выше.
+        Здесь делаем максимально подробное логирование и расшифровку причин на русском языке.
+        """
+        target_info = invite_data.target_username or invite_data.target_phone or invite_data.target_user_id
+        raw_msg = str(e) or ""
+        error_msg = raw_msg.lower()
+
         # Специальная обработка: у аккаунта нет прав писать/приглашать в этот чат
         if isinstance(e, ChatWriteForbiddenError) or "you can't write in this chat" in error_msg:
-            target_info = invite_data.target_username or invite_data.target_phone or invite_data.target_user_id
             logger.info(
-                f"ChatWriteForbidden для аккаунта {account_id}, цель {target_info}: {str(e)}"
+                f"ChatWriteForbidden для аккаунта {account_id}, цель {target_info}: {raw_msg}"
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -691,34 +695,80 @@ async def send_telegram_invite_by_account(
                     "group": invite_data.group_id
                 }
             )
-        
-        if "privacy" in error_msg or "restricted" in error_msg:
-            target_info = invite_data.target_username or invite_data.target_phone or invite_data.target_user_id
-            logger.info(f"Privacy restricted для {target_info}")
-            
+
+        # Общие ограничения приватности (если вдруг не перехвачены выше)
+        if "privacy" in error_msg and "restricted" in error_msg:
+            logger.info(f"Privacy restricted для {target_info}: {raw_msg}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={
                     "error": "privacy_restricted",
-                    "message": "Настройки приватности пользователя запрещают приглашения"
+                    "message": "Настройки приватности пользователя запрещают приглашения",
+                    "target": target_info,
                 }
             )
-        else:
-            # Общие ошибки
-            target_info = invite_data.target_username or invite_data.target_phone or invite_data.target_user_id
-            logger.error(f"Telegram invite error для аккаунта {account_id}, цель {target_info}: {str(e)}")
-            
-            # Улучшенная обработка ошибок - не возвращаем пустые сообщения
-            error_detail = str(e) if str(e).strip() else "Неизвестная ошибка при отправке приглашения"
-            
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail={
-                    "error": "invite_failed",
-                    "message": error_detail,
-                    "target": target_info
-                }
+
+        # 🔍 Расширенная диагностика и расшифровка причин на русском языке
+        reason_code = "invite_failed"
+        reason_ru = "Неизвестная ошибка при отправке приглашения"
+
+        # Пользователь не найден по username
+        if "no user has" in raw_msg.lower():
+            reason_code = "user_not_found"
+            reason_ru = (
+                "Пользователь с указанным username не найден в Telegram. "
+                "Возможные причины: username указан с ошибкой, пользователь изменил username "
+                "или такой учётной записи больше не существует."
             )
+        # Неправильный / недопустимый username
+        elif "username invalid" in error_msg or "the username is not acceptable" in error_msg:
+            reason_code = "invalid_username"
+            reason_ru = (
+                "Указанный username имеет недопустимый формат для Telegram. "
+                "Проверьте, что он начинается с буквы/цифры, содержит только допустимые символы "
+                "и не нарушает правила Telegram."
+            )
+        # Ограничения приватности пользователя (общий случай)
+        elif "user privacy restricted" in error_msg:
+            reason_code = "privacy_restricted"
+            reason_ru = (
+                "Настройки приватности пользователя запрещают приглашения в группы/каналы "
+                "с этого аккаунта."
+            )
+        # Пользователь уже в группе/канале или был недавно добавлен (типичные тексты Telethon)
+        elif "user already" in error_msg or "USER_ALREADY_PARTICIPANT".lower() in error_msg:
+            reason_code = "already_participant"
+            reason_ru = (
+                "Пользователь уже является участником этой группы/канала, "
+                "или недавно был туда добавлен."
+            )
+        # Ограничения на добавление в конкретную группу/канал
+        elif "users too much" in error_msg or "channel private" in error_msg:
+            reason_code = "group_restriction"
+            reason_ru = (
+                "Группа/канал не принимает новых участников или достигнут лимит участников. "
+                "Возможно, владелец ограничил приглашения."
+            )
+
+        logger.error("❌ Telegram invite error (общий перехват):")
+        logger.error(f"   - Аккаунт: {account_id}")
+        logger.error(f"   - Цель: {target_info}")
+        logger.error(f"   - Тип исключения: {type(e).__name__}")
+        logger.error(f"   - Исходное сообщение: {raw_msg!r}")
+        logger.error(f"   - Расшифровка (RU): {reason_ru}")
+        logger.error(f"   - Код причины: {reason_code}")
+
+        # Возвращаем структурированную ошибку для Invite‑service / фронта
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": reason_code,
+                "message": reason_ru,
+                "target": target_info,
+                "original_error": raw_msg,
+                "telethon_error_type": type(e).__name__,
+            }
+        )
 
 
 @router.post("/invite", response_model=TelegramInviteResponse)
