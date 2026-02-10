@@ -629,9 +629,12 @@ async def get_task_status(
         end_time = task.end_time or datetime.utcnow()
         execution_time = (end_time - task.start_time).total_seconds()
     
+    # Статус задачи: в БД он хранится как строка ENUM, поэтому task.status может быть уже строкой.
+    status_value = task.status if isinstance(task.status, str) else task.status.value
+    
     return {
         "task_id": task_id,
-        "status": task.status.value,
+        "status": status_value,
         "progress_percentage": round(progress_percentage, 2),
         "targets": {
             "total": total_targets,
