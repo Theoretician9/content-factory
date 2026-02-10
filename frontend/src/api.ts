@@ -443,8 +443,8 @@ export const inviteApi = {
       body: JSON.stringify({ group_link: groupLink })
     }),
 
-    // Получение детальной статистики
-    stats: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/status`),
+    // Получение детальной статистики по задаче (через statistics endpoint)
+    stats: (taskId: string) => apiFetch(`/api/invite/tasks/${taskId}/stats`),
 
     // Получение логов выполнения
     logs: (taskId: string, params: {
