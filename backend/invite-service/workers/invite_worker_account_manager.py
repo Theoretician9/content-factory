@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 
 from app.models import InviteTarget, TargetStatus
+from app.models.invite_execution_log import InviteExecutionLog, LogLevel, ActionType
 from app.adapters.base import InviteResult, InviteResultStatus
 from app.clients.account_manager_client import AccountManagerClient
 
@@ -166,15 +167,50 @@ async def _send_single_invite_via_account_manager(
         
         target.updated_at = datetime.utcnow()
         
-        # Коммитим изменения с обработкой ошибок
+        # Пишем лог выполнения приглашения в invite_execution_logs
+        try:
+            action = ActionType.INVITE_SUCCESSFUL if result.is_success else ActionType.INVITE_FAILED
+            level = LogLevel.INFO if result.is_success else LogLevel.WARNING
+            status_str = (
+                result.status.value if hasattr(result, "status") and hasattr(result.status, "value") else str(result.status)
+            )
+            log_entry = InviteExecutionLog(
+                task_id=task.id,
+                target_id=target.id,
+                account_id=str(account_id),
+                action_type=action,
+                level=level,
+                message=getattr(result, "message", None) or ("Invite successful" if result.is_success else "Invite failed"),
+                execution_time_ms=int(result.execution_time * 1000) if getattr(result, "execution_time", None) else None,
+                details={
+                    "result_status": status_str,
+                    "target_username": target.username,
+                    "target_user_id": target.user_id_platform,
+                    "target_phone": target.phone_number,
+                    "error_code": getattr(result, "error_code", None),
+                    "error_message": getattr(result, "error_message", None),
+                    "platform_response": getattr(result, "platform_response", None),
+                },
+            )
+            db.add(log_entry)
+        except Exception:
+            # Лог не должен ломать основную транзакцию
+            logger.warning(
+                "⚠️ AccountManager: не удалось записать InviteExecutionLog для цели %s",
+                target.id,
+                exc_info=True,
+            )
+        
+        # Коммитим изменения с обработкой ошибок (цель + лог)
         try:
             db.commit()
         except Exception as db_error:
-            logger.error(f"❌ Ошибка сохранения в БД для цели {target.id}: {str(db_error)}")
+            logger.error(f"❌ Ошибка сохранения в БД для цели {target.id} и лога: {str(db_error)}")
             db.rollback()
             # Повторная попытка коммита
             try:
                 target.updated_at = datetime.utcnow()
+                db.add(log_entry)
                 db.commit()
             except Exception as retry_error:
                 logger.error(f"❌ Повторная ошибка сохранения в БД для цели {target.id}: {str(retry_error)}")
@@ -227,6 +263,27 @@ async def _send_single_invite_via_account_manager(
             except Exception as error_report_error:
                 logger.error(f"❌ Ошибка при уведомлении Account Manager об ошибке: {str(error_report_error)}")
         
+        # Пишем лог об ошибке выполнения
+        try:
+            err_log = InviteExecutionLog(
+                task_id=task.id,
+                target_id=target.id,
+                account_id=str(account_allocation.get("account_id")) if account_allocation else None,
+                action_type=ActionType.ERROR_OCCURRED,
+                level=LogLevel.ERROR,
+                message=e_str,
+                execution_time_ms=int((datetime.utcnow() - start_time).total_seconds() * 1000),
+                error_message=e_str,
+            )
+            db.add(err_log)
+            db.commit()
+        except Exception:
+            logger.warning(
+                "⚠️ AccountManager: не удалось записать InviteExecutionLog для исключения по цели %s",
+                target.id,
+                exc_info=True,
+            )
+
         # Возвращаем результат с ошибкой
         return InviteResult(
             status=InviteResultStatus.FAILED,

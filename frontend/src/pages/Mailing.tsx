@@ -905,13 +905,14 @@ const Mailing = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                          <div
-                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${task.progress_percentage || 0}%` }}
-                          ></div>
+                              <div
+                                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${task.progress_percentage || 0}%` }}
+                              ></div>
                             </div>
                             <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          {task.completed_count || 0} / {task.target_count || 0}
+                              {/* Прогресс по ОБРАБОТАННЫМ целям (успех + неудача), а не только по успешным */}
+                              {((task.completed_count || 0) + (task.failed_count || 0))} / {task.target_count || 0}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
