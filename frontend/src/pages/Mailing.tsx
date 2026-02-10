@@ -11,7 +11,7 @@ import Input from '../components/Input';
 import Form from '../components/Form';
 
 interface InviteTask {
-  id: string;
+  id: number;
   user_id: number;
   platform: 'telegram' | 'instagram' | 'whatsapp';
   task_type: 'invite_to_group' | 'send_messages';
@@ -20,17 +20,18 @@ interface InviteTask {
   target_group_id?: string;
   message_template?: string;
   priority: 'high' | 'normal' | 'low' | 'urgent';
-  status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
-  progress: number;
+  status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled' | string;
   created_at: string;
   updated_at: string;
-  target_count?: number;
-  invited_count?: number;
-  failed_count?: number;
+  // Статистика по задаче — соответствуют InviteTaskResponse из backend
+  target_count: number;
+  completed_count: number;
+  failed_count: number;
+  progress_percentage: number;
   settings?: {
     auto_add_contacts: boolean;
     fallback_to_messages: boolean;
-  };
+  } | null;
 }
 
 // Интерфейс для формы создания (без title)
@@ -48,8 +49,8 @@ interface CreateTaskForm {
 }
 
 interface TaskStats {
-  task_id: string;
-  task_title: string;
+  task_id: number;
+  task_name: string;
   task_status: string;
   targets_statistics: {
     total_targets: number;
@@ -68,16 +69,21 @@ interface TaskStats {
     flood_wait: number;
     avg_execution_time: number;
   };
-  accounts_statistics: any[];
+  time_statistics?: {
+    first_execution: string | null;
+    last_execution: string | null;
+    total_duration: number;
+  };
 }
 
 interface ExecutionLog {
-  id: string;
-  task_id: string;
-  target_id: string;
-  account_id: string;
-  action: string;
-  status: string;
+  id: number;
+  task_id: number;
+  target_id: number;
+  account_id: string | null;
+  action_type: string;
+  message: string;
+  execution_time?: number;
   details: any;
   created_at: string;
 }
@@ -907,13 +913,13 @@ const Mailing = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                              <div
-                                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                style={{ width: `${task.progress || 0}%` }}
-                              ></div>
+                          <div
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${task.progress_percentage || 0}%` }}
+                          ></div>
                             </div>
                             <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              {task.invited_count || 0} / {task.target_count || 0}
+                          {task.completed_count || 0} / {task.target_count || 0}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -1417,7 +1423,7 @@ const Mailing = () => {
                         <div className="flex items-center justify-between">
                           <div>
                             <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                              {statsData.task_title}
+                              {statsData.task_name}
                             </h3>
                             <p className="text-sm text-gray-500 dark:text-gray-400">
                               Статус: <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(statsData.task_status)}`}>
@@ -1534,6 +1540,50 @@ const Mailing = () => {
                               </div>
                             </div>
                           </div>
+                        </div>
+
+                        {/* Краткая лента приглашений в формате: 
+                            Задача №, время, пользователь "юзернейм" добавлен (добавлено/всего)
+                           Основано на успешных попытках INVITE_SENT с result_status=SUCCESS */}
+                        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                          <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-3">
+                            📈 Краткая лента приглашений
+                          </h4>
+                          {(() => {
+                            const total = statsData.targets_statistics.total_targets || 0;
+                            const invited = statsData.targets_statistics.invited_targets || 0;
+                            const successLogs = executionLogs.filter((log) => {
+                              const status = (log.details?.result_status || '').toString().toUpperCase();
+                              return log.action_type === 'INVITE_SENT' && status === 'SUCCESS';
+                            });
+
+                            if (successLogs.length === 0) {
+                              return (
+                                <div className="text-sm text-gray-500 dark:text-gray-400">
+                                  Пока нет зафиксированных успешных приглашений для этой задачи.
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <ul className="space-y-1 text-sm text-gray-800 dark:text-gray-200">
+                                {successLogs.slice(0, 20).map((log) => {
+                                  const username =
+                                    log.details?.target_username ||
+                                    log.details?.username ||
+                                    log.details?.platform_response?.username ||
+                                    `id:${log.target_id}`;
+
+                                  return (
+                                    <li key={log.id}>
+                                      Задача №{statsData.task_id}, {formatDate(log.created_at)} — пользователь "
+                                      {username}" добавлен ({invited}/{total})
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            );
+                          })()}
                         </div>
 
                         {/* Логи выполнения */}
