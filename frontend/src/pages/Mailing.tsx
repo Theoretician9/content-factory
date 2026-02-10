@@ -1599,7 +1599,6 @@ const Mailing = () => {
                                   <tr>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Время</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Действие</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Статус</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Аккаунт</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Детали</th>
                                   </tr>
@@ -1611,12 +1610,7 @@ const Mailing = () => {
                                         {formatDate(log.created_at)}
                                       </td>
                                       <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
-                                        {log.action}
-                                      </td>
-                                      <td className="px-4 py-3 text-sm">
-                                        <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(log.status)}`}>
-                                          {log.status}
-                                        </span>
+                                        {log.action_type}
                                       </td>
                                       <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                                         {log.account_id}
