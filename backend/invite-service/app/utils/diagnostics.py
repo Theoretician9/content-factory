@@ -101,7 +101,9 @@ class InviteServiceDiagnostics:
         
         try:
             # Проверка JWT токена
-            token = await self._get_jwt_token_for_parsing_service()
+            # Для отладочных вызовов используем системный user_id = 0,
+            # чтобы не имитировать конкретного пользователя SaaS.
+            token = await self._get_jwt_token_for_parsing_service(user_id=0)
             
             parsing_service_url = "http://parsing-service:8000"
             
