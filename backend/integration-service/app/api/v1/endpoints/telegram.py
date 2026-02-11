@@ -18,7 +18,7 @@ from ....schemas.telegram import (
     TelegramChannelCreate,
     TelegramChannelResponse,
     SendMessageRequest,
-    SendMessageResponse
+    SendMessageResponse,
 )
 from ....schemas.base import BaseResponse, ErrorResponse, PaginationParams
 from ....schemas.integration_logs import IntegrationLogResponse
@@ -513,6 +513,52 @@ async def test_auth(request: Request):
     except Exception as e:
         logger.error(f"🚨 TEST-AUTH ERROR: {e}")
         return {"error": str(e), "message": "Authentication failed"}
+
+
+@router.post("/messages/send", response_model=SendMessageResponse)
+async def send_telegram_message(
+    request: Request,
+    send_request: SendMessageRequest,
+    session: AsyncSession = Depends(get_async_session),
+    telegram_service: TelegramService = Depends(get_telegram_service),
+    log_service: IntegrationLogService = Depends(get_log_service),
+):
+    """
+    Отправка сообщения в Telegram‑канал/чат от имени уже подключенного аккаунта.
+
+    Аккаунт выбирается из активных сессий пользователя через TelegramService.
+    Изоляция пользователей обеспечивается через JWT (get_user_id_from_request).
+    """
+    try:
+        user_id = await get_user_id_from_request(request)
+
+        result = await telegram_service.send_message_from_any_session(
+            db_session=session,
+            user_id=user_id,
+            send_request=send_request,
+        )
+
+        await log_service.log_action(
+            session,
+            user_id,
+            "telegram",
+            "send_message",
+            "success" if result.success else "error",
+            details={
+                "message_id": result.message_id,
+                "error": result.error,
+            },
+        )
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending telegram message: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка отправки сообщения: {str(e)}",
+        )
 
 @router.get("/test-public")
 async def test_public():
