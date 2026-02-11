@@ -1,0 +1,46 @@
+from typing import Any, Dict
+
+from app.core.llm import LLMClient
+from app.core.prompts import prompt_registry
+from app.schemas.runtime import TaskRuntimeContext
+
+
+class ContentAgent:
+    """
+    Content Agent: генерирует текст поста на основе контекста.
+
+    Пока использует LLM‑клиент с заглушкой, но интерфейс уже
+    соответствует нужному для будущей интеграции с реальной моделью.
+    """
+
+    def __init__(self, llm_client: LLMClient | None = None) -> None:
+        self._llm = llm_client or LLMClient()
+
+    async def generate_post(self, ctx: TaskRuntimeContext) -> Dict[str, Any]:
+        """Собрать промпт и получить черновик поста (JSON)."""
+        persona = ctx.persona or {"tone": "friendly_expert", "language": "ru", "forbidden_topics": []}
+        strategy = ctx.strategy_snapshot or {}
+
+        prompt = prompt_registry.render(
+            "content_writer_v1",
+            {
+                "persona": persona,
+                "strategy": strategy,
+                "pillar": None,
+                "description": "Автоматическое ведение Telegram‑канала.",
+            },
+        )
+
+        messages = [
+            {"role": "system", "content": "You are an assistant that writes Telegram posts."},
+            {"role": "user", "content": prompt},
+        ]
+
+        result = await self._llm.chat_json(
+            model="gpt-4o",
+            messages=messages,
+            response_schema={"type": "object"},
+        )
+
+        return result
+
