@@ -125,6 +125,7 @@ SERVICE_URLS = {
     "invite": os.getenv("INVITE_SERVICE_URL", "http://invite-service:8000"),
     "parsing": os.getenv("PARSING_SERVICE_URL", "http://parsing-service:8000"),
     "integration": os.getenv("INTEGRATION_SERVICE_URL", "http://integration-service:8000"),
+    "evolution": os.getenv("EVOLUTION_AGENT_URL", "http://evolution-agent:8000"),
 }
 
 # Настройка логирования (JSON в stdout)
@@ -776,6 +777,68 @@ async def proxy_invite_service(request: Request, path: str):
         raise HTTPException(status_code=504, detail="Invite service timeout")
     except Exception as e:
         logger.error(json.dumps({"event": "invite_service_error", "url": target_url, "error": str(e)}))
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# Evolution Agent proxy router
+@app.api_route("/api/agents/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def proxy_evolution_agent(request: Request, path: str):
+    """
+    Проксирование всех запросов к evolution-agent.
+
+    Внутри evolution-agent все публичные API расположены под префиксом /api/v1/agents,
+    здесь же внешний префикс остаётся /api/agents/*.
+    """
+    base_url = SERVICE_URLS["evolution"]
+    target_url = f"{base_url}/api/v1/agents/{path}"
+
+    # Копируем все заголовки, включая Authorization и X-User-Id
+    headers: Dict[str, str] = {}
+    for name, value in request.headers.items():
+        if name.lower() not in ["host", "content-length"]:
+            headers[name] = value
+
+    auth_header = headers.get("authorization") or headers.get("Authorization") or "MISSING"
+    logger.info(json.dumps({
+        "event": "proxy_to_evolution_agent",
+        "path": path,
+        "method": request.method,
+        "auth_header": auth_header[:50] + "..." if len(auth_header) > 50 else auth_header,
+        "target_url": target_url,
+    }))
+
+    # Query‑параметры
+    query_params = str(request.url.query)
+    if query_params:
+        target_url += f"?{query_params}"
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            body = None
+            if request.method in ["POST", "PUT", "PATCH"]:
+                body = await request.body()
+
+            resp = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=headers,
+                content=body,
+            )
+
+            response_headers = dict(resp.headers)
+            return Response(
+                content=resp.content,
+                status_code=resp.status_code,
+                headers=response_headers,
+                media_type=response_headers.get("content-type"),
+            )
+    except httpx.ConnectError:
+        logger.error(json.dumps({"event": "evolution_agent_connection_error", "url": target_url}))
+        raise HTTPException(status_code=502, detail="Evolution agent unavailable")
+    except httpx.TimeoutException:
+        logger.error(json.dumps({"event": "evolution_agent_timeout", "url": target_url}))
+        raise HTTPException(status_code=504, detail="Evolution agent timeout")
+    except Exception as e:
+        logger.error(json.dumps({"event": "evolution_agent_error", "url": target_url, "error": str(e)}))
         raise HTTPException(status_code=500, detail="Internal server error")
 
 app.include_router(api_router)

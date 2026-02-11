@@ -12,6 +12,7 @@ services:
       - INVITE_SERVICE_URL=http://invite-service:8000
       - PARSING_SERVICE_URL=http://parsing-service:8000
       - INTEGRATION_SERVICE_URL=http://integration-service:8000
+      - EVOLUTION_AGENT_URL=http://evolution-agent:8000
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - MYSQL_HOST=mysql
@@ -345,6 +346,49 @@ services:
       - backend
       - app-network
     restart: unless-stopped
+
+  # Evolution Agent Service (ИИ‑агент для ведения Telegram‑каналов)
+  evolution-agent:
+    build: ./backend/evolution-agent
+    environment:
+      - VAULT_ADDR=http://vault:8201
+      - VAULT_TOKEN=${VAULT_TOKEN}
+      - VAULT_ROLE_ID=${EVOLUTION_VAULT_ROLE_ID}
+      - VAULT_SECRET_ID=${EVOLUTION_VAULT_SECRET_ID}
+      - API_GATEWAY_URL=http://api-gateway:8000
+      - LOG_LEVEL=INFO
+      - DEBUG=false
+      - PYTHONPATH=/app
+    depends_on:
+      vault:
+        condition: service_healthy
+      vault-unsealer:
+        condition: service_started
+      evolution-postgres:
+        condition: service_healthy
+    networks:
+      - backend
+      - app-network
+    restart: unless-stopped
+
+  # PostgreSQL для Evolution Agent
+  evolution-postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=evolution_user
+      - POSTGRES_PASSWORD=evolution_password
+      - POSTGRES_DB=evolution_db
+    ports:
+      - "127.0.0.1:5436:5432"
+    volumes:
+      - evolution_postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution_user -d evolution_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   # PostgreSQL для Integration Service  
   integration-postgres:
@@ -711,6 +755,7 @@ volumes:
   integration_postgres_data:
   parsing_postgres_data:
   invite_postgres_data:
+  evolution_postgres_data:
 
 networks:
   app-network:
