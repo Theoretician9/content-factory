@@ -88,13 +88,16 @@ async def _send_single_invite_via_account_manager(
         
         # ✅ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Используем аккаунт из Account Manager вместо прямого вызова
         # Account Manager уже проверил лимиты, статус, блокировки
+        # Формируем "облегченный" объект аккаунта для адаптера.
+        # Добавляем owner_user_id, чтобы адаптер мог передать его в Integration Service.
         account_for_adapter = type('Account', (), {
             'account_id': account_id,
             'username': account_data.get('username'),
             'phone': account_data.get('phone'),
             'session_string': account_data.get('session_string'),
             'api_id': account_data.get('api_id'),
-            'api_hash': account_data.get('api_hash')
+            'api_hash': account_data.get('api_hash'),
+            'owner_user_id': task.user_id,
         })()
         
         # Выполняем приглашение через адаптер с аккаунтом от Account Manager

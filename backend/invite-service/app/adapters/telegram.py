@@ -263,14 +263,29 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                     can_retry=False
                 )
             
-            # Отправка через Integration Service
+            # Определяем владельца аккаунта (user_id) для строгой изоляции.
+            # В большинстве случаев он хранится либо в extra_data, либо в
+            # динамическом атрибуте, установленном воркером.
+            owner_user_id = None
+            try:
+                if hasattr(account, "owner_user_id") and account.owner_user_id is not None:
+                    owner_user_id = int(account.owner_user_id)
+                elif getattr(account, "extra_data", None):
+                    maybe_uid = account.extra_data.get("user_id")
+                    if maybe_uid is not None:
+                        owner_user_id = int(maybe_uid)
+            except Exception:
+                owner_user_id = None
+
             logger.info(
                 f"🔍 TelegramAdapter: вызов send_telegram_invite "
-                f"account_id={account.account_id}, data={telegram_invite_data}"
+                f"account_id={account.account_id}, user_id={owner_user_id}, "
+                f"data={telegram_invite_data}"
             )
             response = await self.integration_client.send_telegram_invite(
                 account_id=account.account_id,
-                invite_data=telegram_invite_data
+                invite_data=telegram_invite_data,
+                user_id=owner_user_id,
             )
             logger.info(
                 f"✅ TelegramAdapter: успешный ответ от Integration Service "
@@ -385,10 +400,23 @@ class TelegramInviteAdapter(InvitePlatformAdapter):
                 "reply_to_message_id": message_data.get("reply_to_message_id")
             }
             
+            # Определяем владельца аккаунта (user_id) аналогично send_invite
+            owner_user_id = None
+            try:
+                if hasattr(account, "owner_user_id") and account.owner_user_id is not None:
+                    owner_user_id = int(account.owner_user_id)
+                elif getattr(account, "extra_data", None):
+                    maybe_uid = account.extra_data.get("user_id")
+                    if maybe_uid is not None:
+                        owner_user_id = int(maybe_uid)
+            except Exception:
+                owner_user_id = None
+
             # Отправка через Integration Service
             response = await self.integration_client.send_telegram_message(
                 account_id=account.account_id,
-                message_data=telegram_message_data
+                message_data=telegram_message_data,
+                user_id=owner_user_id,
             )
             
             # Обработка успешного ответа

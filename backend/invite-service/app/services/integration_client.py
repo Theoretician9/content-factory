@@ -34,14 +34,20 @@ class IntegrationServiceClient:
         self.timeout = httpx.Timeout(30.0)  # 30 секунд таймаут
         self.retry_config = RetryConfig()
         
-        # JWT токен для аутентификации между сервисами
+        # JWT токен для аутентификации invite-service как сервисного клиента
         self._jwt_token = None
         self._jwt_expires_at = None
         
         logger.info(f"Инициализирован Integration Service клиент: {self.base_url}")
     
     async def _get_jwt_token(self) -> str:
-        """Получение JWT токена для межсервисной аутентификации"""
+        """
+        Получение JWT токена для межсервисной аутентификации.
+        
+        ВАЖНО: этот токен аутентифицирует ИМЕННО СЕРВИС (invite-service),
+        а не конечного пользователя. Идентификатор пользователя всегда
+        передаётся отдельно через X-User-Id.
+        """
         
         # Проверяем актуальность текущего токена
         if self._jwt_token and self._jwt_expires_at:
@@ -59,9 +65,9 @@ class IntegrationServiceClient:
             jwt_secret = secret_data['secret_key']
             
             # Создание JWT токена для межсервисной аутентификации
-            # Integration Service ожидает 'sub' с email пользователя
+            # Integration Service ожидает 'service' для сервисных токенов
             payload = {
-                'sub': 'nikita.f3d@gmail.com',  # Email пользователя для аутентификации
+                'sub': 'service:invite-service',
                 'service': 'invite-service',
                 'iat': datetime.utcnow(),
                 'exp': datetime.utcnow() + timedelta(hours=1)
@@ -83,7 +89,8 @@ class IntegrationServiceClient:
         endpoint: str,
         json_data: Optional[Dict[str, Any]] = None,
         params: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None
+        headers: Optional[Dict[str, str]] = None,
+        user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Выполнение HTTP запроса с retry логикой"""
         
@@ -92,12 +99,17 @@ class IntegrationServiceClient:
         # Добавление JWT токена в заголовки
         if headers is None:
             headers = {}
-        
+
+        # Если передан user_id, прокидываем его как X-User-Id для строгой изоляции
+        if user_id is not None:
+            headers['X-User-Id'] = str(user_id)
+
+        # Всегда аутентифицируемся как сервис invite-service
         try:
             jwt_token = await self._get_jwt_token()
             headers['Authorization'] = f'Bearer {jwt_token}'
         except Exception as e:
-            logger.warning(f"Не удалось получить JWT токен: {str(e)}")
+            logger.warning(f"Не удалось получить сервисный JWT токен: {str(e)}")
         
         headers['Content-Type'] = 'application/json'
         headers['User-Agent'] = 'invite-service/1.0'
@@ -186,7 +198,8 @@ class IntegrationServiceClient:
             response = await self._make_request(
                 method="GET",
                 endpoint=f"/api/v1/{platform}/internal/active-accounts",
-                params={"user_id": user_id}
+                params={"user_id": user_id},
+                user_id=user_id,
             )
             
             logger.info(f"Получены аккаунты пользователя {user_id} на платформе {platform}: {len(response)} шт.")
@@ -199,7 +212,8 @@ class IntegrationServiceClient:
     async def send_telegram_invite(
         self,
         account_id: str,
-        invite_data: Dict[str, Any]
+        invite_data: Dict[str, Any],
+        user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Отправка Telegram приглашения через Integration Service"""
         
@@ -207,7 +221,8 @@ class IntegrationServiceClient:
             response = await self._make_request(
                 method="POST",
                 endpoint=f"/api/v1/telegram/invites/accounts/{account_id}/invite",
-                json_data=invite_data
+                json_data=invite_data,
+                user_id=user_id,
             )
             
             logger.info(f"Telegram приглашение отправлено через аккаунт {account_id}")
@@ -220,7 +235,8 @@ class IntegrationServiceClient:
     async def send_telegram_message(
         self,
         account_id: str,
-        message_data: Dict[str, Any]
+        message_data: Dict[str, Any],
+        user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Отправка Telegram сообщения через Integration Service"""
         
@@ -228,7 +244,8 @@ class IntegrationServiceClient:
             response = await self._make_request(
                 method="POST",
                 endpoint=f"/api/v1/telegram/invites/accounts/{account_id}/message",
-                json_data=message_data
+                json_data=message_data,
+                user_id=user_id,
             )
             
             logger.info(f"Telegram сообщение отправлено через аккаунт {account_id}")
@@ -238,13 +255,14 @@ class IntegrationServiceClient:
             logger.error(f"Ошибка отправки Telegram сообщения через аккаунт {account_id}: {str(e)}")
             raise
     
-    async def get_account_limits(self, account_id: str) -> Dict[str, Any]:
+    async def get_account_limits(self, account_id: str, user_id: Optional[int] = None) -> Dict[str, Any]:
         """Получение лимитов Telegram аккаунта"""
         
         try:
             response = await self._make_request(
                 method="GET",
-                endpoint=f"/api/v1/telegram/invites/accounts/{account_id}/limits"
+                endpoint=f"/api/v1/telegram/invites/accounts/{account_id}/limits",
+                user_id=user_id,
             )
             
             logger.debug(f"Получены лимиты для аккаунта {account_id}")
@@ -258,7 +276,8 @@ class IntegrationServiceClient:
         self,
         account_id: str,
         group_id: str,
-        required_permissions: List[str] = None
+        required_permissions: List[str] = None,
+        user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Проверка административных прав аккаунта в группе/канале"""
         
@@ -272,7 +291,8 @@ class IntegrationServiceClient:
                 json_data={
                     "group_id": group_id,
                     "required_permissions": required_permissions
-                }
+                },
+                user_id=user_id,
             )
             
             logger.info(f"Проверка админских прав для аккаунта {account_id} в группе {group_id}: {response.get('is_admin', False)}")

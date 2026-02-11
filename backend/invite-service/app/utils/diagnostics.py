@@ -283,26 +283,32 @@ class InviteServiceDiagnostics:
                     "details": f"Ошибка обновления: {str(e)}"
                 }
     
-    async def _get_jwt_token_for_parsing_service(self) -> str:
-        """Получение JWT токена для Parsing Service"""
+    async def _get_jwt_token_for_parsing_service(self, user_id: int) -> str:
+        """
+        Получение JWT токена для Parsing Service.
+        
+        ВАЖНО: токен аутентифицирует сервис (invite-service),
+        а конкретный пользователь передаётся через user_id.
+        """
         try:
             from app.core.vault import get_vault_client
-            
+            from datetime import datetime, timedelta
+
             vault_client = get_vault_client()
             secret_data = vault_client.get_secret("jwt")
-            
+
             if not secret_data or 'secret_key' not in secret_data:
                 raise Exception("JWT secret not found in Vault")
-            
+
             payload = {
                 'service': 'invite-service',
-                'user_id': 1,
+                'user_id': user_id,
                 'exp': int((datetime.utcnow() + timedelta(hours=1)).timestamp())
             }
-            
+
             token = jwt.encode(payload, secret_data['secret_key'], algorithm='HS256')
             return token
-            
+
         except Exception as e:
             self.logger.error(f"Error getting JWT token: {e}")
             raise

@@ -69,7 +69,12 @@ def _filter_admin_accounts(accounts, task: InviteTask):
         
         # РЕАЛЬНАЯ ПРОВЕРКА АДМИНСКИХ ПРАВ
         try:
-            is_admin = _check_account_admin_rights(account.account_id, group_id)
+            # Передаём user_id владельца задачи для строгой изоляции
+            is_admin = _check_account_admin_rights(
+                account_id=account.account_id,
+                group_id=group_id,
+                user_id=task.user_id,
+            )
             if is_admin:
                 logger.info(f"✅ Аккаунт {account.account_id} является администратором группы {group_id} с правами приглашать")
                 admin_accounts.append(account)
@@ -129,7 +134,13 @@ async def _filter_admin_accounts_async(accounts, task: InviteTask):
         
         # РЕАЛЬНАЯ ПРОВЕРКА АДМИНСКИХ ПРАВ
         try:
-            is_admin = await _check_account_admin_rights_async(account.account_id, group_id)
+            # Передаём user_id владельца задачи, чтобы Integration Service
+            # выполнял проверку строго в контексте этого пользователя.
+            is_admin = await _check_account_admin_rights_async(
+                account_id=account.account_id,
+                group_id=group_id,
+                user_id=task.user_id,
+            )
             if is_admin:
                 logger.info(f"✅ Аккаунт {account.account_id} является администратором группы {group_id} с правами приглашать")
                 admin_accounts.append(account)
@@ -173,24 +184,23 @@ def _filter_accounts_basic(accounts):
     return active_accounts
 
 
-async def _check_account_admin_rights_async(account_id: str, group_id: str) -> bool:
+async def _check_account_admin_rights_async(account_id: str, group_id: str, user_id: int) -> bool:
     """Асинхронная проверка административных прав аккаунта в группе/канале
     
     Возвращает True если аккаунт является администратором с правами приглашать пользователей
     """
     try:
-        # Используем аутентифицированный клиент Integration Service
+        # Используем IntegrationServiceClient с сервисной аутентификацией
+        # и явным указанием user_id через X-User-Id для строгой изоляции.
         from app.services.integration_client import IntegrationServiceClient
-        
+
         integration_client = IntegrationServiceClient()
-        
-        response = await integration_client._make_request(
-            method="POST",
-            endpoint=f"/api/v1/telegram/accounts/{account_id}/check-admin",
-            json_data={
-                "group_id": group_id,
-                "required_permissions": ["invite_users"]
-            }
+
+        response = await integration_client.check_admin_rights(
+            account_id=account_id,
+            group_id=group_id,
+            required_permissions=["invite_users"],
+            user_id=user_id,
         )
         
         is_admin = response.get('is_admin', False)
@@ -204,7 +214,7 @@ async def _check_account_admin_rights_async(account_id: str, group_id: str) -> b
         return False
 
 
-def _check_account_admin_rights(account_id: str, group_id: str) -> bool:
+def _check_account_admin_rights(account_id: str, group_id: str, user_id: int) -> bool:
     """Синхронная обертка для проверки административных прав
     
     Возвращает True если аккаунт является администратором с правами приглашать пользователей
@@ -218,7 +228,9 @@ def _check_account_admin_rights(account_id: str, group_id: str) -> bool:
             asyncio.set_event_loop(loop)
         
         # Выполняем асинхронную проверку
-        return loop.run_until_complete(_check_account_admin_rights_async(account_id, group_id))
+        return loop.run_until_complete(
+            _check_account_admin_rights_async(account_id, group_id, user_id)
+        )
         
     except Exception as e:
         logger.error(f"Ошибка в синхронной обертке проверки админ прав для {account_id}: {str(e)}")

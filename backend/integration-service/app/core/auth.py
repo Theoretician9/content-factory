@@ -103,11 +103,41 @@ async def get_user_id_from_request(request: Request) -> int:
     try:
         jwt_secret = settings.JWT_SECRET_KEY
         payload = jwt.decode(token, jwt_secret, algorithms=["HS256"])
+        logger.info(f"🔍 JWT PAYLOAD DEBUG: {payload}")
+
+        # Поддержка сервисной аутентификации:
+        # если токен содержит поле "service", считаем его сервисным
+        service_name = payload.get("service")
+        if service_name:
+            # Для сервисов (invite-service, parsing-service и т.п.) user_id
+            # передаётся явно через заголовок X-User-Id.
+            x_user_id = (
+                request.headers.get("X-User-Id")
+                or request.headers.get("x-user-id")
+            )
+            if not x_user_id:
+                logger.error(
+                    f"🚫 Service token без X-User-Id: service={service_name}, payload={payload}"
+                )
+                raise AuthenticationError("Missing X-User-Id for service token")
+            try:
+                user_id = int(x_user_id)
+            except ValueError:
+                logger.error(f"🚫 Invalid X-User-Id format: '{x_user_id}'")
+                raise AuthenticationError("Invalid X-User-Id format")
+
+            logger.info(
+                f"✅ Service JWT Authentication successful - "
+                f"service='{service_name}', user_id={user_id}"
+            )
+            return user_id
+
+        # Обычная пользовательская аутентификация по email / user_id в 'sub'
         user_id_str = payload.get("sub")
         if not user_id_str:
             logger.error(f"🚫 JWT token missing 'sub' field: {payload}")
             raise AuthenticationError("Invalid token: missing user ID")
-        logger.info(f"🔍 JWT PAYLOAD DEBUG: {payload}")
+
         logger.info(f"🔍 USER_ID DEBUG: '{user_id_str}' (type: {type(user_id_str)})")
         if "@" in user_id_str:
             user_id_val = await get_user_id_by_email_via_api_gateway(user_id_str)

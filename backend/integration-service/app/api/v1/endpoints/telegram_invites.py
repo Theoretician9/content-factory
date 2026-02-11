@@ -36,6 +36,57 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def normalize_group_id(gid: str) -> str:
+    """
+    Нормализует идентификатор группы/канала для использования с Telegram API.
+    Поддерживаются форматы:
+    - @username
+    - username
+    - https://t.me/username
+    - @https://t.me/username (пользовательские ошибки ввода)
+    """
+    if not gid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="group_id не может быть пустым"
+        )
+
+    original_gid = str(gid)
+    gid = original_gid.strip()
+
+    # Убираем ведущий '@' если он есть — это важно, чтобы корректно разобрать URL вида '@https://t.me/xxx'
+    if gid.startswith('@'):
+        gid = gid[1:].strip()
+
+    # Если это уже полный URL - извлекаем username из него
+    if gid.startswith('https://') or gid.startswith('http://') or 't.me/' in gid:
+        # Простейший парсинг username из URL
+        username_part = gid.split('t.me/')[-1]
+        username_part = username_part.strip().strip('/')
+        if not username_part:
+            logger.error(f"Некорректный group_id URL: {original_gid}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Некорректный адрес группы/канала: {original_gid}"
+            )
+        return f'@{username_part}'
+
+    # Если строка после всех очисток пуста — считаем это ошибкой
+    if not gid or gid == '@':
+        logger.error(f"Некорректный group_id: '{original_gid}'")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Некорректный идентификатор группы/канала"
+        )
+
+    # Обычный username: добавляем @
+    if not gid.startswith('@'):
+        return f'@{gid}'
+
+    # На всякий случай, если сюда попали уже с корректным '@username'
+    return gid
+
+
 def get_telegram_service() -> TelegramService:
     """Получение Telegram Service"""
     return TelegramService()
@@ -81,26 +132,6 @@ async def check_account_admin_rights(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="group_id обязателен"
         )
-    
-    # Нормализация group_id для поддержки разных форматов
-    def normalize_group_id(gid: str) -> str:
-        """Нормализует group_id для использования с Telegram API"""
-        gid = gid.strip()
-        
-        # Если это уже полный URL - возвращаем как есть
-        if gid.startswith('https://') or gid.startswith('http://'):
-            return gid
-        
-        # Если это username с @ или без, используем @ префикс
-        if gid.startswith('@'):
-            return gid
-        if 't.me/' in gid:
-            # Извлекаем username из t.me/username
-            username = gid.split('t.me/')[-1]
-            return f'@{username}'
-        
-        # По умолчанию добавляем @ для usernames
-        return f'@{gid}'
     
     normalized_group_id = normalize_group_id(group_id)
     
@@ -315,27 +346,8 @@ async def send_telegram_invite_by_account(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Необходимо указать target_username, target_phone или target_user_id"
                 )
-            
-            # Нормализуем group_id
-            def normalize_group_id(gid: str) -> str:
-                """Нормализует group_id для использования с Telegram API"""
-                gid = gid.strip()
-                
-                # Если это уже полный URL - возвращаем как есть
-                if gid.startswith('https://') or gid.startswith('http://'):
-                    return gid
-                
-                # Если это username с @ или без, используем @ префикс
-                if gid.startswith('@'):
-                    return gid
-                if 't.me/' in gid:
-                    # Извлекаем username из t.me/username
-                    username = gid.split('t.me/')[-1]
-                    return f'@{username}'
-                
-                # По умолчанию добавляем @ для usernames
-                return f'@{gid}'
-            
+
+            # Нормализуем group_id (общая функция выше)
             normalized_group_id = normalize_group_id(invite_data.group_id)
             group = await client.get_entity(normalized_group_id)
             

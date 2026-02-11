@@ -869,7 +869,12 @@ async def check_admin_rights(
 
             try:
                 # Integration client returns a dict: {"is_admin": bool, "permissions": [...]}
-                check_resp = await integration_client.check_admin_rights(account_id, group_link)
+                # ВАЖНО: передаем user_id, чтобы Integration Service выполнял операции строго в контексте этого пользователя
+                check_resp = await integration_client.check_admin_rights(
+                    account_id=account_id,
+                    group_id=group_link,
+                    user_id=user_id,
+                )
                 is_admin = bool(check_resp.get("is_admin", False))
                 permissions = check_resp.get("permissions", [])
 
@@ -985,7 +990,11 @@ async def check_admin_rights(
                 
                 try:
                     # Integration client returns a dict: {"is_admin": bool, "permissions": [...]}
-                    check_resp = await integration_client.check_admin_rights(account_id, group_link)
+                    check_resp = await integration_client.check_admin_rights(
+                        account_id=account_id,
+                        group_id=group_link,
+                        user_id=user_id,
+                    )
                     is_admin = bool(check_resp.get("is_admin", False))
                     permissions = check_resp.get("permissions", [])
                     
