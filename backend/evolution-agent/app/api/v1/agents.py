@@ -10,6 +10,7 @@ from app.core.auth import get_user_id_from_request
 from app.database import get_db_session
 from app.models.calendar import CalendarSlot, CalendarSlotStatus
 from app.models.strategy import Strategy
+from app.services.orchestrator import Orchestrator
 
 
 router = APIRouter()
@@ -193,6 +194,17 @@ async def force_run(
     if not slots:
         raise HTTPException(status_code=404, detail="No slots in specified interval")
 
+    orchestrator = Orchestrator(db=db)
+
+    # Пока запускаем генерацию слотов последовательно и синхронно
+    for s in slots:
+        if s.status == CalendarSlotStatus.PLANNED:
+            await orchestrator.run_slot_generation(slot_id=str(s.id), user_id=user_id)
+
+    # перечитываем статусы
+    result_after = await db.execute(stmt)
+    slots_after: List[CalendarSlot] = result_after.scalars().all()
+
     return {
         "channel_id": payload.channel_id,
         "slots": [
@@ -201,8 +213,8 @@ async def force_run(
                 "dt": s.dt.isoformat(),
                 "status": s.status,
             }
-            for s in slots
+            for s in slots_after
         ],
-        "message": "Force-run registered (actual generation pipeline will be wired next).",
+        "message": "Force-run executed inline for matching slots.",
     }
 
