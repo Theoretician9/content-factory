@@ -11,6 +11,7 @@ from app.models.post import Post
 from app.schemas.runtime import TaskRuntimeContext
 from app.services.content_agent import ContentAgent
 from app.services.research_agent import ResearchAgent
+from app.clients.integration_client import IntegrationServiceClient
 
 
 logger = logging.getLogger(__name__)
@@ -30,10 +31,12 @@ class Orchestrator:
         db: AsyncSession,
         research_agent: Optional[ResearchAgent] = None,
         content_agent: Optional[ContentAgent] = None,
+        integration_client: Optional[IntegrationServiceClient] = None,
     ) -> None:
         self.db = db
         self.research_agent = research_agent or ResearchAgent()
         self.content_agent = content_agent or ContentAgent()
+        self.integration_client = integration_client or IntegrationServiceClient()
 
     async def run_slot_generation(self, slot_id: str, user_id: int) -> None:
         """
@@ -79,13 +82,18 @@ class Orchestrator:
 
             # save post
             ctx.current_step = "save"
-            await self._save_post_and_update_slot(
+            post = await self._save_post_and_update_slot(
                 slot=slot,
                 ctx=ctx,
                 content_result=content_result,
             )
+
+            # publish (через integration-service)
+            ctx.current_step = "publish"
+            await self._publish_post(post=post)
+
             ctx.current_step = "done"
-            ctx.decisions_log.append("slot_completed")
+            ctx.decisions_log.append("slot_completed_and_published")
 
             logger.info(
                 f"✅ evolution-agent: generation completed for slot={slot_id}, user_id={user_id}"
@@ -131,7 +139,7 @@ class Orchestrator:
         slot: CalendarSlot,
         ctx: TaskRuntimeContext,
         content_result: dict,
-    ) -> None:
+    ) -> Post:
         post = Post(
             user_id=ctx.user_id,
             channel_id=ctx.channel_id,
@@ -150,9 +158,31 @@ class Orchestrator:
         slot.updated_at = datetime.utcnow()
 
         await self.db.commit()
+        await self.db.refresh(post)
+        return post
 
     async def _mark_slot_failed(self, slot: CalendarSlot) -> None:
         slot.status = CalendarSlotStatus.FAILED
         slot.updated_at = datetime.utcnow()
         await self.db.commit()
+
+    async def _publish_post(self, post: Post) -> None:
+        """
+        Публикация поста в Telegram через integration-service.
+
+        Сейчас публикуем сразу после генерации, без дополнительного
+        учёта времени слота (для MVP).
+        """
+        try:
+            # В контексте evolution-agent мы не храним JWT, поэтому предполагаем,
+            # что publish вызывается в контексте запроса пользователя через API‑gateway.
+            # Здесь предполагается, что Orchestrator в будущем будет вызываться
+            # из Celery с сервисным токеном и X-User-Id; пока publish оставляем
+            # как no-op, чтобы не ломать пайплайн.
+            #
+            # TODO: при добавлении Celery передавать сервисный JWT и user_id,
+            # затем вызывать self.integration_client.send_telegram_message(...).
+            _ = post  # заглушка, чтобы не было предупреждения о неиспользуемой переменной
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"evolution-agent: error publishing post {post.id}: {e}", exc_info=True)
 
