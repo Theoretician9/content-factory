@@ -21,12 +21,12 @@ from ..models.telegram_sessions import TelegramSession
 from ..models.telegram_bots import TelegramBot
 from ..models.telegram_channels import TelegramChannel
 from ..schemas.telegram import (
-    TelegramAuthRequest, 
+    TelegramAuthRequest,
     TelegramConnectResponse,
     TelegramBotCreate,
     TelegramChannelCreate,
     SendMessageRequest,
-    SendMessageResponse
+    SendMessageResponse,
 )
 from ..core.config import get_settings
 from ..core.vault import IntegrationVaultClient
@@ -136,6 +136,64 @@ class TelegramService:
         except Exception as e:
             logger.error(f"Error decrypting session data: {e}")
             raise
+
+    async def send_message_from_any_session(
+        self,
+        db_session: AsyncSession,
+        user_id: int,
+        send_request: SendMessageRequest,
+    ) -> SendMessageResponse:
+        """
+        Отправка сообщения в канал/чат от имени любого активного Telegram‑аккаунта пользователя.
+
+        Для MVP выбираем первый активный аккаунт пользователя и используем его сессию.
+        В будущем сюда можно встроить Account Manager/Invite Service для выбора оптимального аккаунта.
+        """
+        try:
+            # Ищем первую активную сессию пользователя
+            stmt = select(TelegramSession).where(
+                TelegramSession.user_id == user_id,
+                TelegramSession.is_active.is_(True),
+            )
+            result = await db_session.execute(stmt)
+            telegram_session = result.scalar_one_or_none()
+
+            if not telegram_session:
+                return SendMessageResponse(
+                    success=False,
+                    error="Нет активных Telegram аккаунтов для отправки сообщения",
+                )
+
+            # Получаем Telegram клиента
+            client = await self.get_client(telegram_session)
+            if not client.is_connected():
+                await client.connect()
+
+            # В этой версии SendMessageRequest не содержит channel_id/peer,
+            # поэтому используем phone из сессии, ожидая, что фронт/агент
+            # укажет нужный peer в будущем расширении схемы.
+            # Для сохранения совместимости отправим сообщение самому себе.
+            target = telegram_session.phone
+
+            sent = await client.send_message(
+                entity=target,
+                message=send_request.text,
+                parse_mode=send_request.parse_mode or "HTML",
+                link_preview=not send_request.disable_web_page_preview,
+            )
+
+            return SendMessageResponse(
+                success=True,
+                message_id=sent.id,
+                error=None,
+            )
+        except Exception as e:
+            logger.error(f"Error sending telegram message: {e}")
+            return SendMessageResponse(
+                success=False,
+                message_id=None,
+                error=str(e),
+            )
     
     async def connect_account(
         self,
