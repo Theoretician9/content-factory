@@ -11,6 +11,7 @@ from app.database import get_db_session
 from app.models.calendar import CalendarSlot, CalendarSlotStatus
 from app.models.strategy import Strategy
 from app.services.orchestrator import Orchestrator
+from app.services.persona_service import generate_persona_and_strategy
 
 
 router = APIRouter()

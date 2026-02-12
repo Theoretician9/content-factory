@@ -1,16 +1,13 @@
 from typing import Any, Dict
 
-from app.core.llm import LLMClient
+from app.core.llm import LLMClient, MODEL_CONTENT
 from app.core.prompts import prompt_registry
 from app.schemas.runtime import TaskRuntimeContext
 
 
 class ContentAgent:
     """
-    Content Agent: генерирует текст поста на основе контекста.
-
-    Пока использует LLM‑клиент с заглушкой, но интерфейс уже
-    соответствует нужному для будущей интеграции с реальной моделью.
+    Content Agent: генерирует текст поста через GPT-4o-mini (OpenAI).
     """
 
     def __init__(self, llm_client: LLMClient | None = None) -> None:
@@ -32,15 +29,14 @@ class ContentAgent:
         )
 
         messages = [
-            {"role": "system", "content": "You are an assistant that writes Telegram posts."},
+            {"role": "system", "content": "You are an assistant that writes Telegram posts. Reply with JSON only."},
             {"role": "user", "content": prompt},
         ]
 
         result = await self._llm.chat_json(
-            model="gpt-4o",
+            model=MODEL_CONTENT,
             messages=messages,
             response_schema={"type": "object"},
         )
-
         return result
 
