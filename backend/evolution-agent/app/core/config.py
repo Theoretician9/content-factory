@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     # БД evolution_db (PostgreSQL, async)
     DATABASE_URL: Optional[str] = None
 
+    # LLM API keys (из Vault: openai, evolution-agent/gemini, evolution-agent/groq)
+    OPENAI_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
+    GROQ_API_KEY: Optional[str] = None
+
     class Config:
         env_file = ".env"
         case_sensitive = True
@@ -58,6 +63,30 @@ class Settings(BaseSettings):
                     print(
                         f"⚠ evolution-agent: используем дефолтный DATABASE_URL для локальной разработки: {e}"
                     )
+
+        # 3. Загружаем ключи LLM из Vault
+        try:
+            vault_client = get_vault_client()
+            # OpenAI (GPT-4o-mini для Content Agent)
+            try:
+                openai_data = vault_client.get_secret("openai")
+                self.OPENAI_API_KEY = openai_data.get("api_key")
+            except Exception:
+                self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+            # Gemini (Research Agent)
+            try:
+                gemini_data = vault_client.get_secret("evolution-agent/gemini")
+                self.GEMINI_API_KEY = gemini_data.get("api_key")
+            except Exception:
+                self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+            # Groq (Llama 3.1 8B для Persona/Strategy)
+            try:
+                groq_data = vault_client.get_secret("evolution-agent/groq")
+                self.GROQ_API_KEY = groq_data.get("api_key")
+            except Exception:
+                self.GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+        except Exception as e:
+            print(f"⚠ evolution-agent: LLM keys from ENV fallback: {e}")
 
 
 @lru_cache()

@@ -25,6 +25,11 @@ jinja2==3.1.3
 python-dotenv==1.0.0
 hvac==2.1.0
 
+# LLM: OpenAI (GPT-4o-mini), Google (Gemini 1.5 Flash), Groq (Llama 3.1 8B)
+openai==1.12.0
+google-generativeai==0.3.2
+groq==0.4.2
+
 prometheus-client==0.19.0
 
 # dev / tests (по мере необходимости можно расширить)
