@@ -79,7 +79,14 @@ async def onboard_agent(
     """
     user_id = await get_user_id_from_request(request)
 
-    strategy_data = await _generate_default_persona_and_strategy_payload(payload)
+    # Persona/Strategy через Llama 3.1 8B (Groq); при ошибке — дефолтный payload
+    strategy_data = await generate_persona_and_strategy(
+        description=payload.description,
+        tone=payload.tone or "friendly_expert",
+        language=payload.language,
+    )
+    if strategy_data is None:
+        strategy_data = _generate_default_persona_and_strategy_payload(payload)
 
     # Деактивируем предыдущие стратегии для этого канала
     await db.execute(
