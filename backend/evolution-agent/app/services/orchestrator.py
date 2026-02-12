@@ -32,11 +32,14 @@ class Orchestrator:
         research_agent: Optional[ResearchAgent] = None,
         content_agent: Optional[ContentAgent] = None,
         integration_client: Optional[IntegrationServiceClient] = None,
+        jwt_token: Optional[str] = None,
     ) -> None:
         self.db = db
         self.research_agent = research_agent or ResearchAgent()
         self.content_agent = content_agent or ContentAgent()
         self.integration_client = integration_client or IntegrationServiceClient()
+        # JWT текущего пользователя или сервисный JWT для публикации
+        self.jwt_token = jwt_token
 
     async def run_slot_generation(self, slot_id: str, user_id: int) -> None:
         """
@@ -174,15 +177,34 @@ class Orchestrator:
         учёта времени слота (для MVP).
         """
         try:
-            # В контексте evolution-agent мы не храним JWT, поэтому предполагаем,
-            # что publish вызывается в контексте запроса пользователя через API‑gateway.
-            # Здесь предполагается, что Orchestrator в будущем будет вызываться
-            # из Celery с сервисным токеном и X-User-Id; пока publish оставляем
-            # как no-op, чтобы не ломать пайплайн.
-            #
-            # TODO: при добавлении Celery передавать сервисный JWT и user_id,
-            # затем вызывать self.integration_client.send_telegram_message(...).
-            _ = post  # заглушка, чтобы не было предупреждения о неиспользуемой переменной
+            if not self.jwt_token:
+                logger.info(
+                    "evolution-agent: JWT токен не передан в Orchestrator, "
+                    "пропускаем публикацию поста %s", post.id
+                )
+                return
+
+            resp = await self.integration_client.send_telegram_message(
+                jwt_token=self.jwt_token,
+                text=post.content_text,
+                channel_id=post.channel_id,
+            )
+
+            if isinstance(resp, dict) and resp.get("success"):
+                post.telegram_message_id = resp.get("message_id")
+                await self.db.commit()
+                logger.info(
+                    "✅ evolution-agent: post %s published to telegram channel %s, message_id=%s",
+                    post.id,
+                    post.channel_id,
+                    resp.get("message_id"),
+                )
+            else:
+                logger.error(
+                    "❌ evolution-agent: failed to publish post %s, response=%s",
+                    post.id,
+                    resp,
+                )
         except Exception as e:  # noqa: BLE001
             logger.error(f"evolution-agent: error publishing post {post.id}: {e}", exc_info=True)
 
