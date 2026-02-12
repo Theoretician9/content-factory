@@ -100,6 +100,8 @@ class TelegramChannelResponse(BaseModelResponse):
 class SendMessageRequest(BaseModel):
     """Схема запроса на отправку сообщения"""
     text: str = Field(..., max_length=4096, description="Текст сообщения")
+    # ID канала/чата в Telegram, от имени которого отправляется сообщение
+    channel_id: int = Field(..., description="Telegram channel/group ID для отправки сообщения")
     parse_mode: Optional[str] = Field("HTML", description="Режим парсинга: HTML, Markdown, MarkdownV2")
     disable_web_page_preview: Optional[bool] = Field(False, description="Отключить предпросмотр ссылок")
     

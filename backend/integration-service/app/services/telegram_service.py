@@ -169,11 +169,23 @@ class TelegramService:
             if not client.is_connected():
                 await client.connect()
 
-            # В этой версии SendMessageRequest не содержит channel_id/peer,
-            # поэтому используем phone из сессии, ожидая, что фронт/агент
-            # укажет нужный peer в будущем расширении схемы.
-            # Для сохранения совместимости отправим сообщение самому себе.
-            target = telegram_session.phone
+            # Находим канал пользователя, в который нужно отправить сообщение
+            stmt_channel = select(TelegramChannel).where(
+                TelegramChannel.user_id == user_id,
+                TelegramChannel.channel_id == send_request.channel_id,
+                TelegramChannel.is_active.is_(True),
+            )
+            channel_result = await db_session.execute(stmt_channel)
+            telegram_channel = channel_result.scalar_one_or_none()
+
+            if not telegram_channel:
+                return SendMessageResponse(
+                    success=False,
+                    error="Канал не найден или не активен для данного пользователя",
+                )
+
+            # В качестве target используем channel_id (peer) — Telethon сам разрешит его в сущность.
+            target = send_request.channel_id
 
             sent = await client.send_message(
                 entity=target,

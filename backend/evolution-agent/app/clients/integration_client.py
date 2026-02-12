@@ -22,6 +22,7 @@ class IntegrationServiceClient:
         self,
         jwt_token: str,
         text: str,
+        channel_id: str | int,
     ) -> Dict[str, Any]:
         """
         Вызов `POST /api/v1/telegram/messages/send` в integration-service.
@@ -35,6 +36,7 @@ class IntegrationServiceClient:
         }
         payload = {
             "text": text,
+            "channel_id": channel_id,
             # parse_mode и disable_web_page_preview оставляем по умолчанию
         }
 
