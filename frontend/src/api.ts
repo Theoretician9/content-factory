@@ -151,6 +151,41 @@ export const api = {
   // ...добавлять новые сервисы по мере необходимости
 };
 
+// API для evolution-agent (ИИ-агент для Telegram-канала)
+export const evolutionApi = {
+  onboard: (data: {
+    channel_id: string;
+    description: string;
+    tone?: string;
+    language?: string;
+  }) =>
+    apiFetch('/api/agents/onboard', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getCalendar: (channelId?: string) => {
+    const query = channelId ? `?channel_id=${encodeURIComponent(channelId)}` : '';
+    return apiFetch(`/api/agents/calendar${query}`);
+  },
+
+  forceRun: (data: {
+    channel_id: string;
+    from_dt: string; // ISO
+    to_dt: string; // ISO
+  }) =>
+    apiFetch('/api/agents/force-run', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  regenerateSlot: (slotId: string, feedback?: string) =>
+    apiFetch(`/api/agents/slots/${slotId}/regenerate`, {
+      method: 'POST',
+      body: JSON.stringify(feedback ? { feedback } : {}),
+    }),
+};
+
 // API функции для Integration Service
 export const integrationApi = {
   // Health checks
