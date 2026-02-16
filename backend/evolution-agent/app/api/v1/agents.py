@@ -380,6 +380,15 @@ async def publish_slot_now(
     if not slot_after:
         raise HTTPException(status_code=404, detail="Slot not found after publish-now")
 
+    # Если пайплайн завершился с ошибкой (например, лимиты LLM / публикации),
+    # явно возвращаем 5xx, чтобы фронт мог показать понятное сообщение.
+    if slot_after.status == CalendarSlotStatus.FAILED:
+        raise HTTPException(
+            status_code=502,
+            detail="Не удалось сгенерировать или опубликовать пост для слота. "
+            "Проверь лимиты LLM/публикации и логи evolution-agent.",
+        )
+
     return {
         "slot_id": str(slot_after.id),
         "dt": slot_after.dt.isoformat(),
