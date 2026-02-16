@@ -35,27 +35,26 @@ class IntegrationServiceClient:
             "Authorization": f"Bearer {jwt_token}",
         }
 
-        # Integration Service ожидает numeric channel_id (int).
-        # Если нам передали ссылку/username (t.me/... или @channel), публикация
-        # через этот endpoint не сработает. Явно логируем предупреждение.
-        if isinstance(channel_id, str):
-            # Обрезаем возможные префиксы, но не приводим к int автоматически —
-            # это должен быть real numeric ID, который уже есть в integration-service.
-            normalized = channel_id.replace("https://t.me/", "").replace("http://t.me/", "")
-            normalized = normalized.lstrip("@")
-            # Логируем для отладки; сам numeric id должен быть получен через integration-service.
-            print(
-                f"⚠ evolution-agent: send_telegram_message получил channel_id='{channel_id}', "
-                f"Integration Service ожидает numeric ID (int). "
-                "Убедись, что в стратегии/канале сохранён numeric channel_id из integration-service."
-            )
-            # Оставляем исходный channel_id — integration-service вернёт 422, если тип не int.
-
-        payload = {
+        payload: Dict[str, Any] = {
             "text": text,
-            "channel_id": channel_id,
             # parse_mode и disable_web_page_preview оставляем по умолчанию
         }
+
+        # Нормализуем channel_id:
+        # - если это чисто число/строка-число → отправляем как numeric channel_id
+        # - иначе считаем, что это username/ссылка и отправляем как channel (строковое поле)
+        if isinstance(channel_id, int):
+            payload["channel_id"] = channel_id
+        elif isinstance(channel_id, str):
+            raw = channel_id.strip()
+            # Если строка состоит только из цифр, трактуем как numeric ID
+            if raw.isdigit():
+                payload["channel_id"] = int(raw)
+            else:
+                # Любой другой формат (t.me/..., @username, текст) отправляем как channel
+                payload["channel"] = raw
+        else:
+            raise ValueError(f"Unsupported channel_id type: {type(channel_id)}")
 
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(url, json=payload, headers=headers)
