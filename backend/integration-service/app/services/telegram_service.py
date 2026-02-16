@@ -169,10 +169,46 @@ class TelegramService:
             if not client.is_connected():
                 await client.connect()
 
+            # Определяем numeric channel_id, даже если клиент передал username/ссылку.
+            target_channel_id = send_request.channel_id
+
+            # Если channel_id не задан, но есть строковый идентификатор, нормализуем его.
+            if target_channel_id is None and getattr(send_request, "channel", None):
+                raw = (send_request.channel or "").strip()
+                # Убираем возможные префиксы t.me, @ и протоколы
+                normalized = raw
+                for prefix in ("https://t.me/", "http://t.me/", "t.me/"):
+                    if normalized.startswith(prefix):
+                        normalized = normalized[len(prefix) :]
+                normalized = normalized.lstrip("@").strip()
+
+                if not normalized:
+                    return SendMessageResponse(
+                        success=False,
+                        error="Некорректный идентификатор канала (пустой username)",
+                    )
+
+                # Пытаемся получить сущность канала через Telethon по username.
+                try:
+                    entity = await client.get_entity(normalized)
+                    # У Telethon у каналов channel_id хранится в .id (BigInteger)
+                    target_channel_id = int(getattr(entity, "id", 0) or 0)
+                    if target_channel_id == 0:
+                        return SendMessageResponse(
+                            success=False,
+                            error="Не удалось определить numeric channel_id для указанного канала",
+                        )
+                except Exception as e:
+                    logger.error(f"Error resolving channel '{raw}' → '{normalized}': {e}")
+                    return SendMessageResponse(
+                        success=False,
+                        error=f"Не удалось найти канал по идентификатору '{raw}'",
+                    )
+
             # Находим канал пользователя, в который нужно отправить сообщение
             stmt_channel = select(TelegramChannel).where(
                 TelegramChannel.user_id == user_id,
-                TelegramChannel.channel_id == send_request.channel_id,
+                TelegramChannel.channel_id == target_channel_id,
                 TelegramChannel.is_active.is_(True),
             )
             channel_result = await db_session.execute(stmt_channel)
@@ -184,8 +220,8 @@ class TelegramService:
                     error="Канал не найден или не активен для данного пользователя",
                 )
 
-            # В качестве target используем channel_id (peer) — Telethon сам разрешит его в сущность.
-            target = send_request.channel_id
+            # В качестве target используем numeric channel_id (peer) — Telethon сам разрешит его в сущность.
+            target = target_channel_id
 
             sent = await client.send_message(
                 entity=target,
