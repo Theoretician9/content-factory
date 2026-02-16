@@ -495,10 +495,10 @@ async def delete_target(
 async def bulk_target_operations(
     task_id: int,
     bulk_request: TargetBulkRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Массовые операции с целевыми контактами"""
-    user_id = get_current_user_id()
     
     # Проверка доступа к задаче
     task = check_task_ownership(task_id, user_id, db)
@@ -584,10 +584,10 @@ async def bulk_target_operations(
 @router.get("/{task_id}/targets/stats", response_model=TargetStatsResponse)
 async def get_target_stats(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Получение статистики по целевым контактам задачи"""
-    user_id = get_current_user_id()
     
     # Проверка доступа к задаче
     task = check_task_ownership(task_id, user_id, db)
