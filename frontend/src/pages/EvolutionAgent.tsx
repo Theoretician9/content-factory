@@ -234,7 +234,8 @@ const EvolutionAgent: React.FC = () => {
   const calendarStats = useMemo(() => {
     const total = calendarSlots.length;
     const byStatus = calendarSlots.reduce<Record<string, number>>((acc, s) => {
-      acc[s.status] = (acc[s.status] || 0) + 1;
+      const key = (s.status || '').toLowerCase();
+      acc[key] = (acc[key] || 0) + 1;
       return acc;
     }, {});
     return { total, byStatus };
@@ -371,11 +372,11 @@ const EvolutionAgent: React.FC = () => {
                 {calendarStats.total > 0 && (
                   <div className="text-xs text-gray-600 dark:text-gray-400 flex flex-wrap gap-2">
                     <span>Всего: {calendarStats.total}</span>
-                    <span>| PLANNED: {calendarStats.byStatus.PLANNED || 0}</span>
-                    <span>| PROCESSING: {calendarStats.byStatus.PROCESSING || 0}</span>
-                    <span>| READY: {calendarStats.byStatus.READY || 0}</span>
-                    <span>| PUBLISHED: {calendarStats.byStatus.PUBLISHED || 0}</span>
-                    <span>| FAILED: {calendarStats.byStatus.FAILED || 0}</span>
+                    <span>| PLANNED: {calendarStats.byStatus.planned || 0}</span>
+                    <span>| PROCESSING: {calendarStats.byStatus.processing || 0}</span>
+                    <span>| READY: {calendarStats.byStatus.ready || 0}</span>
+                    <span>| PUBLISHED: {calendarStats.byStatus.published || 0}</span>
+                    <span>| FAILED: {calendarStats.byStatus.failed || 0}</span>
                   </div>
                 )}
               </div>
@@ -410,20 +411,17 @@ const EvolutionAgent: React.FC = () => {
                             })}
                           </td>
                           <td className="py-2 pr-4">
-                            <span
+                                <span
                               className={`
                                 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-                                ${
-                                  slot.status === 'READY'
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : slot.status === 'PUBLISHED'
-                                    ? 'bg-green-100 text-green-800'
-                                    : slot.status === 'FAILED'
-                                    ? 'bg-red-100 text-red-800'
-                                    : slot.status === 'PROCESSING'
-                                    ? 'bg-yellow-100 text-yellow-800'
-                                    : 'bg-gray-100 text-gray-800'
-                                }
+                                ${(() => {
+                                  const st = (slot.status || '').toLowerCase();
+                                  if (st === 'ready') return 'bg-blue-100 text-blue-800';
+                                  if (st === 'published') return 'bg-green-100 text-green-800';
+                                  if (st === 'failed') return 'bg-red-100 text-red-800';
+                                  if (st === 'processing') return 'bg-yellow-100 text-yellow-800';
+                                  return 'bg-gray-100 text-gray-800';
+                                })()}
                               `}
                             >
                               {slot.status}
@@ -433,7 +431,7 @@ const EvolutionAgent: React.FC = () => {
                           <td className="py-2 pr-4">
                             <div className="flex flex-col gap-2">
                               <div className="flex flex-wrap gap-2">
-                                {slot.status === 'PLANNED' && (
+                                {(slot.status || '').toLowerCase() === 'planned' && (
                                   <button
                                     onClick={() => handlePublishNow(slot.slot_id)}
                                     disabled={publishLoadingSlotId === slot.slot_id}
