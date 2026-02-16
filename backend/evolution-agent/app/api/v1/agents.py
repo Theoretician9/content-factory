@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import get_user_id_from_request
 from app.database import get_db_session
 from app.models.calendar import CalendarSlot, CalendarSlotStatus
+from app.models.post import Post
 from app.models.strategy import Strategy
 from app.services.orchestrator import Orchestrator
 from app.services.persona_service import generate_persona_and_strategy
@@ -186,13 +187,22 @@ async def force_run(
     """
     user_id = await get_user_id_from_request(request)
 
+    # Нормализуем from_dt/to_dt: приводим к UTC и убираем tzinfo,
+    # т.к. в БД используется TIMESTAMP WITHOUT TIME ZONE (наивные даты).
+    from_dt = payload.from_dt
+    to_dt = payload.to_dt
+    if from_dt.tzinfo is not None:
+        from_dt = from_dt.astimezone(timezone.utc).replace(tzinfo=None)
+    if to_dt.tzinfo is not None:
+        to_dt = to_dt.astimezone(timezone.utc).replace(tzinfo=None)
+
     stmt = (
         select(CalendarSlot)
         .where(
             CalendarSlot.user_id == user_id,
             CalendarSlot.channel_id == payload.channel_id,
-            CalendarSlot.dt >= payload.from_dt,
-            CalendarSlot.dt <= payload.to_dt,
+            CalendarSlot.dt >= from_dt,
+            CalendarSlot.dt <= to_dt,
         )
         .order_by(CalendarSlot.dt.asc())
     )
