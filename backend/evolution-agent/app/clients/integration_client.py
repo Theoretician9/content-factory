@@ -34,6 +34,23 @@ class IntegrationServiceClient:
         headers = {
             "Authorization": f"Bearer {jwt_token}",
         }
+
+        # Integration Service ожидает numeric channel_id (int).
+        # Если нам передали ссылку/username (t.me/... или @channel), публикация
+        # через этот endpoint не сработает. Явно логируем предупреждение.
+        if isinstance(channel_id, str):
+            # Обрезаем возможные префиксы, но не приводим к int автоматически —
+            # это должен быть real numeric ID, который уже есть в integration-service.
+            normalized = channel_id.replace("https://t.me/", "").replace("http://t.me/", "")
+            normalized = normalized.lstrip("@")
+            # Логируем для отладки; сам numeric id должен быть получен через integration-service.
+            print(
+                f"⚠ evolution-agent: send_telegram_message получил channel_id='{channel_id}', "
+                f"Integration Service ожидает numeric ID (int). "
+                "Убедись, что в стратегии/канале сохранён numeric channel_id из integration-service."
+            )
+            # Оставляем исходный channel_id — integration-service вернёт 422, если тип не int.
+
         payload = {
             "text": text,
             "channel_id": channel_id,
