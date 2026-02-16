@@ -21,10 +21,19 @@ class Settings(BaseSettings):
     # БД evolution_db (PostgreSQL, async)
     DATABASE_URL: Optional[str] = None
 
-    # LLM API keys (из Vault: openai, evolution-agent/gemini, evolution-agent/groq)
+    # LLM API keys (из Vault: openai, evolution-agent/gemini, evolution-agent/groq, evolution-agent/openrouter)
     OPENAI_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
+
+    # OpenRouter (OpenAI-совместимый провайдер, например DeepSeek через OpenRouter)
+    OPENROUTER_API_KEY: Optional[str] = None
+
+    # Конфигурация провайдера для Content Agent
+    # content_provider: "openai" (по умолчанию) или "openrouter"
+    LLM_CONTENT_PROVIDER: str = os.getenv("LLM_CONTENT_PROVIDER", "openai")
+    # Явная модель для Content Agent; если не задана, используются дефолты в llm.py
+    LLM_CONTENT_MODEL: Optional[str] = os.getenv("LLM_CONTENT_MODEL")
 
     class Config:
         env_file = ".env"
@@ -85,6 +94,12 @@ class Settings(BaseSettings):
                 self.GROQ_API_KEY = groq_data.get("api_key")
             except Exception:
                 self.GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+            # OpenRouter (альтернатива OpenAI для Content Agent)
+            try:
+                openrouter_data = vault_client.get_secret("evolution-agent/openrouter")
+                self.OPENROUTER_API_KEY = openrouter_data.get("api_key")
+            except Exception:
+                self.OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
         except Exception as e:
             print(f"⚠ evolution-agent: LLM keys from ENV fallback: {e}")
 
