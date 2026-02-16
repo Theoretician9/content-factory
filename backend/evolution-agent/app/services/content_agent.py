@@ -17,6 +17,7 @@ class ContentAgent:
         """Собрать промпт и получить черновик поста (JSON)."""
         persona = ctx.persona or {"tone": "friendly_expert", "language": "ru", "forbidden_topics": []}
         strategy = ctx.strategy_snapshot or {}
+        feedback = (ctx.feedback or "").strip()
 
         prompt = prompt_registry.render(
             "content_writer_v1",
@@ -27,6 +28,12 @@ class ContentAgent:
                 "description": "Автоматическое ведение Telegram‑канала.",
             },
         )
+
+        if feedback:
+            prompt += (
+                "\n\nADDITIONAL USER FEEDBACK / INSTRUCTIONS FOR THIS POST:\n"
+                f"{feedback}\n"
+            )
 
         messages = [
             {"role": "system", "content": "You are an assistant that writes Telegram posts. Reply with JSON only."},

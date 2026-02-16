@@ -17,6 +17,9 @@ class TaskRuntimeContext(BaseModel):
 
     current_step: str  # init / research / draft / validate / publish / done / error
 
+    # Дополнительные указания/фидбек от пользователя (используется при регенерации слота)
+    feedback: Optional[str] = None
+
     persona: Optional[Dict[str, Any]] = None
     strategy_snapshot: Optional[Dict[str, Any]] = None
     research_data: List[Dict[str, Any]] = []

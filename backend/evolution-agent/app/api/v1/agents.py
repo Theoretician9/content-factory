@@ -37,7 +37,7 @@ class OnboardResponse(BaseModel):
     slots: List[CalendarSlotOut]
 
 
-async def _generate_default_persona_and_strategy_payload(
+def _generate_default_persona_and_strategy_payload(
     req: OnboardRequest,
 ) -> dict:
     """Простейшая нормализация запроса и генерация persona/content_mix/schedule."""
@@ -202,7 +202,13 @@ async def force_run(
     if not slots:
         raise HTTPException(status_code=404, detail="No slots in specified interval")
 
-    orchestrator = Orchestrator(db=db)
+    # Пробрасываем текущий JWT в Orchestrator, чтобы он мог публиковать через integration-service
+    auth_header = request.headers.get("Authorization")
+    jwt_token: Optional[str] = None
+    if auth_header and auth_header.lower().startswith("bearer "):
+        jwt_token = auth_header.split(" ", 1)[1].strip()
+
+    orchestrator = Orchestrator(db=db, jwt_token=jwt_token)
 
     # Пока запускаем генерацию слотов последовательно и синхронно
     for s in slots:
@@ -224,5 +230,73 @@ async def force_run(
             for s in slots_after
         ],
         "message": "Force-run executed inline for matching slots.",
+    }
+
+
+class RegenerateRequest(BaseModel):
+    feedback: Optional[str] = None
+
+
+@router.post("/slots/{slot_id}/regenerate")
+async def regenerate_slot(
+    slot_id: str,
+    request: Request,
+    payload: RegenerateRequest,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Ручная регенерация поста для слота с пользовательским фидбеком.
+
+    Алгоритм:
+    - проверяем, что слот принадлежит пользователю;
+    - удаляем старый пост для слота (если есть) и возвращаем слот в статус PLANNED;
+    - запускаем Orchestrator.run_slot_generation с учётом feedback;
+    - возвращаем обновлённый статус слота.
+    """
+    user_id = await get_user_id_from_request(request)
+
+    # Находим слот пользователя
+    stmt_slot = select(CalendarSlot).where(
+        CalendarSlot.id == slot_id,
+        CalendarSlot.user_id == user_id,
+    )
+    result = await db.execute(stmt_slot)
+    slot: Optional[CalendarSlot] = result.scalar_one_or_none()
+    if not slot:
+        raise HTTPException(status_code=404, detail="Slot not found")
+
+    # Удаляем существующий пост для слота (при наличии), чтобы не нарушить уникальность slot_id
+    stmt_post = select(Post).where(Post.slot_id == slot.id)
+    post_result = await db.execute(stmt_post)
+    existing_post: Optional[Post] = post_result.scalar_one_or_none()
+    if existing_post:
+        await db.delete(existing_post)
+        await db.commit()
+
+    # Возвращаем слот в статус PLANNED для повторной генерации
+    slot.status = CalendarSlotStatus.PLANNED
+    slot.updated_at = datetime.utcnow()
+    await db.commit()
+
+    # Пробрасываем JWT в Orchestrator
+    auth_header = request.headers.get("Authorization")
+    jwt_token: Optional[str] = None
+    if auth_header and auth_header.lower().startswith("bearer "):
+        jwt_token = auth_header.split(" ", 1)[1].strip()
+
+    orchestrator = Orchestrator(db=db, jwt_token=jwt_token)
+    await orchestrator.run_slot_generation(slot_id=str(slot.id), user_id=user_id, feedback=payload.feedback)
+
+    # перечитываем слот после генерации
+    result_after = await db.execute(stmt_slot)
+    slot_after: Optional[CalendarSlot] = result_after.scalar_one_or_none()
+
+    if not slot_after:
+        raise HTTPException(status_code=404, detail="Slot not found after regeneration")
+
+    return {
+        "slot_id": str(slot_after.id),
+        "dt": slot_after.dt.isoformat(),
+        "status": slot_after.status,
     }
 

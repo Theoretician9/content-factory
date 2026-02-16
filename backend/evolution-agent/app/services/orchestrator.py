@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.calendar import CalendarSlot, CalendarSlotStatus
 from app.models.post import Post
+from app.models.memory import MemoryLog
 from app.schemas.runtime import TaskRuntimeContext
 from app.services.content_agent import ContentAgent
 from app.services.research_agent import ResearchAgent
@@ -41,7 +42,7 @@ class Orchestrator:
         # JWT текущего пользователя или сервисный JWT для публикации
         self.jwt_token = jwt_token
 
-    async def run_slot_generation(self, slot_id: str, user_id: int) -> None:
+    async def run_slot_generation(self, slot_id: str, user_id: int, feedback: Optional[str] = None) -> None:
         """
         Основной пайплайн генерации поста для слота.
 
@@ -61,6 +62,7 @@ class Orchestrator:
             channel_id=slot.channel_id,
             slot_id=slot.id,
             current_step="init",
+            feedback=feedback,
         )
 
         try:
@@ -71,17 +73,27 @@ class Orchestrator:
             ctx.insights = research_result.get("insights", [])
             ctx.decisions_log.append("research_finished")
 
-            # content draft
-            ctx.current_step = "draft"
-            content_result = await self.content_agent.generate_post(ctx)
-            ctx.draft_content = content_result.get("post_text", "")
-            ctx.decisions_log.append("draft_generated")
+            # content draft + quality gate с ретраями
+            validation_error: Optional[str] = None
+            content_result: dict = {}
 
-            # minimal validation
-            ctx.current_step = "validate"
-            if not ctx.draft_content or len(ctx.draft_content.strip()) < 20:
-                raise ValueError("Generated post is too short")
-            ctx.decisions_log.append("validation_passed")
+            for attempt in range(3):
+                ctx.current_step = "draft"
+                ctx.decisions_log.append(f"draft_attempt_{attempt + 1}")
+                content_result = await self.content_agent.generate_post(ctx)
+                ctx.draft_content = content_result.get("post_text", "") or ""
+
+                ctx.current_step = "validate"
+                validation_error = await self._validate_draft(ctx)
+                if validation_error is None:
+                    ctx.decisions_log.append("validation_passed")
+                    break
+
+                ctx.errors.append(validation_error)
+                ctx.decisions_log.append(f"validation_failed_attempt_{attempt + 1}: {validation_error}")
+
+            if validation_error is not None:
+                raise ValueError(f"Validation failed after 3 attempts: {validation_error}")
 
             # save post
             ctx.current_step = "save"
@@ -164,6 +176,27 @@ class Orchestrator:
         await self.db.refresh(post)
         return post
 
+    async def _validate_draft(self, ctx: TaskRuntimeContext) -> Optional[str]:
+        """
+        Простейший quality gate без ML.
+
+        Проверяет:
+        - минимальную длину;
+        - отсутствие явных запрещённых тем из persona.forbidden_topics.
+        """
+        text = (ctx.draft_content or "").strip()
+        if len(text) < 20:
+            return "Generated post is too short"
+
+        persona = ctx.persona or {}
+        forbidden_topics = [str(t).lower() for t in persona.get("forbidden_topics", []) if t]
+        text_lower = text.lower()
+        for t in forbidden_topics:
+            if t and t in text_lower:
+                return f"Post contains forbidden topic: {t}"
+
+        return None
+
     async def _mark_slot_failed(self, slot: CalendarSlot) -> None:
         slot.status = CalendarSlotStatus.FAILED
         slot.updated_at = datetime.utcnow()
@@ -192,6 +225,18 @@ class Orchestrator:
 
             if isinstance(resp, dict) and resp.get("success"):
                 post.telegram_message_id = resp.get("message_id")
+                # Сохраняем базовый snapshot «памяти» о публикации в memory_logs
+                memory_entry = MemoryLog(
+                    user_id=post.user_id,
+                    channel_id=post.channel_id,
+                    post_id=post.id,
+                    metrics_snapshot={
+                        "published_at": datetime.utcnow().isoformat(),
+                        "telegram_message_id": resp.get("message_id"),
+                        "status": "published",
+                    },
+                )
+                self.db.add(memory_entry)
                 await self.db.commit()
                 logger.info(
                     "✅ evolution-agent: post %s published to telegram channel %s, message_id=%s",
