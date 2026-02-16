@@ -92,10 +92,15 @@ async def onboard_agent(
     if strategy_data is None:
         strategy_data = _generate_default_persona_and_strategy_payload(payload)
 
-    # Деактивируем предыдущие стратегии для этого канала
+    # Деактивируем только активные стратегии для этого канала (is_active = True),
+    # чтобы не трогать уже неактивные версии.
     await db.execute(
         Strategy.__table__.update()
-        .where(Strategy.user_id == user_id, Strategy.channel_id == payload.channel_id)
+        .where(
+            Strategy.user_id == user_id,
+            Strategy.channel_id == payload.channel_id,
+            Strategy.is_active.is_(True),
+        )
         .values(is_active=False)
     )
 
