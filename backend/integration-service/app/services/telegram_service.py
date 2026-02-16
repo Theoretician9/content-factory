@@ -215,10 +215,32 @@ class TelegramService:
             telegram_channel = channel_result.scalar_one_or_none()
 
             if not telegram_channel:
-                return SendMessageResponse(
-                    success=False,
-                    error="Канал не найден или не активен для данного пользователя",
-                )
+                # Если канал ещё не зарегистрирован в БД для этого пользователя,
+                # создаём запись «на лету», чтобы не требовать отдельного шага добавления.
+                try:
+                    telegram_channel = TelegramChannel(
+                        user_id=user_id,
+                        channel_id=target_channel_id,
+                        title=str(target_channel_id),
+                        type="channel",
+                        settings={},
+                        members_count=0,
+                        is_active=True,
+                    )
+                    db_session.add(telegram_channel)
+                    await db_session.commit()
+                    await db_session.refresh(telegram_channel)
+                    logger.info(
+                        f"Автоматически зарегистрирован канал {target_channel_id} для пользователя {user_id}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error auto-creating TelegramChannel for user {user_id}, channel_id {target_channel_id}: {e}"
+                    )
+                    return SendMessageResponse(
+                        success=False,
+                        error="Канал не найден или не активен для данного пользователя",
+                    )
 
             # В качестве target используем numeric channel_id (peer) — Telethon сам разрешит его в сущность.
             target = target_channel_id
