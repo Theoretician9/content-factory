@@ -333,3 +333,56 @@ async def regenerate_slot(
         "status": slot_after.status,
     }
 
+
+@router.post("/slots/{slot_id}/publish-now")
+async def publish_slot_now(
+    slot_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Принудительная генерация и публикация поста для указанного слота.
+
+    Используется для кнопки «Опубликовать сейчас» рядом с плановыми слотами.
+    """
+    user_id = await get_user_id_from_request(request)
+
+    # Проверяем, что слот принадлежит пользователю
+    stmt_slot = select(CalendarSlot).where(
+        CalendarSlot.id == slot_id,
+        CalendarSlot.user_id == user_id,
+    )
+    result = await db.execute(stmt_slot)
+    slot: Optional[CalendarSlot] = result.scalar_one_or_none()
+    if not slot:
+        raise HTTPException(status_code=404, detail="Slot not found")
+
+    if slot.status != CalendarSlotStatus.PLANNED:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Slot status must be PLANNED to publish now, got {slot.status}",
+        )
+
+    # Пробрасываем JWT в Orchestrator
+    auth_header = request.headers.get("Authorization")
+    jwt_token: Optional[str] = None
+    if auth_header and auth_header.lower().startswith("bearer "):
+        jwt_token = auth_header.split(" ", 1)[1].strip()
+
+    orchestrator = Orchestrator(db=db, jwt_token=jwt_token)
+    # Генерация + публикация (если JWT передан)
+    await orchestrator.run_slot_generation(slot_id=str(slot.id), user_id=user_id)
+
+    # перечитываем слот после выполнения пайплайна
+    result_after = await db.execute(stmt_slot)
+    slot_after: Optional[CalendarSlot] = result_after.scalar_one_or_none()
+
+    if not slot_after:
+        raise HTTPException(status_code=404, detail="Slot not found after publish-now")
+
+    return {
+        "slot_id": str(slot_after.id),
+        "dt": slot_after.dt.isoformat(),
+        "status": slot_after.status,
+    }
+

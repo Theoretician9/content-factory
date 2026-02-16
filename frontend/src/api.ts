@@ -184,6 +184,11 @@ export const evolutionApi = {
       method: 'POST',
       body: JSON.stringify(feedback ? { feedback } : {}),
     }),
+
+  publishNow: (slotId: string) =>
+    apiFetch(`/api/agents/slots/${slotId}/publish-now`, {
+      method: 'POST',
+    }),
 };
 
 // API функции для Integration Service
