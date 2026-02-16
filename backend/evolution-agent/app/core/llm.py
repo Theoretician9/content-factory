@@ -21,6 +21,9 @@ MODEL_RESEARCH = "gemini-1.5-flash"
 MODEL_CONTENT = "gpt-4o-mini"
 MODEL_PERSONA = "llama-3.1-8b-instant"
 
+# Дефолтная модель для Content Agent через OpenRouter (можно переопределить через ENV)
+MODEL_CONTENT_OPENROUTER_DEFAULT = "deepseek/deepseek-chat-v3:free"
+
 
 class BaseLLMProvider(ABC):
     """Базовый интерфейс: асинхронный вызов с ожиданием JSON-ответа."""
@@ -57,13 +60,34 @@ def _extract_json_from_text(text: str) -> Dict[str, Any]:
 
 
 class OpenAIProvider(BaseLLMProvider):
-    """GPT-4o-mini через OpenAI API (Content Agent)."""
+    """
+    Провайдер для Content Agent.
+
+    По умолчанию использует OpenAI (GPT-4o-mini), но может работать через OpenRouter,
+    сохраняя OpenAI-совместимый интерфейс (base_url меняется на OpenRouter).
+    """
 
     def __init__(self, api_key: Optional[str] = None, model: str = MODEL_CONTENT):
-        self._api_key = api_key or get_settings().OPENAI_API_KEY
-        self._model = model
-        if not self._api_key:
-            logger.warning("evolution-agent: OPENAI_API_KEY not set, Content Agent calls will fail")
+        settings = get_settings()
+        self._provider = settings.LLM_CONTENT_PROVIDER.lower()
+        self._model = settings.LLM_CONTENT_MODEL or model
+
+        if self._provider == "openrouter":
+            # OpenRouter API-ключ
+            self._api_key = api_key or settings.OPENROUTER_API_KEY
+            if not self._api_key:
+                logger.warning(
+                    "evolution-agent: OPENROUTER_API_KEY not set, "
+                    "Content Agent calls via OpenRouter will fail"
+                )
+        else:
+            # Стандартный OpenAI
+            self._api_key = api_key or settings.OPENAI_API_KEY
+            if not self._api_key:
+                logger.warning(
+                    "evolution-agent: OPENAI_API_KEY not set, "
+                    "Content Agent calls via OpenAI will fail"
+                )
 
     async def chat_json(
         self,
@@ -72,6 +96,31 @@ class OpenAIProvider(BaseLLMProvider):
     ) -> Dict[str, Any]:
         from openai import AsyncOpenAI
 
+        settings = get_settings()
+
+        if self._provider == "openrouter":
+            # OpenRouter: OpenAI-совместимый эндпоинт
+            base_url = "https://openrouter.ai/api/v1"
+            model = settings.LLM_CONTENT_MODEL or MODEL_CONTENT_OPENROUTER_DEFAULT
+
+            client = AsyncOpenAI(
+                api_key=self._api_key,
+                base_url=base_url,
+            )
+            resp = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                response_format={"type": "json_object"} if response_schema else None,
+                extra_headers={
+                    # Рекомендуется указывать реферер и название приложения
+                    "HTTP-Referer": "https://content-factory.xyz/",
+                    "X-Title": "Content Factory Evolution Agent",
+                },
+            )
+            text = (resp.choices[0].message.content or "").strip()
+            return _extract_json_from_text(text)
+
+        # Стандартный OpenAI путь (как было раньше)
         client = AsyncOpenAI(api_key=self._api_key)
         resp = await client.chat.completions.create(
             model=self._model,
