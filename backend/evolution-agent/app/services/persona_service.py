@@ -33,6 +33,19 @@ async def generate_persona_and_strategy(
         if not persona or not content_mix or not schedule_rules:
             logger.warning("Persona LLM returned incomplete keys: %s", list(out.keys()))
             return None
+
+        # Пробрасываем исходное описание канала в persona, чтобы ContentAgent мог его использовать.
+        # Это не ломает контракт JSON, просто добавляет дополнительное поле.
+        try:
+            if isinstance(persona, dict):
+                persona.setdefault("channel_description", description)
+            else:
+                # на всякий случай не трогаем нестандартные типы
+                pass
+        except Exception:
+            # не блокируем работу, если по какой-то причине не удалось обогатить persona
+            pass
+
         return {
             "persona_json": persona,
             "content_mix_json": content_mix,
