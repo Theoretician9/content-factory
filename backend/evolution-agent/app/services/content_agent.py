@@ -19,13 +19,21 @@ class ContentAgent:
         strategy = ctx.strategy_snapshot or {}
         feedback = (ctx.feedback or "").strip()
 
+        # Описание канала: сначала берём то, что пришло с онбординга (channel_description),
+        # если его нет — используем общий fallback.
+        channel_description = None
+        if isinstance(persona, dict):
+            channel_description = persona.get("channel_description")
+        if not channel_description:
+            channel_description = "Автоматическое ведение Telegram‑канала."
+
         prompt = prompt_registry.render(
             "content_writer_v1",
             {
                 "persona": persona,
                 "strategy": strategy,
                 "pillar": None,
-                "description": "Автоматическое ведение Telegram‑канала.",
+                "description": channel_description,
             },
         )
 

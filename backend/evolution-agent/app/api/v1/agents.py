@@ -47,6 +47,8 @@ def _generate_default_persona_and_strategy_payload(
         "tone": req.tone or "friendly_expert",
         "language": req.language,
         "forbidden_topics": [],
+        # Сохраняем исходное описание канала, чтобы использовать его при генерации постов
+        "channel_description": req.description,
     }
     content_mix = {
         "education": 0.5,
