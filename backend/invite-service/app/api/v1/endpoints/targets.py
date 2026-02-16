@@ -165,10 +165,10 @@ async def create_target(
 async def create_targets_bulk(
     task_id: int,
     bulk_data: InviteTargetBulkCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Массовое создание целевых контактов"""
-    user_id = get_current_user_id()
     
     # Проверка доступа к задаче
     task = check_task_ownership(task_id, user_id, db)
@@ -316,10 +316,10 @@ async def get_targets(
     sort_by: TargetSortBy = Query(TargetSortBy.CREATED_AT, description="Поле для сортировки"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Порядок сортировки"),
     
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Получение списка целевых контактов задачи"""
-    user_id = get_current_user_id()
     
     # Проверка доступа к задаче
     task = check_task_ownership(task_id, user_id, db)
@@ -385,10 +385,10 @@ async def get_targets(
 async def get_target(
     task_id: int,
     target_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Получение конкретного целевого контакта"""
-    user_id = get_current_user_id()
     
     # Проверка доступа к задаче
     task = check_task_ownership(task_id, user_id, db)
@@ -412,10 +412,10 @@ async def update_target(
     task_id: int,
     target_id: int,
     target_update: InviteTargetUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Обновление целевого контакта"""
-    user_id = get_current_user_id()
     
     # Проверка доступа к задаче
     task = check_task_ownership(task_id, user_id, db)
@@ -455,10 +455,10 @@ async def update_target(
 async def delete_target(
     task_id: int,
     target_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
 ):
     """Удаление целевого контакта"""
-    user_id = get_current_user_id()
     
     # Проверка доступа к задаче
     task = check_task_ownership(task_id, user_id, db)
