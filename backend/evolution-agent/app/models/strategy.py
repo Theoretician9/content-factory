@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from .base import BaseModel, Base
@@ -29,13 +29,4 @@ class Strategy(Base, BaseModel):
     is_active = Column(Boolean, nullable=False, default=True, index=True)
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-
-    __table_args__ = (
-        UniqueConstraint(
-            "user_id",
-            "channel_id",
-            "is_active",
-            name="uq_strategies_user_channel_active",
-        ),
-    )
 
