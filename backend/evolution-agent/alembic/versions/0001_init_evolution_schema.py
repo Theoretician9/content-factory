@@ -55,16 +55,7 @@ def upgrade() -> None:
             server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
     )
-    op.create_index(
-        "ix_strategies_user_id",
-        "strategies",
-        ["user_id"],
-    )
-    op.create_index(
-        "ix_strategies_channel_id",
-        "strategies",
-        ["channel_id"],
-    )
+    # user_id и channel_id уже индексируются через index=True в create_table
     op.create_index(
         "ix_strategies_is_active",
         "strategies",
