@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import { evolutionApi } from '../api';
@@ -53,6 +53,51 @@ const EvolutionAgent: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Восстанавливаем состояние последнего онбординга после перезагрузки страницы
+  useEffect(() => {
+    try {
+      const storedChannelId = localStorage.getItem('evolutionAgent.channelId');
+      const storedOnboard = localStorage.getItem('evolutionAgent.onboardResult');
+      if (storedChannelId) {
+        setChannelId(storedChannelId);
+        setCalendarChannelId(storedChannelId);
+      }
+      if (storedOnboard) {
+        const parsed = JSON.parse(storedOnboard) as OnboardResponse;
+        setOnboardResult(parsed);
+      }
+    } catch {
+      // игнорируем ошибки парсинга localStorage
+    }
+  }, []);
+
+  // Автозагрузка календаря при наличии сохранённого channel_id
+  useEffect(() => {
+    const ch = calendarChannelId.trim();
+    if (!ch) return;
+    // не блокируем UI, просто пробуем подгрузить слоты
+    (async () => {
+      setCalendarLoading(true);
+      setCalendarError('');
+      try {
+        const res = await evolutionApi.getCalendar(ch);
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.detail || 'Ошибка загрузки календаря');
+        }
+        const data = (await res.json()) as CalendarSlot[];
+        setCalendarSlots(data);
+      } catch (e: any) {
+        // тихо логируем в state, чтобы пользователь видел причину при первом рендере
+        setCalendarError(e.message || 'Ошибка загрузки календаря');
+      } finally {
+        setCalendarLoading(false);
+      }
+    })();
+    // вызываем только при первом заполнении calendarChannelId из localStorage
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarChannelId]);
+
   const handleOnboard = async () => {
     if (!channelId.trim()) {
       setOnboardError('Укажи channel_id (username или numeric id канала).');
@@ -81,6 +126,9 @@ const EvolutionAgent: React.FC = () => {
       setCalendarChannelId(data.channel_id);
       setForceMessage('Онбординг выполнен. Календарь создан на 7 дней.');
       setForceError('');
+      // Сохраняем контекст онбординга для отображения после обновления страницы
+      localStorage.setItem('evolutionAgent.channelId', data.channel_id);
+      localStorage.setItem('evolutionAgent.onboardResult', JSON.stringify(data));
     } catch (e: any) {
       setOnboardError(e.message || 'Ошибка онбординга агента');
     } finally {
@@ -162,6 +210,15 @@ const EvolutionAgent: React.FC = () => {
       setRegenLoadingSlotId(null);
     }
   };
+
+  const calendarStats = useMemo(() => {
+    const total = calendarSlots.length;
+    const byStatus = calendarSlots.reduce<Record<string, number>>((acc, s) => {
+      acc[s.status] = (acc[s.status] || 0) + 1;
+      return acc;
+    }, {});
+    return { total, byStatus };
+  }, [calendarSlots]);
 
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -288,7 +345,19 @@ const EvolutionAgent: React.FC = () => {
             </div>
 
             <div className="mt-4">
-              <h3 className="text-md font-semibold mb-2">Слоты</h3>
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2">
+                <h3 className="text-md font-semibold">Слоты</h3>
+                {calendarStats.total > 0 && (
+                  <div className="text-xs text-gray-600 dark:text-gray-400 flex flex-wrap gap-2">
+                    <span>Всего: {calendarStats.total}</span>
+                    <span>| PLANNED: {calendarStats.byStatus.PLANNED || 0}</span>
+                    <span>| PROCESSING: {calendarStats.byStatus.PROCESSING || 0}</span>
+                    <span>| READY: {calendarStats.byStatus.READY || 0}</span>
+                    <span>| PUBLISHED: {calendarStats.byStatus.PUBLISHED || 0}</span>
+                    <span>| FAILED: {calendarStats.byStatus.FAILED || 0}</span>
+                  </div>
+                )}
+              </div>
               {calendarLoading ? (
                 <div className="text-gray-400">Загрузка календаря…</div>
               ) : calendarSlots.length === 0 ? (
