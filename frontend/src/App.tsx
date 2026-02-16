@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import Integrations from './pages/Integrations';
 import Parsing from './pages/Parsing';
 import Mailing from './pages/Mailing';
+import EvolutionAgent from './pages/EvolutionAgent';
 import PrivateRoute from './PrivateRoute';
 import { UserProvider } from './UserContext';
 
@@ -24,6 +25,11 @@ const App = () => (
       <Route path="/integrations" element={
         <PrivateRoute>
           <Integrations />
+        </PrivateRoute>
+      } />
+      <Route path="/agents" element={
+        <PrivateRoute>
+          <EvolutionAgent />
         </PrivateRoute>
       } />
       <Route path="/parsing" element={

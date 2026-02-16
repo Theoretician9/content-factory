@@ -5,6 +5,7 @@ import { useUser } from '../UserContext';
 const menu = [
   { to: '/dashboard', label: 'Главная', icon: <span>🏠</span> },
   { to: '/integrations', label: 'Интеграции', icon: <span>🔗</span> },
+  { to: '/agents', label: 'ИИ-агент', icon: <span>🤖</span> },
   { to: '/content', label: 'Контент', icon: <span>📝</span> },
   { to: '/autocall', label: 'Автообзвон', icon: <span>📞</span> },
   { to: '/funnels', label: 'Воронки', icon: <span>🔄</span> },
