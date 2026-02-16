@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from zoneinfo import ZoneInfo
 
 from app.core.auth import get_user_id_from_request
 from app.database import get_db_session
@@ -187,14 +188,36 @@ async def force_run(
     """
     user_id = await get_user_id_from_request(request)
 
-    # Нормализуем from_dt/to_dt: приводим к UTC и убираем tzinfo,
-    # т.к. в БД используется TIMESTAMP WITHOUT TIME ZONE (наивные даты).
-    from_dt = payload.from_dt
-    to_dt = payload.to_dt
-    if from_dt.tzinfo is not None:
-        from_dt = from_dt.astimezone(timezone.utc).replace(tzinfo=None)
-    if to_dt.tzinfo is not None:
-        to_dt = to_dt.astimezone(timezone.utc).replace(tzinfo=None)
+    # Определяем таймзону пользователя/канала из активной стратегии
+    tzinfo = timezone.utc
+    stmt_strategy = (
+        select(Strategy)
+        .where(
+            Strategy.user_id == user_id,
+            Strategy.channel_id == payload.channel_id,
+            Strategy.is_active.is_(True),
+        )
+        .order_by(Strategy.version.desc())
+    )
+    strategy_result = await db.execute(stmt_strategy)
+    strategy: Optional[Strategy] = strategy_result.scalars().first()
+    if strategy:
+        rules = strategy.schedule_rules_json or {}
+        tz_name = rules.get("timezone") or "UTC"
+        try:
+            tzinfo = ZoneInfo(tz_name)
+        except Exception:
+            tzinfo = timezone.utc
+
+    # Нормализуем from_dt/to_dt: приводим к локальной таймзоне пользователя и далее в UTC,
+    # затем убираем tzinfo, т.к. в БД TIMESTAMP WITHOUT TIME ZONE.
+    def _normalize(dt: datetime) -> datetime:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=tzinfo)
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+    from_dt = _normalize(payload.from_dt)
+    to_dt = _normalize(payload.to_dt)
 
     stmt = (
         select(CalendarSlot)
