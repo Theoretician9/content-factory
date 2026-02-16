@@ -132,6 +132,12 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(),
+            nullable=False,
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+        ),
     )
     op.create_index("ix_posts_user_id", "posts", ["user_id"])
     op.create_index("ix_posts_channel_id", "posts", ["channel_id"])
