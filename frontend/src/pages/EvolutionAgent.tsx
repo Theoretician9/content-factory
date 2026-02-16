@@ -43,6 +43,8 @@ const EvolutionAgent: React.FC = () => {
   const [regenFeedback, setRegenFeedback] = useState('');
   const [regenLoadingSlotId, setRegenLoadingSlotId] = useState<string | null>(null);
   const [regenError, setRegenError] = useState('');
+  const [publishLoadingSlotId, setPublishLoadingSlotId] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState('');
 
   useEffect(() => {
     const handleResize = () => {
@@ -211,6 +213,24 @@ const EvolutionAgent: React.FC = () => {
     }
   };
 
+  const handlePublishNow = async (slotId: string) => {
+    setPublishError('');
+    setPublishLoadingSlotId(slotId);
+    try {
+      const res = await evolutionApi.publishNow(slotId);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || 'Ошибка немедленной публикации');
+      }
+      // После публикации обновляем календарь
+      handleLoadCalendar();
+    } catch (e: any) {
+      setPublishError(e.message || 'Ошибка немедленной публикации');
+    } finally {
+      setPublishLoadingSlotId(null);
+    }
+  };
+
   const calendarStats = useMemo(() => {
     const total = calendarSlots.length;
     const byStatus = calendarSlots.reduce<Record<string, number>>((acc, s) => {
@@ -342,6 +362,7 @@ const EvolutionAgent: React.FC = () => {
               {forceError && <div className="text-sm text-red-500">{forceError}</div>}
               {calendarError && <div className="text-sm text-red-500">{calendarError}</div>}
               {regenError && <div className="text-sm text-red-500">{regenError}</div>}
+              {publishError && <div className="text-sm text-red-500">{publishError}</div>}
             </div>
 
             <div className="mt-4">
@@ -411,13 +432,24 @@ const EvolutionAgent: React.FC = () => {
                           <td className="py-2 pr-4">{slot.pillar || '—'}</td>
                           <td className="py-2 pr-4">
                             <div className="flex flex-col gap-2">
-                              <button
-                                onClick={() => handleRegenerate(slot.slot_id)}
-                                disabled={regenLoadingSlotId === slot.slot_id}
-                                className="bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-3 py-1 rounded text-xs hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-60 text-left"
-                              >
-                                {regenLoadingSlotId === slot.slot_id ? 'Регенерация…' : 'Регенерировать с фидбеком'}
-                              </button>
+                              <div className="flex flex-wrap gap-2">
+                                {slot.status === 'PLANNED' && (
+                                  <button
+                                    onClick={() => handlePublishNow(slot.slot_id)}
+                                    disabled={publishLoadingSlotId === slot.slot_id}
+                                    className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-60"
+                                  >
+                                    {publishLoadingSlotId === slot.slot_id ? 'Публикуем…' : 'Опубликовать сейчас'}
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleRegenerate(slot.slot_id)}
+                                  disabled={regenLoadingSlotId === slot.slot_id}
+                                  className="bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-3 py-1 rounded text-xs hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-60 text-left"
+                                >
+                                  {regenLoadingSlotId === slot.slot_id ? 'Регенерация…' : 'Регенерировать с фидбеком'}
+                                </button>
+                              </div>
                               <textarea
                                 className="border rounded px-2 py-1 text-xs bg-white dark:bg-gray-900"
                                 placeholder="Опциональный фидбек для этого и следующих слотов"
