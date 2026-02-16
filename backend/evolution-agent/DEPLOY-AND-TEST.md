@@ -46,12 +46,121 @@ vault kv put kv/evolution-agent/db database_url="postgresql+asyncpg://evolution_
 
 ---
 
+## 2a. Откуда взять EVOLUTION_VAULT_ROLE_ID и EVOLUTION_VAULT_SECRET_ID
+
+Эти значения **не придумываются** — их выдаёт Vault после создания роли AppRole для evolution-agent. Делается один раз на сервере (или с машины с доступом к Vault).
+
+### Шаг 1: Подключиться к Vault
+
+На сервере, из каталога проекта:
+
+```bash
+cd /var/www/html
+docker compose exec vault sh
+```
+
+Внутри контейнера доступна команда `vault`. Либо, если `vault` CLI установлен на хосте и поднят туннель на 8201:
+
+```bash
+export VAULT_ADDR=http://127.0.0.1:8201
+export VAULT_TOKEN=<твой_root_токен_vault>
+```
+
+### Шаг 2: Создать политику для evolution-agent
+
+В контейнере Vault (или с хоста с настроенным `VAULT_ADDR` и `VAULT_TOKEN`):
+
+```bash
+vault policy write evolution-agent-policy - <<EOF
+# Evolution Agent: JWT, OpenAI, Gemini, Groq, DB
+path "kv/data/jwt" {
+  capabilities = ["read"]
+}
+path "kv/data/openai" {
+  capabilities = ["read"]
+}
+path "kv/data/evolution-agent/*" {
+  capabilities = ["read"]
+}
+EOF
+```
+
+### Шаг 3: Создать AppRole-роль
+
+```bash
+vault write auth/approle/role/evolution-agent \
+  token_policies=evolution-agent-policy \
+  token_ttl=24h \
+  token_max_ttl=24h \
+  secret_id_num_uses=0 \
+  token_num_uses=0 \
+  bind_secret_id=true
+```
+
+Если Vault в контейнере и команда выше выполняется с хоста (не из `docker compose exec vault sh`), то сначала задай переменные:
+
+```bash
+export VAULT_ADDR=http://vault:8201
+```
+
+изнутри другого контейнера в той же сети не получится — тогда все команды выполняй **внутри контейнера vault** (`docker compose exec vault sh`), а там по умолчанию `VAULT_ADDR` уже может указывать на localhost; если Vault слушает на 0.0.0.0, оставь `VAULT_ADDR=http://127.0.0.1:8200` или как у тебя настроено. Либо выполни шаги 2–5 одной оболочкой внутри контейнера:
+
+```bash
+docker compose exec vault sh
+# внутри:
+export VAULT_TOKEN=<root_token>
+vault policy write evolution-agent-policy - <<'EOF'
+path "kv/data/jwt" { capabilities = ["read"] }
+path "kv/data/openai" { capabilities = ["read"] }
+path "kv/data/evolution-agent/*" { capabilities = ["read"] }
+EOF
+vault write auth/approle/role/evolution-agent token_policies=evolution-agent-policy token_ttl=24h token_max_ttl=24h secret_id_num_uses=0 token_num_uses=0 bind_secret_id=true
+vault read auth/approle/role/evolution-agent/role-id
+vault write -f auth/approle/role/evolution-agent/secret-id
+exit
+```
+
+### Шаг 4: Получить role_id
+
+```bash
+vault read auth/approle/role/evolution-agent/role-id
+```
+
+В выводе будет строка **`role_id`** (UUID). Это значение вписываешь в `.env` как **`EVOLUTION_VAULT_ROLE_ID`**.
+
+### Шаг 5: Сгенерировать secret_id
+
+```bash
+vault write -f auth/approle/role/evolution-agent/secret-id
+```
+
+В выводе будет **`secret_id`** (UUID). Это значение вписываешь в `.env` как **`EVOLUTION_VAULT_SECRET_ID`**.
+
+### Шаг 6: Вписать в .env на сервере
+
+На сервере открой `.env` в корне проекта (`/var/www/html/.env`) и добавь (или замени) строки, подставив реальные значения из шагов 4 и 5:
+
+```bash
+EVOLUTION_VAULT_ROLE_ID=<значение role_id из шага 4>
+EVOLUTION_VAULT_SECRET_ID=<значение secret_id из шага 5>
+```
+
+Сохрани файл. Перезапусти evolution-agent:
+
+```bash
+docker compose restart evolution-agent
+```
+
+**Итог:** `EVOLUTION_VAULT_ROLE_ID` и `EVOLUTION_VAULT_SECRET_ID` ты берёшь из Vault командами `vault read .../role-id` и `vault write -f .../secret-id` после создания роли `evolution-agent` и политики `evolution-agent-policy`.
+
+---
+
 ## 3. Переменные окружения на сервере
 
 В каталоге проекта на сервере (`/var/www/html`) в файле **`.env`** должны быть заданы (в дополнение к уже существующим):
 
 ```bash
-# Evolution Agent — AppRole для Vault
+# Evolution Agent — AppRole для Vault (значения из раздела 2a выше)
 EVOLUTION_VAULT_ROLE_ID=<role_id_из_vault>
 EVOLUTION_VAULT_SECRET_ID=<secret_id_из_vault>
 
