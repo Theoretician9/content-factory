@@ -98,13 +98,39 @@ class TelegramChannelResponse(BaseModelResponse):
 
 # Схемы для отправки сообщений
 class SendMessageRequest(BaseModel):
-    """Схема запроса на отправку сообщения"""
+    """Схема запроса на отправку сообщения.
+
+    Для удобства evolution-agent и других клиентов допускает как numeric channel_id,
+    так и строковый идентификатор/ссылку на канал:
+    - 123456789
+    - @my_channel
+    - https://t.me/my_channel
+    """
+
     text: str = Field(..., max_length=4096, description="Текст сообщения")
     # ID канала/чата в Telegram, от имени которого отправляется сообщение
-    channel_id: int = Field(..., description="Telegram channel/group ID для отправки сообщения")
+    channel_id: Optional[int] = Field(
+        None,
+        description="Telegram channel/group ID для отправки сообщения (numeric chat_id)",
+    )
+    # Дополнительное строковое представление канала: username или t.me‑ссылка
+    channel: Optional[str] = Field(
+        None,
+        description="Telegram канал в виде @username или t.me/…; "
+        "будет автоматически нормализован в numeric channel_id",
+    )
     parse_mode: Optional[str] = Field("HTML", description="Режим парсинга: HTML, Markdown, MarkdownV2")
     disable_web_page_preview: Optional[bool] = Field(False, description="Отключить предпросмотр ссылок")
-    
+
+    @validator("channel_id", always=True)
+    def validate_channel_inputs(cls, v, values):  # type: ignore[override]
+        """
+        Гарантирует, что хотя бы один из идентификаторов канала передан.
+        """
+        channel = values.get("channel")
+        if v is None and (channel is None or not str(channel).strip()):
+            raise ValueError("Either channel_id or channel must be provided")
+        return v
 class SendMessageResponse(BaseModel):
     """Схема ответа на отправку сообщения"""
     success: bool
