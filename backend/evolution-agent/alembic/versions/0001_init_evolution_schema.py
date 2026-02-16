@@ -17,7 +17,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Enums
+    # Enums: создаём явно выше с checkfirst=True; в таблицах не создаём повторно
     calendar_status_enum = sa.Enum(
         "planned",
         "processing",
@@ -25,6 +25,7 @@ def upgrade() -> None:
         "published",
         "failed",
         name="calendar_slot_status",
+        create_type=False,
     )
     agent_task_status_enum = sa.Enum(
         "created",
@@ -32,6 +33,7 @@ def upgrade() -> None:
         "completed",
         "failed",
         name="agent_task_status",
+        create_type=False,
     )
 
     calendar_status_enum.create(op.get_bind(), checkfirst=True)
