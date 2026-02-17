@@ -553,6 +553,148 @@ const EvolutionAgent: React.FC = () => {
                             </div>
                           )}
                         </div>
+
+                        {/* Персона (как агент понимает автора канала) */}
+                        {channelSummary.persona && (
+                          <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-3 space-y-1">
+                            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Персона</h3>
+                            <div className="text-xs text-gray-700 dark:text-gray-300 space-y-1">
+                              {channelSummary.persona.tone && (
+                                <div>
+                                  <span className="font-semibold">Тон:</span>{' '}
+                                  {channelSummary.persona.tone}
+                                </div>
+                              )}
+                              {channelSummary.persona.language && (
+                                <div>
+                                  <span className="font-semibold">Язык:</span>{' '}
+                                  {channelSummary.persona.language}
+                                </div>
+                              )}
+                              {Array.isArray(channelSummary.persona.forbidden_topics) &&
+                                channelSummary.persona.forbidden_topics.length > 0 && (
+                                  <div>
+                                    <span className="font-semibold">Запрещённые темы:</span>{' '}
+                                    {channelSummary.persona.forbidden_topics.join(', ')}
+                                  </div>
+                                )}
+                              {/* Показываем остальные поля персоны в виде JSON, если они есть */}
+                              {Object.keys(channelSummary.persona).filter((k) =>
+                                !['tone', 'language', 'forbidden_topics', 'channel_description', 'description'].includes(k)
+                              ).length > 0 && (
+                                <div className="mt-1">
+                                  <span className="font-semibold">Доп. параметры персоны:</span>
+                                  <pre className="mt-1 bg-gray-50 dark:bg-gray-900 rounded p-2 whitespace-pre-wrap break-words">
+                                    {JSON.stringify(
+                                      Object.fromEntries(
+                                        Object.entries(channelSummary.persona).filter(
+                                          ([k]) =>
+                                            !['tone', 'language', 'forbidden_topics', 'channel_description', 'description'].includes(
+                                              k,
+                                            ),
+                                        ),
+                                      ),
+                                      null,
+                                      2,
+                                    )}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Стратегия контента (content_mix) */}
+                        {channelSummary.content_mix && (
+                          <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-3 space-y-1">
+                            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Стратегия контента</h3>
+                            <div className="text-xs text-gray-700 dark:text-gray-300 space-y-1">
+                              {'education' in channelSummary.content_mix && (
+                                <div>
+                                  <span className="font-semibold">Обучающий контент:</span>{' '}
+                                  {channelSummary.content_mix.education}
+                                </div>
+                              )}
+                              {'opinion' in channelSummary.content_mix && (
+                                <div>
+                                  <span className="font-semibold">Мнение/личные истории:</span>{' '}
+                                  {channelSummary.content_mix.opinion}
+                                </div>
+                              )}
+                              {'news' in channelSummary.content_mix && (
+                                <div>
+                                  <span className="font-semibold">Новости/обновления:</span>{' '}
+                                  {channelSummary.content_mix.news}
+                                </div>
+                              )}
+                              {Object.keys(channelSummary.content_mix).filter((k) =>
+                                !['education', 'opinion', 'news'].includes(k),
+                              ).length > 0 && (
+                                <div className="mt-1">
+                                  <span className="font-semibold">Доп. параметры стратегии:</span>
+                                  <pre className="mt-1 bg-gray-50 dark:bg-gray-900 rounded p-2 whitespace-pre-wrap break-words">
+                                    {JSON.stringify(
+                                      Object.fromEntries(
+                                        Object.entries(channelSummary.content_mix).filter(
+                                          ([k]) => !['education', 'opinion', 'news'].includes(k),
+                                        ),
+                                      ),
+                                      null,
+                                      2,
+                                    )}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Правила расписания (schedule_rules) */}
+                        {channelSummary.schedule_rules && (
+                          <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-3 space-y-1">
+                            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Правила расписания</h3>
+                            <div className="text-xs text-gray-700 dark:text-gray-300 space-y-1">
+                              {'posts_per_day' in channelSummary.schedule_rules && (
+                                <div>
+                                  <span className="font-semibold">Постов в день:</span>{' '}
+                                  {channelSummary.schedule_rules.posts_per_day}
+                                </div>
+                              )}
+                              {'preferred_hours' in channelSummary.schedule_rules &&
+                                Array.isArray(channelSummary.schedule_rules.preferred_hours) && (
+                                  <div>
+                                    <span className="font-semibold">Предпочтительные часы (UTC):</span>{' '}
+                                    {channelSummary.schedule_rules.preferred_hours.join(', ')}
+                                  </div>
+                                )}
+                              {'timezone' in channelSummary.schedule_rules && (
+                                <div>
+                                  <span className="font-semibold">Часовой пояс:</span>{' '}
+                                  {channelSummary.schedule_rules.timezone}
+                                </div>
+                              )}
+                              {Object.keys(channelSummary.schedule_rules).filter((k) =>
+                                !['posts_per_day', 'preferred_hours', 'timezone'].includes(k),
+                              ).length > 0 && (
+                                <div className="mt-1">
+                                  <span className="font-semibold">Доп. параметры расписания:</span>
+                                  <pre className="mt-1 bg-gray-50 dark:bg-gray-900 rounded p-2 whitespace-pre-wrap break-words">
+                                    {JSON.stringify(
+                                      Object.fromEntries(
+                                        Object.entries(channelSummary.schedule_rules).filter(
+                                          ([k]) =>
+                                            !['posts_per_day', 'preferred_hours', 'timezone'].includes(k),
+                                        ),
+                                      ),
+                                      null,
+                                      2,
+                                    )}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
