@@ -174,10 +174,12 @@ app.include_router(research_router, prefix="/v1/research", tags=["Research"])
 # Frontend может обращаться к /v1/api/v1/tasks/ (двойной v1)
 app.include_router(tasks_router, prefix="/v1/api/v1/tasks", tags=["Parse Tasks Compat"])
 app.include_router(results_router, prefix="/v1/api/v1/results", tags=["Parse Results Compat"])
+app.include_router(research_router, prefix="/v1/api/v1/research", tags=["Research Compat"])
 
 # ✅ ADDITIONAL COMPATIBILITY ROUTES: Для разных вариантов URL
 app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["Parse Tasks API"])
 app.include_router(results_router, prefix="/api/v1/results", tags=["Parse Results API"])
+app.include_router(research_router, prefix="/api/v1/research", tags=["Research API"])
 
 
 # =============================================================================
