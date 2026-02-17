@@ -179,6 +179,121 @@ async def get_calendar(
     ]
 
 
+class ChannelStatsOut(BaseModel):
+    total_slots: int
+    planned: int
+    processing: int
+    ready: int
+    published: int
+    failed: int
+    total_posts: int
+    total_memory_logs: int
+    last_published_at: Optional[datetime] = None
+
+
+class ChannelSummaryOut(BaseModel):
+    channel_id: str
+    description: Optional[str] = None
+    persona: Optional[Dict] = None
+    content_mix: Optional[Dict] = None
+    schedule_rules: Optional[Dict] = None
+    stats: ChannelStatsOut
+
+
+@router.get("/channels/{channel_id}/summary", response_model=ChannelSummaryOut)
+async def get_channel_summary(
+    channel_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+) -> ChannelSummaryOut:
+    """
+    Краткое описание канала и стратегии + статистика по слотам/постам.
+    """
+    user_id = await get_user_id_from_request(request)
+
+    # Берём последнюю активную стратегию по этому каналу
+    stmt_strategy = (
+        select(Strategy)
+        .where(
+            Strategy.user_id == user_id,
+            Strategy.channel_id == channel_id,
+            Strategy.is_active.is_(True),
+        )
+        .order_by(Strategy.version.desc())
+    )
+    res_strategy = await db.execute(stmt_strategy)
+    strategy: Optional[Strategy] = res_strategy.scalars().first()
+    if not strategy:
+        raise HTTPException(status_code=404, detail="Стратегия для канала не найдена")
+
+    persona = strategy.persona_json or {}
+    content_mix = strategy.content_mix_json or {}
+    schedule_rules = strategy.schedule_rules_json or {}
+    description = None
+    if isinstance(persona, dict):
+        description = persona.get("channel_description") or persona.get("description")
+
+    # Слоты по этому каналу
+    stmt_slots = select(CalendarSlot).where(
+        CalendarSlot.user_id == user_id,
+        CalendarSlot.channel_id == channel_id,
+    )
+    res_slots = await db.execute(stmt_slots)
+    slots: List[CalendarSlot] = res_slots.scalars().all()
+
+    status_counts: Dict[str, int] = {}
+    for s in slots:
+        key = (s.status or "").lower()
+        status_counts[key] = status_counts.get(key, 0) + 1
+
+    # Кол-во постов и логов, последнее время публикации
+    posts_count_q = await db.execute(
+        select(func.count(Post.id)).where(
+            Post.user_id == user_id,
+            Post.channel_id == channel_id,
+        )
+    )
+    total_posts = int(posts_count_q.scalar() or 0)
+
+    logs_count_q = await db.execute(
+        select(func.count(MemoryLog.id)).where(
+            MemoryLog.user_id == user_id,
+            MemoryLog.channel_id == channel_id,
+        )
+    )
+    total_logs = int(logs_count_q.scalar() or 0)
+
+    last_published_q = await db.execute(
+        select(func.max(Post.created_at)).where(
+            Post.user_id == user_id,
+            Post.channel_id == channel_id,
+            Post.telegram_message_id.isnot(None),
+        )
+    )
+    last_published_at = last_published_q.scalar()
+
+    stats = ChannelStatsOut(
+        total_slots=len(slots),
+        planned=status_counts.get("planned", 0),
+        processing=status_counts.get("processing", 0),
+        ready=status_counts.get("ready", 0),
+        published=status_counts.get("published", 0),
+        failed=status_counts.get("failed", 0),
+        total_posts=total_posts,
+        total_memory_logs=total_logs,
+        last_published_at=last_published_at,
+    )
+
+    return ChannelSummaryOut(
+        channel_id=channel_id,
+        description=description,
+        persona=persona,
+        content_mix=content_mix,
+        schedule_rules=schedule_rules,
+        stats=stats,
+    )
+
+
 class ForceRunRequest(BaseModel):
     channel_id: str
     from_dt: datetime
