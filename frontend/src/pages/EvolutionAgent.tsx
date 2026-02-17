@@ -170,8 +170,8 @@ const EvolutionAgent: React.FC = () => {
     }
   };
 
-  const handleLoadCalendar = async () => {
-    const ch = calendarChannelId.trim() || channelId.trim();
+  const handleLoadCalendar = async (overrideChannelId?: string) => {
+    const ch = (overrideChannelId || calendarChannelId.trim() || channelId.trim());
     if (!ch) {
       setCalendarError('Сначала укажи channel_id.');
       return;
@@ -190,6 +190,76 @@ const EvolutionAgent: React.FC = () => {
       setCalendarError(e.message || 'Ошибка загрузки календаря');
     } finally {
       setCalendarLoading(false);
+    }
+  };
+
+  const loadChannels = async () => {
+    setChannelsLoading(true);
+    setChannelsError('');
+    try {
+      const res = await evolutionApi.getCalendar();
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || 'Ошибка загрузки каналов');
+      }
+      const data = (await res.json()) as CalendarSlot[];
+      setAllSlots(data);
+      const counts: Record<string, number> = {};
+      data.forEach((s) => {
+        if (!s.channel_id) return;
+        counts[s.channel_id] = (counts[s.channel_id] || 0) + 1;
+      });
+      const list = Object.entries(counts).map(([ch, count]) => ({
+        channel_id: ch,
+        slots_count: count,
+      }));
+      setChannels(list);
+    } catch (e: any) {
+      setChannelsError(e.message || 'Ошибка загрузки каналов');
+    } finally {
+      setChannelsLoading(false);
+    }
+  };
+
+  const loadChannelDetails = async (channel: string) => {
+    setSelectedChannelId(channel);
+    setCalendarChannelId(channel);
+    setChannelSummary(null);
+    await handleLoadCalendar(channel);
+    try {
+      const res = await evolutionApi.getChannelSummary(channel);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || 'Ошибка загрузки сводки по каналу');
+      }
+      const data = (await res.json()) as ChannelSummary;
+      setChannelSummary(data);
+    } catch (e: any) {
+      // Показываем ошибку в блоке деталей вместо отдельного алерта
+      setChannelsError(e.message || 'Ошибка загрузки сводки по каналу');
+    }
+  };
+
+  const handleDeleteChannel = async (channel: string) => {
+    if (!window.confirm(`Удалить канал ${channel} и все связанные данные?`)) {
+      return;
+    }
+    try {
+      const res = await evolutionApi.deleteChannel(channel);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || 'Ошибка удаления канала');
+      }
+      // Обновляем список каналов
+      await loadChannels();
+      // Если удалён текущий выбранный канал, сбрасываем детали
+      if (selectedChannelId === channel) {
+        setSelectedChannelId('');
+        setChannelSummary(null);
+        setCalendarSlots([]);
+      }
+    } catch (e: any) {
+      setChannelsError(e.message || 'Ошибка удаления канала');
     }
   };
 
@@ -279,9 +349,53 @@ const EvolutionAgent: React.FC = () => {
       <div className="flex-1 flex flex-col min-h-screen">
         <Header title="ИИ-агент для Telegram" onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 p-4 md:p-8 flex flex-col gap-8 max-w-6xl mx-auto w-full">
-          {/* Блок онбординга */}
-          <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col gap-4">
-            <h2 className="text-lg font-semibold">1. Онбординг агента</h2>
+          {/* Вкладки */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-2 flex flex-wrap gap-2">
+            <button
+              className={`px-3 py-1 rounded text-sm font-semibold ${
+                activeTab === 'launch'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100'
+              }`}
+              onClick={() => setActiveTab('launch')}
+            >
+              Запуск ведения телеграм канала
+            </button>
+            <button
+              className={`px-3 py-1 rounded text-sm font-semibold ${
+                activeTab === 'channels'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100'
+              }`}
+              onClick={() => {
+                setActiveTab('channels');
+                loadChannels();
+              }}
+            >
+              Текущие каналы
+            </button>
+            <button
+              className={`px-3 py-1 rounded text-sm font-semibold ${
+                activeTab === 'details'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100'
+              }`}
+              onClick={() => {
+                setActiveTab('details');
+                if (selectedChannelId) {
+                  loadChannelDetails(selectedChannelId);
+                }
+              }}
+              disabled={!selectedChannelId}
+            >
+              Детали канала
+            </button>
+          </div>
+
+          {/* Вкладка 1: Запуск ведения телеграм канала */}
+          {activeTab === 'launch' && (
+            <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col gap-4">
+              <h2 className="text-lg font-semibold">Запуск ведения телеграм канала</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Укажи канал и опиши, как агент должен вести его. Для корректной работы сначала подключи Telegram в разделе
               «Интеграции» и добавь канал/группу.
@@ -341,11 +455,119 @@ const EvolutionAgent: React.FC = () => {
                 </div>
               )}
             </div>
-          </section>
+            </section>
+          )}
 
-          {/* Календарь и управление слотами */}
-          <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col gap-4">
-            <h2 className="text-lg font-semibold">2. Календарь и управление слотами</h2>
+          {/* Вкладка 2: Список текущих каналов */}
+          {activeTab === 'channels' && (
+            <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col gap-4">
+              <h2 className="text-lg font-semibold">Текущие каналы</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Здесь отображаются каналы, для которых уже запускался агент (есть слоты в календаре).
+              </p>
+              {channelsError && <div className="text-sm text-red-500">{channelsError}</div>}
+              {channelsLoading ? (
+                <div className="text-gray-400 text-sm">Загрузка каналов…</div>
+              ) : channels.length === 0 ? (
+                <div className="text-gray-500 text-sm">Пока нет каналов с активными слотами. Выполни онбординг.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-gray-700">
+                        <th className="text-left py-2 pr-4">Канал</th>
+                        <th className="text-left py-2 pr-4">Кол-во слотов</th>
+                        <th className="text-left py-2 pr-4">Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {channels.map((ch) => (
+                        <tr
+                          key={ch.channel_id}
+                          className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900"
+                        >
+                          <td className="py-2 pr-4 font-mono">{ch.channel_id}</td>
+                          <td className="py-2 pr-4">{ch.slots_count}</td>
+                          <td className="py-2 pr-4">
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                onClick={async () => {
+                                  await loadChannelDetails(ch.channel_id);
+                                  setActiveTab('details');
+                                }}
+                                className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700"
+                              >
+                                Открыть
+                              </button>
+                              <button
+                                onClick={() => handleDeleteChannel(ch.channel_id)}
+                                className="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700"
+                              >
+                                Удалить
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Вкладка 3: Детали канала */}
+          {activeTab === 'details' && (
+            <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col gap-4">
+              <h2 className="text-lg font-semibold">Детали канала</h2>
+              {!selectedChannelId ? (
+                <div className="text-sm text-gray-500">Выбери канал во вкладке «Текущие каналы».</div>
+              ) : (
+                <>
+                  <div className="text-sm">
+                    <div className="font-mono text-gray-700 dark:text-gray-200">Канал: {selectedChannelId}</div>
+                    {channelSummary && (
+                      <div className="mt-3 space-y-2">
+                        {channelSummary.description && (
+                          <p className="text-gray-700 dark:text-gray-200">
+                            <span className="font-semibold">О чём паблик: </span>
+                            {channelSummary.description}
+                          </p>
+                        )}
+                        <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                          <div>
+                            <span className="font-semibold">Слоты всего:</span> {channelSummary.stats.total_slots};
+                            {' '}PLANNED: {channelSummary.stats.planned};
+                            {' '}READY: {channelSummary.stats.ready};
+                            {' '}PUBLISHED: {channelSummary.stats.published};
+                            {' '}FAILED: {channelSummary.stats.failed}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Постов всего:</span> {channelSummary.stats.total_posts};
+                            {' '}логов памяти: {channelSummary.stats.total_memory_logs}
+                          </div>
+                          {channelSummary.stats.last_published_at && (
+                            <div>
+                              <span className="font-semibold">Последняя публикация:</span>{' '}
+                              {new Date(channelSummary.stats.last_published_at).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {channelsError && <div className="text-sm text-red-500">{channelsError}</div>}
+                </>
+              )}
+            </section>
+          )}
+
+          {/* Календарь и управление слотами (используется в launch + details) */}
+          {(activeTab === 'launch' || activeTab === 'details') && (
+            <section className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex flex-col gap-4">
+            <h2 className="text-lg font-semibold">
+              {activeTab === 'launch' ? '2. Календарь и управление слотами' : 'Календарь постов'}
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">Канал для календаря</label>
@@ -378,7 +600,7 @@ const EvolutionAgent: React.FC = () => {
             </div>
             <div className="flex flex-wrap items-center gap-4 mt-2">
               <button
-                onClick={handleLoadCalendar}
+                onClick={() => handleLoadCalendar()}
                 disabled={calendarLoading}
                 className="bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-60"
               >
@@ -495,7 +717,8 @@ const EvolutionAgent: React.FC = () => {
                 </div>
               )}
             </div>
-          </section>
+            </section>
+          )}
         </main>
       </div>
     </div>
