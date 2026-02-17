@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     LLM_CONTENT_PROVIDER: str = os.getenv("LLM_CONTENT_PROVIDER", "openai")
     # Явная модель для Content Agent; если не задана, используются дефолты в llm.py
     LLM_CONTENT_MODEL: Optional[str] = os.getenv("LLM_CONTENT_MODEL")
+    # Конфигурация модели для Research Agent (Gemini); по умолчанию берётся из llm.MODEL_RESEARCH
+    LLM_RESEARCH_MODEL: Optional[str] = os.getenv("LLM_RESEARCH_MODEL")
 
     class Config:
         env_file = ".env"

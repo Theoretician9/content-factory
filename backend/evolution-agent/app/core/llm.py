@@ -135,8 +135,10 @@ class GeminiProvider(BaseLLMProvider):
     """Gemini 1.5 Flash (Research Agent)."""
 
     def __init__(self, api_key: Optional[str] = None, model: str = MODEL_RESEARCH):
-        self._api_key = api_key or get_settings().GEMINI_API_KEY
-        self._model = model
+        settings = get_settings()
+        self._api_key = api_key or settings.GEMINI_API_KEY
+        # Модель можно переопределить через ENV (LLM_RESEARCH_MODEL), чтобы не менять код при изменении API.
+        self._model = settings.LLM_RESEARCH_MODEL or model
         if not self._api_key:
             logger.warning("evolution-agent: GEMINI_API_KEY not set, Research Agent calls will fail")
 
