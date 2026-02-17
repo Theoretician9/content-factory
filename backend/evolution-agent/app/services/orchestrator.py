@@ -89,6 +89,37 @@ class Orchestrator:
                 "schedule_rules": strategy.schedule_rules_json,
             }
 
+        # Загружаем краткую историю последних постов этого канала,
+        # чтобы ContentAgent мог учитывать контекст и не писать «болванки».
+        previous_posts: list[dict[str, object]] = []
+        try:
+            stmt_posts = (
+                select(Post)
+                .where(
+                    Post.user_id == user_id,
+                    Post.channel_id == slot.channel_id,
+                )
+                .order_by(Post.created_at.desc())
+                .limit(5)
+            )
+            posts_result = await self.db.execute(stmt_posts)
+            recent_posts: list[Post] = list(posts_result.scalars().all())
+
+            for p in recent_posts:
+                text = (p.content_text or "").strip()
+                short = text[:200]
+                if len(text) > 200:
+                    short += "..."
+                previous_posts.append(
+                    {
+                        "post_id": str(p.id),
+                        "short_summary": short,
+                        "created_at": p.created_at.isoformat() if p.created_at else None,
+                    }
+                )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("evolution-agent: failed to load previous posts for context: %s", e)
+
         ctx = TaskRuntimeContext(
             task_id=uuid4(),
             user_id=user_id,
@@ -98,6 +129,7 @@ class Orchestrator:
             feedback=feedback,
             persona=persona,
             strategy_snapshot=strategy_snapshot,
+            previous_posts=previous_posts,
         )
 
         try:

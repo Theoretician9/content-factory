@@ -15,9 +15,15 @@ class ContentAgent:
 
     async def generate_post(self, ctx: TaskRuntimeContext) -> Dict[str, Any]:
         """Собрать промпт и получить черновик поста (JSON)."""
-        persona = ctx.persona or {"tone": "friendly_expert", "language": "ru", "forbidden_topics": []}
+        persona = ctx.persona or {
+            "tone": "friendly_expert",
+            "language": "ru",
+            "forbidden_topics": [],
+        }
         strategy = ctx.strategy_snapshot or {}
         feedback = (ctx.feedback or "").strip()
+        insights = ctx.insights or []
+        previous_posts = ctx.previous_posts or []
 
         # Описание канала: сначала берём то, что пришло с онбординга (channel_description).
         # Никаких жёстко зашитых заглушек — если описания нет, считаем это ошибкой конфигурации.
@@ -35,16 +41,14 @@ class ContentAgent:
             {
                 "persona": persona,
                 "strategy": strategy,
-                "pillar": None,
+                "pillar": None,  # пока явно не назначаем pillar/series
+                "series": ctx.series_info,
                 "description": channel_description,
+                "feedback": feedback,
+                "insights": insights,
+                "previous_posts": previous_posts,
             },
         )
-
-        if feedback:
-            prompt += (
-                "\n\nADDITIONAL USER FEEDBACK / INSTRUCTIONS FOR THIS POST:\n"
-                f"{feedback}\n"
-            )
 
         messages = [
             {"role": "system", "content": "You are an assistant that writes Telegram posts. Reply with JSON only."},
