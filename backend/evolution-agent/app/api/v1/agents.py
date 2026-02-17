@@ -141,6 +141,7 @@ async def onboard_agent(
                 dt=s.dt,
                 pillar=s.pillar,
                 status=s.status,
+                channel_id=s.channel_id,
             )
             for s in slots
         ],
@@ -172,6 +173,7 @@ async def get_calendar(
             dt=s.dt,
             pillar=s.pillar,
             status=s.status,
+            channel_id=s.channel_id,
         )
         for s in slots
     ]
