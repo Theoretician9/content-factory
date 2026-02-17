@@ -66,6 +66,9 @@ class ResearchAgent:
             logger.error("Research Agent: parsing-service error: %s", e, exc_info=True)
             raise
 
+        # Лёгкая диагностика: сколько реальных постов удалось получить
+        logger.info("Research Agent: collected %s telegram items for topic '%s'", len(items), topic)
+
         # Если parsing-service не дал данных — просто возвращаем пустой список без заглушек.
         # Контент-агент будет опираться только на persona/description пользователя.
         llm = get_llm_research()
