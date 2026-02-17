@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from zoneinfo import ZoneInfo
 
@@ -12,6 +12,7 @@ from app.database import get_db_session
 from app.models.calendar import CalendarSlot, CalendarSlotStatus
 from app.models.post import Post
 from app.models.strategy import Strategy
+from app.models.memory import MemoryLog
 from app.services.orchestrator import Orchestrator
 from app.services.persona_service import generate_persona_and_strategy
 
@@ -31,6 +32,7 @@ class CalendarSlotOut(BaseModel):
     dt: datetime
     pillar: Optional[str] = None
     status: str
+    channel_id: str
 
 
 class OnboardResponse(BaseModel):
