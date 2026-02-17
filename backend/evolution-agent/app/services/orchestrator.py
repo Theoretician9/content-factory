@@ -281,7 +281,8 @@ class Orchestrator:
         - отсутствие шаблонных и нежелательных фраз-заглушек.
         """
         text = (ctx.draft_content or "").strip()
-        if len(text) < 20:
+        # Для минимально осмысленного поста под Telegram‑канал требуем хотя бы ~300 символов.
+        if len(text) < 300:
             return "Generated post is too short"
 
         persona = ctx.persona or {}
