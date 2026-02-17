@@ -164,125 +164,153 @@ class TelegramService:
                     error="Нет активных Telegram аккаунтов для отправки сообщения",
                 )
 
-            # Если по каким‑то причинам несколько активных сессий — используем первую,
-            # но логируем ситуацию для диагностики.
-            if len(sessions) > 1:
-                logger.warning(
-                    "Found multiple active Telegram sessions for user %s, "
-                    "using the first one: %s",
-                    user_id,
-                    [str(s.id) for s in sessions],
-                )
+            last_error: Optional[str] = None
 
-            telegram_session = sessions[0]
-
-            # Получаем Telegram клиента
-            client = await self.get_client(telegram_session)
-            if not client.is_connected():
-                await client.connect()
-
-            # Определяем numeric channel_id, даже если клиент передал username/ссылку.
-            target_channel_id = send_request.channel_id
-
-            # Если channel_id не задан, но есть строковый идентификатор, нормализуем его.
-            if target_channel_id is None and getattr(send_request, "channel", None):
-                raw = (send_request.channel or "").strip()
-                # Убираем возможные префиксы t.me, @ и протоколы
-                normalized = raw
-                for prefix in ("https://t.me/", "http://t.me/", "t.me/"):
-                    if normalized.startswith(prefix):
-                        normalized = normalized[len(prefix) :]
-                normalized = normalized.lstrip("@").strip()
-
-                if not normalized:
-                    return SendMessageResponse(
-                        success=False,
-                        error="Некорректный идентификатор канала (пустой username)",
-                    )
-
-                # Пытаемся получить сущность канала через Telethon по username.
+            # Пробуем отправить сообщение с каждой активной сессии по очереди.
+            # Это позволяет выбрать тот аккаунт, у которого реально есть права писать в канал.
+            for telegram_session in sessions:
                 try:
-                    entity = await client.get_entity(normalized)
-                    # У Telethon у каналов channel_id хранится в .id (BigInteger)
-                    target_channel_id = int(getattr(entity, "id", 0) or 0)
-                    if target_channel_id == 0:
-                        return SendMessageResponse(
-                            success=False,
-                            error="Не удалось определить numeric channel_id для указанного канала",
-                        )
-                except Exception as e:
-                    logger.error(f"Error resolving channel '{raw}' → '{normalized}': {e}")
-                    return SendMessageResponse(
-                        success=False,
-                        error=f"Не удалось найти канал по идентификатору '{raw}'",
-                    )
-
-            # Находим канал пользователя, в который нужно отправить сообщение
-            stmt_channel = select(TelegramChannel).where(
-                TelegramChannel.user_id == user_id,
-                TelegramChannel.channel_id == target_channel_id,
-                TelegramChannel.is_active.is_(True),
-            )
-            channel_result = await db_session.execute(stmt_channel)
-            channels = channel_result.scalars().all()
-
-            if not channels:
-                # Если канал ещё не зарегистрирован в БД для этого пользователя,
-                # создаём запись «на лету», чтобы не требовать отдельного шага добавления.
-                try:
-                    telegram_channel = TelegramChannel(
-                        user_id=user_id,
-                        channel_id=target_channel_id,
-                        title=str(target_channel_id),
-                        type="channel",
-                        settings={},
-                        members_count=0,
-                        is_active=True,
-                    )
-                    db_session.add(telegram_channel)
-                    await db_session.commit()
-                    await db_session.refresh(telegram_channel)
                     logger.info(
-                        f"Автоматически зарегистрирован канал {target_channel_id} для пользователя {user_id}"
+                        "Trying to send message for user %s using session %s",
+                        user_id,
+                        telegram_session.id,
                     )
-                except Exception as e:
-                    logger.error(
-                        f"Error auto-creating TelegramChannel for user {user_id}, channel_id {target_channel_id}: {e}"
+
+                    # Получаем Telegram клиента для конкретной сессии
+                    client = await self.get_client(telegram_session)
+                    if not client.is_connected():
+                        await client.connect()
+
+                    # Определяем numeric channel_id, даже если клиент передал username/ссылку.
+                    target_channel_id = send_request.channel_id
+
+                    # Если channel_id не задан, но есть строковый идентификатор, нормализуем его.
+                    if target_channel_id is None and getattr(send_request, "channel", None):
+                        raw = (send_request.channel or "").strip()
+                        # Убираем возможные префиксы t.me, @ и протоколы
+                        normalized = raw
+                        for prefix in ("https://t.me/", "http://t.me/", "t.me/"):
+                            if normalized.startswith(prefix):
+                                normalized = normalized[len(prefix) :]
+                        normalized = normalized.lstrip("@").strip()
+
+                        if not normalized:
+                            last_error = "Некорректный идентификатор канала (пустой username)"
+                            logger.warning(last_error)
+                            continue
+
+                        # Пытаемся получить сущность канала через Telethon по username.
+                        try:
+                            entity = await client.get_entity(normalized)
+                            # У Telethon у каналов channel_id хранится в .id (BigInteger)
+                            target_channel_id = int(getattr(entity, "id", 0) or 0)
+                            if target_channel_id == 0:
+                                last_error = "Не удалось определить numeric channel_id для указанного канала"
+                                logger.warning(last_error)
+                                continue
+                        except Exception as e:
+                            msg = f"Не удалось найти канал по идентификатору '{raw}' через сессию {telegram_session.id}: {e}"
+                            logger.error(msg)
+                            last_error = msg
+                            # Пробуем следующую сессию
+                            continue
+
+                    # Если так и не получили numeric ID — нет смысла продолжать
+                    if target_channel_id is None:
+                        last_error = "Не удалось определить канал для отправки сообщения"
+                        logger.warning(last_error)
+                        continue
+
+                    # Находим/создаём канал пользователя, в который нужно отправить сообщение
+                    stmt_channel = select(TelegramChannel).where(
+                        TelegramChannel.user_id == user_id,
+                        TelegramChannel.channel_id == target_channel_id,
+                        TelegramChannel.is_active.is_(True),
                     )
-                    return SendMessageResponse(
-                        success=False,
-                        error="Канал не найден или не активен для данного пользователя",
+                    channel_result = await db_session.execute(stmt_channel)
+                    channels = channel_result.scalars().all()
+
+                    if not channels:
+                        # Если канал ещё не зарегистрирован в БД для этого пользователя,
+                        # создаём запись «на лету», чтобы не требовать отдельного шага добавления.
+                        try:
+                            telegram_channel = TelegramChannel(
+                                user_id=user_id,
+                                channel_id=target_channel_id,
+                                title=str(target_channel_id),
+                                type="channel",
+                                settings={},
+                                members_count=0,
+                                is_active=True,
+                            )
+                            db_session.add(telegram_channel)
+                            await db_session.commit()
+                            await db_session.refresh(telegram_channel)
+                            logger.info(
+                                "Автоматически зарегистрирован канал %s для пользователя %s",
+                                target_channel_id,
+                                user_id,
+                            )
+                        except Exception as e:
+                            msg = (
+                                f"Error auto-creating TelegramChannel for user {user_id}, "
+                                f"channel_id {target_channel_id}: {e}"
+                            )
+                            logger.error(msg)
+                            last_error = "Канал не найден или не активен для данного пользователя"
+                            # Пробуем следующую сессию
+                            continue
+                    else:
+                        # Если по каким‑то причинам несколько записей — используем первую и логируем.
+                        if len(channels) > 1:
+                            logger.warning(
+                                "Found multiple TelegramChannel rows for user %s and channel_id %s, "
+                                "using the first one: %s",
+                                user_id,
+                                target_channel_id,
+                                [str(c.id) for c in channels],
+                            )
+                        telegram_channel = channels[0]
+
+                    # В качестве target используем numeric channel_id (peer) — Telethon сам разрешит его в сущность.
+                    target = target_channel_id
+
+                    sent = await client.send_message(
+                        entity=target,
+                        message=send_request.text,
+                        parse_mode=send_request.parse_mode or "HTML",
+                        link_preview=not send_request.disable_web_page_preview,
                     )
-            else:
-                # Аналогично с сессиями: если по каким‑то причинам несколько записей —
-                # используем первую и логируем.
-                if len(channels) > 1:
-                    logger.warning(
-                        "Found multiple TelegramChannel rows for user %s and channel_id %s, "
-                        "using the first one: %s",
+
+                    logger.info(
+                        "Successfully sent message for user %s to channel %s using session %s, message_id=%s",
                         user_id,
                         target_channel_id,
-                        [str(c.id) for c in channels],
+                        telegram_session.id,
+                        sent.id,
                     )
-                telegram_channel = channels[0]
 
-            # В качестве target используем numeric channel_id (peer) — Telethon сам разрешит его в сущность.
-            target = target_channel_id
+                    return SendMessageResponse(
+                        success=True,
+                        message_id=sent.id,
+                        error=None,
+                    )
 
-            sent = await client.send_message(
-                entity=target,
-                message=send_request.text,
-                parse_mode=send_request.parse_mode or "HTML",
-                link_preview=not send_request.disable_web_page_preview,
-            )
+                except Exception as e:
+                    # Логируем ошибку, но пробуем следующую сессию
+                    err_msg = f"Error sending message using session {telegram_session.id}: {e}"
+                    logger.error(err_msg)
+                    last_error = str(e)
+                    continue
 
+            # Если ни с одной сессии отправить не удалось
             return SendMessageResponse(
-                success=True,
-                message_id=sent.id,
-                error=None,
+                success=False,
+                message_id=None,
+                error=last_error or "Не удалось отправить сообщение ни с одной Telegram‑сессии пользователя",
             )
         except Exception as e:
-            logger.error(f"Error sending telegram message: {e}")
+            logger.error(f"Error sending telegram message (global): {e}")
             return SendMessageResponse(
                 success=False,
                 message_id=None,
