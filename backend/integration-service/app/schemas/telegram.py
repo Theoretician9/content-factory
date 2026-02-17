@@ -108,16 +108,17 @@ class SendMessageRequest(BaseModel):
     """
 
     text: str = Field(..., max_length=4096, description="Текст сообщения")
-    # ID канала/чата в Telegram, от имени которого отправляется сообщение
-    channel_id: Optional[int] = Field(
-        None,
-        description="Telegram channel/group ID для отправки сообщения (numeric chat_id)",
-    )
     # Дополнительное строковое представление канала: username или t.me‑ссылка
+    # ВАЖНО: объявляем `channel` ПЕРЕД `channel_id`, чтобы валидатор видел его в `values`.
     channel: Optional[str] = Field(
         None,
         description="Telegram канал в виде @username или t.me/…; "
         "будет автоматически нормализован в numeric channel_id",
+    )
+    # ID канала/чата в Telegram, от имени которого отправляется сообщение
+    channel_id: Optional[int] = Field(
+        None,
+        description="Telegram channel/group ID для отправки сообщения (numeric chat_id)",
     )
     parse_mode: Optional[str] = Field("HTML", description="Режим парсинга: HTML, Markdown, MarkdownV2")
     disable_web_page_preview: Optional[bool] = Field(False, description="Отключить предпросмотр ссылок")
