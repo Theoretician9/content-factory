@@ -150,19 +150,31 @@ class TelegramService:
         В будущем сюда можно встроить Account Manager/Invite Service для выбора оптимального аккаунта.
         """
         try:
-            # Ищем первую активную сессию пользователя
+            # Ищем активные сессии пользователя
             stmt = select(TelegramSession).where(
                 TelegramSession.user_id == user_id,
                 TelegramSession.is_active.is_(True),
             )
             result = await db_session.execute(stmt)
-            telegram_session = result.scalar_one_or_none()
+            sessions = result.scalars().all()
 
-            if not telegram_session:
+            if not sessions:
                 return SendMessageResponse(
                     success=False,
                     error="Нет активных Telegram аккаунтов для отправки сообщения",
                 )
+
+            # Если по каким‑то причинам несколько активных сессий — используем первую,
+            # но логируем ситуацию для диагностики.
+            if len(sessions) > 1:
+                logger.warning(
+                    "Found multiple active Telegram sessions for user %s, "
+                    "using the first one: %s",
+                    user_id,
+                    [str(s.id) for s in sessions],
+                )
+
+            telegram_session = sessions[0]
 
             # Получаем Telegram клиента
             client = await self.get_client(telegram_session)
@@ -212,9 +224,9 @@ class TelegramService:
                 TelegramChannel.is_active.is_(True),
             )
             channel_result = await db_session.execute(stmt_channel)
-            telegram_channel = channel_result.scalar_one_or_none()
+            channels = channel_result.scalars().all()
 
-            if not telegram_channel:
+            if not channels:
                 # Если канал ещё не зарегистрирован в БД для этого пользователя,
                 # создаём запись «на лету», чтобы не требовать отдельного шага добавления.
                 try:
@@ -241,6 +253,18 @@ class TelegramService:
                         success=False,
                         error="Канал не найден или не активен для данного пользователя",
                     )
+            else:
+                # Аналогично с сессиями: если по каким‑то причинам несколько записей —
+                # используем первую и логируем.
+                if len(channels) > 1:
+                    logger.warning(
+                        "Found multiple TelegramChannel rows for user %s and channel_id %s, "
+                        "using the first one: %s",
+                        user_id,
+                        target_channel_id,
+                        [str(c.id) for c in channels],
+                    )
+                telegram_channel = channels[0]
 
             # В качестве target используем numeric channel_id (peer) — Telethon сам разрешит его в сущность.
             target = target_channel_id
