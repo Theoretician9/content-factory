@@ -25,8 +25,8 @@ class ContentAgent:
         insights = ctx.insights or []
         previous_posts = ctx.previous_posts or []
 
-        # Отбираем несколько самых релевантных и «сильных» постов из research_data,
-        # чтобы дать LLM конкретную опору на реальные сообщения из Telegram.
+        # Отбираем ОДИН самый релевантный и «сильный» пост из research_data,
+        # чтобы дать LLM конкретную опору на реальный Telegram‑пост.
         source_snippets: list[dict[str, object]] = []
         try:
             data = ctx.research_data or []
@@ -39,7 +39,8 @@ class ContentAgent:
                 key=_score,
                 reverse=True,
             )
-            for d in sorted_items[:5]:
+            # берём только лучший пост
+            for d in sorted_items[:1]:
                 text = str(d.get("text") or "").strip()
                 if not text:
                     continue
@@ -47,7 +48,9 @@ class ContentAgent:
                     {
                         "channel_id": d.get("channel_id"),
                         "channel_name": d.get("channel_name"),
-                        "text": text[:500],  # ограничиваем длину одного сниппета
+                        # полный текст поста; дальнейшее усечение, если нужно,
+                        # делаем уже в LLM, а не на уровне данных
+                        "text": text,
                         "engagement_total": int(d.get("engagement_total") or 0),
                         "views_count": int(d.get("views_count") or 0),
                     }
