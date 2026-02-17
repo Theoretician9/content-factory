@@ -17,10 +17,10 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 # Модели по назначению (как в ТЗ)
-# Research Agent: фиксированная модель без псевдонимов latest,
-# чтобы не зависеть от переключений вроде gemini-flash-latest → gemini-3-flash-preview.
+# Research Agent: используем актуальную модель Gemini 2.0 Flash
+# без latest‑псевдонимов, чтобы не зависеть от их переключений.
 # см. актуальный список моделей: https://ai.google.dev/gemini-api/docs/models
-MODEL_RESEARCH = "gemini-1.5-flash"
+MODEL_RESEARCH = "gemini-2.0-flash"
 MODEL_CONTENT = "gpt-4o-mini"
 MODEL_PERSONA = "llama-3.1-8b-instant"
 
