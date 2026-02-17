@@ -74,6 +74,14 @@ class Orchestrator:
                 persona = strategy.persona_json or None
             except Exception:
                 persona = None
+
+            # Бэкап для старых стратегий: если persona пришла без channel_description,
+            # но внутри есть description — используем её как описание канала.
+            if isinstance(persona, dict):
+                desc = persona.get("channel_description") or persona.get("description")
+                if desc:
+                    persona.setdefault("channel_description", desc)
+
             # В snapshot кладём всё, что может пригодиться ContentAgent/валидации
             strategy_snapshot = {
                 "persona": strategy.persona_json,
