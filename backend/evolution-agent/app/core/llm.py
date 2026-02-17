@@ -17,7 +17,9 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 # Модели по назначению (как в ТЗ)
-MODEL_RESEARCH = "gemini-1.5-flash"
+# Research Agent: используем актуальное название модели из Gemini API
+# см. docs: https://ai.google.dev/gemini-api/docs/models
+MODEL_RESEARCH = "gemini-1.5-flash-latest"
 MODEL_CONTENT = "gpt-4o-mini"
 MODEL_PERSONA = "llama-3.1-8b-instant"
 
