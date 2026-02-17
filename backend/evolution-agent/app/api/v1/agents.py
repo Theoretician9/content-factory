@@ -348,11 +348,16 @@ async def delete_channel(
     """
     user_id = await get_user_id_from_request(request)
 
+    raw_channel = channel_id
+    norm_channel = _normalize_channel_id_value(channel_id)
+
+    channel_values = [raw_channel, norm_channel] if norm_channel != raw_channel else [norm_channel]
+
     # Проверяем, что для канала вообще есть стратегии (и, следовательно, данные)
     has_strategy_q = await db.execute(
         select(func.count(Strategy.id)).where(
             Strategy.user_id == user_id,
-            Strategy.channel_id == channel_id,
+            Strategy.channel_id.in_(channel_values),
         )
     )
     if int(has_strategy_q.scalar() or 0) == 0:
@@ -362,34 +367,34 @@ async def delete_channel(
     await db.execute(
         delete(MemoryLog).where(
             MemoryLog.user_id == user_id,
-            MemoryLog.channel_id == channel_id,
+            MemoryLog.channel_id.in_(channel_values),
         )
     )
 
     await db.execute(
         delete(Post).where(
             Post.user_id == user_id,
-            Post.channel_id == channel_id,
+            Post.channel_id.in_(channel_values),
         )
     )
 
     await db.execute(
         delete(CalendarSlot).where(
             CalendarSlot.user_id == user_id,
-            CalendarSlot.channel_id == channel_id,
+            CalendarSlot.channel_id.in_(channel_values),
         )
     )
 
     await db.execute(
         delete(Strategy).where(
             Strategy.user_id == user_id,
-            Strategy.channel_id == channel_id,
+            Strategy.channel_id.in_(channel_values),
         )
     )
 
     await db.commit()
 
-    return {"status": "deleted", "channel_id": channel_id}
+    return {"status": "deleted", "channel_id": norm_channel or raw_channel}
 
 
 class ForceRunRequest(BaseModel):
