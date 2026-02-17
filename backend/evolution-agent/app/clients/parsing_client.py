@@ -120,3 +120,56 @@ class ParsingServiceClient:
 
         return items
 
+    async def get_topic_telegram_snippets(
+        self,
+        user_id: int,
+        topic: str,
+        limit: int = 50,
+        min_engagement: int = 0,
+        min_views: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """
+        Получить популярные Telegram‑посты пользователя по заданной теме.
+
+        Использует новый endpoint parsing-service:
+        POST /api/v1/research/telegram/snippets
+        """
+        token = await self._get_jwt_token(user_id)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        payload: Dict[str, Any] = {
+            "topic": topic,
+            "limit": limit,
+            "min_engagement": min_engagement,
+            "min_views": min_views,
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            url = f"{self.base_url}/api/v1/research/telegram/snippets"
+            resp = await client.post(url, headers=headers, json=payload)
+            resp.raise_for_status()
+            data = resp.json() or {}
+
+        items: List[Dict[str, Any]] = []
+        for r in data.get("items", []):
+            text = (r.get("text") or "").strip()
+            if not text:
+                continue
+
+            items.append(
+                {
+                    "source": "telegram_post",
+                    "channel_id": r.get("channel_id"),
+                    "channel_name": r.get("channel_name"),
+                    "text": text,
+                    "ts": r.get("ts"),
+                    "engagement_total": r.get("engagement_total", 0),
+                    "views_count": r.get("views_count", 0),
+                    "likes_count": r.get("likes_count", 0),
+                    "comments_count": r.get("comments_count", 0),
+                    "reactions_count": r.get("reactions_count", 0),
+                }
+            )
+
+        return items
+

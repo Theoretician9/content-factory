@@ -164,9 +164,11 @@ async def root():
 from app.api.v1.endpoints.tasks import router as tasks_router
 from app.api.v1.endpoints.results import router as results_router
 from app.api.v1.endpoints.search import router as search_router
+from app.api.v1.endpoints.research import router as research_router
 app.include_router(tasks_router, prefix="/v1/tasks", tags=["Parse Tasks"])
 app.include_router(results_router, prefix="/v1/results", tags=["Parse Results"])
 app.include_router(search_router, prefix="/v1/search", tags=["Community Search"])
+app.include_router(research_router, prefix="/v1/research", tags=["Research"])
 
 # ✅ BACKWARD COMPATIBILITY: Добавляем роуты для исправления 404 ошибок
 # Frontend может обращаться к /v1/api/v1/tasks/ (двойной v1)
