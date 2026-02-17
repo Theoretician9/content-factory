@@ -1,6 +1,6 @@
 """fix strategies unique active constraint
 
-Revision ID: 0004_fix_strategies_unique_active_constraint
+Revision ID: 0004_strategies_unique_active
 Revises: 0003_add_posts_updated_at
 Create Date: 2026-02-16
 
@@ -10,7 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0004_fix_strategies_unique_active_constraint"
+revision = "0004_strategies_unique_active"
 down_revision = "0003_add_posts_updated_at"
 branch_labels = None
 depends_on = None
