@@ -21,7 +21,9 @@ logger = logging.getLogger(__name__)
 # без latest‑псевдонимов, чтобы не зависеть от их переключений.
 # см. актуальный список моделей: https://ai.google.dev/gemini-api/docs/models
 MODEL_RESEARCH = "gemini-2.0-flash"
-MODEL_CONTENT = "gpt-4o-mini"
+# Content Agent: по умолчанию используем самую мощную доступную GPT‑4‑линию.
+# Рекомендуемый вариант на февраль 2026 — gpt-4.1.
+MODEL_CONTENT = "gpt-4.1"
 MODEL_PERSONA = "llama-3.1-8b-instant"
 
 # Дефолтная модель для Content Agent через OpenRouter (можно переопределить через ENV)
@@ -65,9 +67,10 @@ def _extract_json_from_text(text: str) -> Dict[str, Any]:
 class OpenAIProvider(BaseLLMProvider):
     """
     Провайдер для Content Agent.
-
-    По умолчанию использует OpenAI (GPT-4o-mini), но может работать через OpenRouter,
-    сохраняя OpenAI-совместимый интерфейс (base_url меняется на OpenRouter).
+    
+    По умолчанию использует OpenAI (модель GPT-4.1 или заданную через ENV),
+    но может работать через OpenRouter, сохраняя OpenAI-совместимый интерфейс
+    (base_url меняется на OpenRouter).
     """
 
     def __init__(self, api_key: Optional[str] = None, model: str = MODEL_CONTENT):
@@ -201,7 +204,7 @@ def get_llm_research() -> BaseLLMProvider:
 
 
 def get_llm_content() -> BaseLLMProvider:
-    """Content Agent → GPT-4o-mini."""
+    """Content Agent → GPT-4.1 (или модель из LLM_CONTENT_MODEL)."""
     return OpenAIProvider(model=MODEL_CONTENT)
 
 
@@ -213,7 +216,7 @@ def get_llm_persona() -> BaseLLMProvider:
 # Обратная совместимость: LLMClient = Content-провайдер по умолчанию
 class LLMClient:
     """
-    Обёртка для Content Agent (GPT-4o-mini).
+    Обёртка для Content Agent (GPT-4.1 по умолчанию).
     Сохраняет интерфейс chat_json(model=..., messages=..., response_schema=...).
     """
 
