@@ -294,6 +294,37 @@ async def get_channel_summary(
     )
 
 
+@router.delete("/channels/{channel_id}")
+async def delete_channel(
+    channel_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """
+    Полное удаление канала для текущего пользователя:
+    - стратегии по этому каналу;
+    - все связанные слоты, посты и memory_logs (через ON DELETE CASCADE).
+    """
+    user_id = await get_user_id_from_request(request)
+
+    stmt_strategies = select(Strategy).where(
+        Strategy.user_id == user_id,
+        Strategy.channel_id == channel_id,
+    )
+    res = await db.execute(stmt_strategies)
+    strategies: List[Strategy] = res.scalars().all()
+
+    if not strategies:
+        raise HTTPException(status_code=404, detail="Канал не найден или уже удалён")
+
+    for st in strategies:
+        await db.delete(st)
+
+    await db.commit()
+
+    return {"status": "deleted", "channel_id": channel_id}
+
+
 class ForceRunRequest(BaseModel):
     channel_id: str
     from_dt: datetime

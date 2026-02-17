@@ -189,6 +189,14 @@ export const evolutionApi = {
     apiFetch(`/api/agents/slots/${slotId}/publish-now`, {
       method: 'POST',
     }),
+
+  getChannelSummary: (channelId: string) =>
+    apiFetch(`/api/agents/channels/${encodeURIComponent(channelId)}/summary`),
+
+  deleteChannel: (channelId: string) =>
+    apiFetch(`/api/agents/channels/${encodeURIComponent(channelId)}`, {
+      method: 'DELETE',
+    }),
 };
 
 // API функции для Integration Service
