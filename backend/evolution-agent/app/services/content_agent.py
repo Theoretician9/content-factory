@@ -41,7 +41,7 @@ class ContentAgent:
             {
                 "persona": persona,
                 "strategy": strategy,
-                "pillar": None,  # пока явно не назначаем pillar/series
+                "pillar": ctx.pillar_id,
                 "series": ctx.series_info,
                 "description": channel_description,
                 "feedback": feedback,

@@ -69,6 +69,9 @@ class Orchestrator:
 
         persona = None
         strategy_snapshot = None
+        pillar_id: Optional[str] = None
+        series_info: Optional[dict[str, object]] = None
+
         if strategy is not None:
             try:
                 persona = strategy.persona_json or None
@@ -88,6 +91,29 @@ class Orchestrator:
                 "content_mix": strategy.content_mix_json,
                 "schedule_rules": strategy.schedule_rules_json,
             }
+
+            # Пробуем вытащить текущий pillar/series из content_mix_json, чтобы задать контекст.
+            try:
+                content_mix = strategy.content_mix_json or {}
+                pillars = content_mix.get("pillars") or []
+                if isinstance(pillars, list) and pillars:
+                    first_pillar = pillars[0]
+                    pillar_id = str(first_pillar.get("id") or "") or None
+
+                    series_list = first_pillar.get("series") or []
+                    if isinstance(series_list, list) and series_list:
+                        # Берём первую серию как дефолтный вариант.
+                        first_series = series_list[0]
+                        # Лёгкая нормализация, чтобы не тащить лишний мусор.
+                        series_info = {
+                            "id": first_series.get("id"),
+                            "name": first_series.get("name"),
+                            "goal": first_series.get("goal"),
+                            "typical_format": first_series.get("typical_format"),
+                            "recommended_hook_styles": first_series.get("recommended_hook_styles"),
+                        }
+            except Exception as e:  # noqa: BLE001
+                logger.warning("evolution-agent: failed to extract pillar/series from strategy: %s", e)
 
         # Загружаем краткую историю последних постов этого канала,
         # чтобы ContentAgent мог учитывать контекст и не писать «болванки».
@@ -130,6 +156,8 @@ class Orchestrator:
             persona=persona,
             strategy_snapshot=strategy_snapshot,
             previous_posts=previous_posts,
+            pillar_id=pillar_id,
+            series_info=series_info,
         )
 
         try:
@@ -249,7 +277,8 @@ class Orchestrator:
 
         Проверяет:
         - минимальную длину;
-        - отсутствие явных запрещённых тем из persona.forbidden_topics.
+        - отсутствие явных запрещённых тем из persona.forbidden_topics;
+        - отсутствие шаблонных и нежелательных фраз-заглушек.
         """
         text = (ctx.draft_content or "").strip()
         if len(text) < 20:
@@ -261,6 +290,20 @@ class Orchestrator:
         for t in forbidden_topics:
             if t and t in text_lower:
                 return f"Post contains forbidden topic: {t}"
+
+        # Базовые эвристики против «болванок»:
+        banned_patterns = [
+            "в этом посте я расскажу",
+            "сегодня мы поговорим",
+            "в этом посте мы рассмотрим",
+            "вы когда-нибудь задумывались",
+            "вы когда нибудь задумывались",
+            "в следующих постах",
+            "на следующей неделе мы поговорим",
+        ]
+        for pat in banned_patterns:
+            if pat in text_lower:
+                return f"Post contains banned template phrase: {pat}"
 
         return None
 
