@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from zoneinfo import ZoneInfo
@@ -25,6 +25,10 @@ class OnboardRequest(BaseModel):
     description: str
     tone: Optional[str] = None
     language: str = "ru"
+
+    @validator("channel_id", pre=True)
+    def normalize_channel_id(cls, v: str) -> str:
+        return _normalize_channel_id_value(v)
 
 
 class CalendarSlotOut(BaseModel):
@@ -56,12 +60,6 @@ def _normalize_channel_id_value(raw: str) -> str:
             ch = ch[len(prefix) :]
     ch = ch.lstrip("@").strip()
     return ch
-
-
-@OnboardRequest.model_validator(mode="after")
-def _normalize_channel_id(cls, values: "OnboardRequest") -> "OnboardRequest":  # type: ignore[override]
-    values.channel_id = _normalize_channel_id_value(values.channel_id)
-    return values
 
 
 def _generate_default_persona_and_strategy_payload(
