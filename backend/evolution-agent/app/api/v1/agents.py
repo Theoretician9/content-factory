@@ -302,23 +302,50 @@ async def delete_channel(
 ) -> dict:
     """
     Полное удаление канала для текущего пользователя:
-    - стратегии по этому каналу;
-    - все связанные слоты, посты и memory_logs (через ON DELETE CASCADE).
+    - все слоты, посты, memory_logs;
+    - все стратегии по этому каналу.
+    Выполняется через явные DELETE, чтобы избежать попыток ORM проставить NULL в strategy_id.
     """
     user_id = await get_user_id_from_request(request)
 
-    stmt_strategies = select(Strategy).where(
-        Strategy.user_id == user_id,
-        Strategy.channel_id == channel_id,
+    # Проверяем, что для канала вообще есть стратегии (и, следовательно, данные)
+    has_strategy_q = await db.execute(
+        select(func.count(Strategy.id)).where(
+            Strategy.user_id == user_id,
+            Strategy.channel_id == channel_id,
+        )
     )
-    res = await db.execute(stmt_strategies)
-    strategies: List[Strategy] = res.scalars().all()
-
-    if not strategies:
+    if int(has_strategy_q.scalar() or 0) == 0:
         raise HTTPException(status_code=404, detail="Канал не найден или уже удалён")
 
-    for st in strategies:
-        await db.delete(st)
+    # Удаляем в безопасном порядке: сначала логи, затем посты, слоты, стратегии.
+    await db.execute(
+        delete(MemoryLog).where(
+            MemoryLog.user_id == user_id,
+            MemoryLog.channel_id == channel_id,
+        )
+    )
+
+    await db.execute(
+        delete(Post).where(
+            Post.user_id == user_id,
+            Post.channel_id == channel_id,
+        )
+    )
+
+    await db.execute(
+        delete(CalendarSlot).where(
+            CalendarSlot.user_id == user_id,
+            CalendarSlot.channel_id == channel_id,
+        )
+    )
+
+    await db.execute(
+        delete(Strategy).where(
+            Strategy.user_id == user_id,
+            Strategy.channel_id == channel_id,
+        )
+    )
 
     await db.commit()
 
