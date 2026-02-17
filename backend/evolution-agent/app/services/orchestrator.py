@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.calendar import CalendarSlot, CalendarSlotStatus
 from app.models.post import Post
 from app.models.memory import MemoryLog
+from app.models.strategy import Strategy
 from app.schemas.runtime import TaskRuntimeContext
 from app.services.content_agent import ContentAgent
 from app.services.research_agent import ResearchAgent
@@ -56,6 +57,30 @@ class Orchestrator:
             logger.warning(f"evolution-agent: slot {slot_id} not found or not accessible")
             return
 
+        # Загружаем связанную стратегию, чтобы пробросить persona и snapshot в контекст.
+        strategy: Optional[Strategy] = None
+        if slot.strategy_id:
+            stmt = select(Strategy).where(
+                Strategy.id == slot.strategy_id,
+                Strategy.user_id == user_id,
+            )
+            res = await self.db.execute(stmt)
+            strategy = res.scalar_one_or_none()
+
+        persona = None
+        strategy_snapshot = None
+        if strategy is not None:
+            try:
+                persona = strategy.persona_json or None
+            except Exception:
+                persona = None
+            # В snapshot кладём всё, что может пригодиться ContentAgent/валидации
+            strategy_snapshot = {
+                "persona": strategy.persona_json,
+                "content_mix": strategy.content_mix_json,
+                "schedule_rules": strategy.schedule_rules_json,
+            }
+
         ctx = TaskRuntimeContext(
             task_id=uuid4(),
             user_id=user_id,
@@ -63,6 +88,8 @@ class Orchestrator:
             slot_id=slot.id,
             current_step="init",
             feedback=feedback,
+            persona=persona,
+            strategy_snapshot=strategy_snapshot,
         )
 
         try:
