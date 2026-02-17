@@ -58,6 +58,16 @@ class IntegrationServiceClient:
 
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(url, json=payload, headers=headers)
-            resp.raise_for_status()
+
+            # Хотим видеть, ПОЧЕМУ integration-service вернул 4xx/5xx
+            if resp.status_code >= 400:
+                # В логах evolution-agent окажется и статус, и тело ошибки (detail из FastAPI)
+                raise httpx.HTTPStatusError(
+                    f"{resp.status_code} {resp.reason_phrase} while calling "
+                    f"{url} with payload={payload!r}. Response body: {resp.text}",
+                    request=resp.request,
+                    response=resp,
+                )
+
             return resp.json()
 
