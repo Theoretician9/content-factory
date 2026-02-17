@@ -41,6 +41,29 @@ class OnboardResponse(BaseModel):
     slots: List[CalendarSlotOut]
 
 
+def _normalize_channel_id_value(raw: str) -> str:
+    """
+    Нормализует channel_id:
+    - убирает префиксы t.me/ и протоколы;
+    - убирает ведущий @;
+    - тримминг пробелов.
+    """
+    if raw is None:
+        return ""
+    ch = str(raw).strip()
+    for prefix in ("https://t.me/", "http://t.me/", "t.me/"):
+        if ch.startswith(prefix):
+            ch = ch[len(prefix) :]
+    ch = ch.lstrip("@").strip()
+    return ch
+
+
+@OnboardRequest.model_validator(mode="after")
+def _normalize_channel_id(cls, values: "OnboardRequest") -> "OnboardRequest":  # type: ignore[override]
+    values.channel_id = _normalize_channel_id_value(values.channel_id)
+    return values
+
+
 def _generate_default_persona_and_strategy_payload(
     req: OnboardRequest,
 ) -> dict:
