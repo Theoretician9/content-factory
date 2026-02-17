@@ -8,12 +8,36 @@ interface CalendarSlot {
   dt: string;
   pillar?: string | null;
   status: string;
+  channel_id: string;
 }
 
 interface OnboardResponse {
   strategy_id: string;
   channel_id: string;
   slots: CalendarSlot[];
+}
+
+type EvolutionTab = 'launch' | 'channels' | 'details';
+
+interface ChannelSummaryStats {
+  total_slots: number;
+  planned: number;
+  processing: number;
+  ready: number;
+  published: number;
+  failed: number;
+  total_posts: number;
+  total_memory_logs: number;
+  last_published_at?: string | null;
+}
+
+interface ChannelSummary {
+  channel_id: string;
+  description?: string;
+  persona?: any;
+  content_mix?: any;
+  schedule_rules?: any;
+  stats: ChannelSummaryStats;
 }
 
 const EvolutionAgent: React.FC = () => {
@@ -45,6 +69,14 @@ const EvolutionAgent: React.FC = () => {
   const [regenError, setRegenError] = useState('');
   const [publishLoadingSlotId, setPublishLoadingSlotId] = useState<string | null>(null);
   const [publishError, setPublishError] = useState('');
+
+  const [activeTab, setActiveTab] = useState<EvolutionTab>('launch');
+  const [channelsLoading, setChannelsLoading] = useState(false);
+  const [channelsError, setChannelsError] = useState('');
+  const [channels, setChannels] = useState<{ channel_id: string; slots_count: number }[]>([]);
+  const [allSlots, setAllSlots] = useState<CalendarSlot[]>([]);
+  const [selectedChannelId, setSelectedChannelId] = useState<string>('');
+  const [channelSummary, setChannelSummary] = useState<ChannelSummary | null>(null);
 
   useEffect(() => {
     const handleResize = () => {
