@@ -184,7 +184,12 @@ async def get_calendar(
 
     stmt = select(CalendarSlot).where(CalendarSlot.user_id == user_id)
     if channel_id:
-        stmt = stmt.where(CalendarSlot.channel_id == channel_id)
+        raw = channel_id
+        norm = _normalize_channel_id_value(channel_id)
+        if norm != raw:
+            stmt = stmt.where(CalendarSlot.channel_id.in_([raw, norm]))
+        else:
+            stmt = stmt.where(CalendarSlot.channel_id == norm)
     stmt = stmt.order_by(CalendarSlot.dt.asc())
 
     result = await db.execute(stmt)
@@ -234,13 +239,17 @@ async def get_channel_summary(
     """
     user_id = await get_user_id_from_request(request)
 
-    # Берём последнюю активную стратегию по этому каналу
+    raw_channel = channel_id
+    norm_channel = _normalize_channel_id_value(channel_id)
+
+    # Берём последнюю стратегию по этому каналу (не только is_active, чтобы всегда была сводка)
     stmt_strategy = (
         select(Strategy)
         .where(
             Strategy.user_id == user_id,
-            Strategy.channel_id == channel_id,
-            Strategy.is_active.is_(True),
+            Strategy.channel_id.in_(
+                [raw_channel, norm_channel] if norm_channel != raw_channel else [norm_channel]
+            ),
         )
         .order_by(Strategy.version.desc())
     )
@@ -259,7 +268,9 @@ async def get_channel_summary(
     # Слоты по этому каналу
     stmt_slots = select(CalendarSlot).where(
         CalendarSlot.user_id == user_id,
-        CalendarSlot.channel_id == channel_id,
+        CalendarSlot.channel_id.in_(
+            [raw_channel, norm_channel] if norm_channel != raw_channel else [norm_channel]
+        ),
     )
     res_slots = await db.execute(stmt_slots)
     slots: List[CalendarSlot] = res_slots.scalars().all()
@@ -273,7 +284,9 @@ async def get_channel_summary(
     posts_count_q = await db.execute(
         select(func.count(Post.id)).where(
             Post.user_id == user_id,
-            Post.channel_id == channel_id,
+            Post.channel_id.in_(
+                [raw_channel, norm_channel] if norm_channel != raw_channel else [norm_channel]
+            ),
         )
     )
     total_posts = int(posts_count_q.scalar() or 0)
@@ -281,7 +294,9 @@ async def get_channel_summary(
     logs_count_q = await db.execute(
         select(func.count(MemoryLog.id)).where(
             MemoryLog.user_id == user_id,
-            MemoryLog.channel_id == channel_id,
+            MemoryLog.channel_id.in_(
+                [raw_channel, norm_channel] if norm_channel != raw_channel else [norm_channel]
+            ),
         )
     )
     total_logs = int(logs_count_q.scalar() or 0)
@@ -289,7 +304,9 @@ async def get_channel_summary(
     last_published_q = await db.execute(
         select(func.max(Post.created_at)).where(
             Post.user_id == user_id,
-            Post.channel_id == channel_id,
+            Post.channel_id.in_(
+                [raw_channel, norm_channel] if norm_channel != raw_channel else [norm_channel]
+            ),
             Post.telegram_message_id.isnot(None),
         )
     )
@@ -308,7 +325,7 @@ async def get_channel_summary(
     )
 
     return ChannelSummaryOut(
-        channel_id=channel_id,
+        channel_id=norm_channel or raw_channel,
         description=description,
         persona=persona,
         content_mix=content_mix,
