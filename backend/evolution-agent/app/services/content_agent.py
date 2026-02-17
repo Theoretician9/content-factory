@@ -19,13 +19,16 @@ class ContentAgent:
         strategy = ctx.strategy_snapshot or {}
         feedback = (ctx.feedback or "").strip()
 
-        # Описание канала: сначала берём то, что пришло с онбординга (channel_description),
-        # если его нет — используем общий fallback.
+        # Описание канала: сначала берём то, что пришло с онбординга (channel_description).
+        # Никаких жёстко зашитых заглушек — если описания нет, считаем это ошибкой конфигурации.
         channel_description = None
         if isinstance(persona, dict):
             channel_description = persona.get("channel_description")
         if not channel_description:
-            channel_description = "Автоматическое ведение Telegram‑канала."
+            raise ValueError(
+                "Persona.channel_description is not set. "
+                "Онбординг канала должен передавать текстовое описание, иначе пост генерировать нельзя."
+            )
 
         prompt = prompt_registry.render(
             "content_writer_v1",

@@ -30,16 +30,12 @@ class ResearchAgent:
                     max_results_per_task=20,
                 )
         except Exception as e:  # noqa: BLE001
-            logger.warning("Research Agent: parsing-service unavailable, using stub data: %s", e)
+            # Ошибка внешнего API → не подменяем stub-данными, а даём пайплайну упасть.
+            logger.error("Research Agent: parsing-service error: %s", e, exc_info=True)
+            raise
 
-        # Если parsing-service не дал данных — используем stub для стабильности пайплайна
-        if not items:
-            items = [
-                {"source": "stub", "text": "Популярные посты про автоматизацию маркетинга."},
-                {"source": "stub", "text": "Аудитория хорошо реагирует на пошаговые инструкции."},
-            ]
-
-        # 2. Gemini 1.5 Flash → извлечение инсайтов из items
+        # Если parsing-service не дал данных — просто возвращаем пустой список без заглушек.
+        # Контент-агент будет опираться только на persona/description пользователя.
         llm = get_llm_research()
         prompt = prompt_registry.render("research_insights_v1", {"items": items})
         messages = [
@@ -49,11 +45,10 @@ class ResearchAgent:
             out = await llm.chat_json(messages=messages)
             insights = out.get("insights") or []
         except Exception as e:  # noqa: BLE001
-            logger.warning("Research Agent (Gemini) fallback to stub insights: %s", e)
-            insights = [
-                "Использовать понятный, человеческий язык без перегруза терминами.",
-                "Чередовать образовательные и более лёгкие, вдохновляющие посты.",
-            ]
+            # Ошибка Gemini → это критическая ошибка качества, останавливаем процесс.
+            logger.error("Research Agent (Gemini) error: %s", e, exc_info=True)
+            raise
+
         return {"items": items, "insights": insights}
 
 
