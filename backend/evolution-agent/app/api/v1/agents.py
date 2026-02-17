@@ -351,17 +351,9 @@ async def delete_channel(
 
     channel_values = [raw_channel, norm_channel] if norm_channel != raw_channel else [norm_channel]
 
-    # Проверяем, что для канала вообще есть стратегии (и, следовательно, данные)
-    has_strategy_q = await db.execute(
-        select(func.count(Strategy.id)).where(
-            Strategy.user_id == user_id,
-            Strategy.channel_id.in_(channel_values),
-        )
-    )
-    if int(has_strategy_q.scalar() or 0) == 0:
-        raise HTTPException(status_code=404, detail="Канал не найден или уже удалён")
-
     # Удаляем в безопасном порядке: сначала логи, затем посты, слоты, стратегии.
+    # Важно: операция идемпотентна — даже если стратегии уже нет (старые данные,
+    # только слоты и т.п.), мы не падаем с 404, чтобы фронт мог «дочистить» канал.
     await db.execute(
         delete(MemoryLog).where(
             MemoryLog.user_id == user_id,
