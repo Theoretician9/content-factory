@@ -25,6 +25,37 @@ class ContentAgent:
         insights = ctx.insights or []
         previous_posts = ctx.previous_posts or []
 
+        # Отбираем несколько самых релевантных и «сильных» постов из research_data,
+        # чтобы дать LLM конкретную опору на реальные сообщения из Telegram.
+        source_snippets: list[dict[str, object]] = []
+        try:
+            data = ctx.research_data or []
+            # если там есть engagement_total/views_count — сортируем по ним
+            def _score(d: Dict[str, Any]) -> int:
+                return int(d.get("engagement_total") or 0) + int(d.get("views_count") or 0)
+
+            sorted_items = sorted(
+                [d for d in data if isinstance(d, dict) and d.get("text")],
+                key=_score,
+                reverse=True,
+            )
+            for d in sorted_items[:5]:
+                text = str(d.get("text") or "").strip()
+                if not text:
+                    continue
+                source_snippets.append(
+                    {
+                        "channel_id": d.get("channel_id"),
+                        "channel_name": d.get("channel_name"),
+                        "text": text[:500],  # ограничиваем длину одного сниппета
+                        "engagement_total": int(d.get("engagement_total") or 0),
+                        "views_count": int(d.get("views_count") or 0),
+                    }
+                )
+        except Exception:
+            # не блокируем пайплайн, если что-то пошло не так
+            source_snippets = []
+
         # Описание канала: сначала берём то, что пришло с онбординга (channel_description).
         # Никаких жёстко зашитых заглушек — если описания нет, считаем это ошибкой конфигурации.
         channel_description = None
@@ -47,6 +78,7 @@ class ContentAgent:
                 "feedback": feedback,
                 "insights": insights,
                 "previous_posts": previous_posts,
+                "source_snippets": source_snippets,
             },
         )
 

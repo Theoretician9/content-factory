@@ -177,17 +177,20 @@ export const evolutionApi = {
     apiFetch('/api/agents/force-run', {
       method: 'POST',
       body: JSON.stringify(data),
+      timeout: 60000, // генерация+публикация может занимать больше 30с
     }),
 
   regenerateSlot: (slotId: string, feedback?: string) =>
     apiFetch(`/api/agents/slots/${slotId}/regenerate`, {
       method: 'POST',
       body: JSON.stringify(feedback ? { feedback } : {}),
+      timeout: 60000,
     }),
 
   publishNow: (slotId: string) =>
     apiFetch(`/api/agents/slots/${slotId}/publish-now`, {
       method: 'POST',
+      timeout: 60000,
     }),
 
   getChannelSummary: (channelId: string) =>
