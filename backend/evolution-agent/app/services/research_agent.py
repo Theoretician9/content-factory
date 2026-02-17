@@ -20,10 +20,42 @@ class ResearchAgent:
         self._parsing_client = parsing_client or ParsingServiceClient()
 
     async def run_research(self, ctx: TaskRuntimeContext) -> Dict[str, Any]:
-        # 1. Пытаемся получить реальные данные из parsing-service
+        # 1. Пытаемся получить тематические данные из parsing-service
         items: List[Dict[str, Any]] = []
+        topic: str = ""
+
+        # Тему берём из persona/strategy: сначала channel_description, потом description.
         try:
-            if ctx.user_id:
+            if ctx.persona and isinstance(ctx.persona, dict):
+                topic = str(
+                    ctx.persona.get("channel_description")
+                    or ctx.persona.get("description")
+                    or ""
+                ).strip()
+            if (not topic) and ctx.strategy_snapshot and isinstance(ctx.strategy_snapshot, dict):
+                persona_snapshot = ctx.strategy_snapshot.get("persona") or {}
+                if isinstance(persona_snapshot, dict):
+                    topic = str(
+                        persona_snapshot.get("channel_description")
+                        or persona_snapshot.get("description")
+                        or ""
+                    ).strip()
+        except Exception:
+            topic = ""
+
+        try:
+            if ctx.user_id and topic:
+                # Сначала пробуем новый тематический endpoint с приоритизацией по engagement.
+                items = await self._parsing_client.get_topic_telegram_snippets(
+                    user_id=ctx.user_id,
+                    topic=topic,
+                    limit=50,
+                    min_engagement=10,
+                    min_views=0,
+                )
+
+            # Fallback: если ничего не нашли по теме — используем последние сниппеты.
+            if ctx.user_id and not items:
                 items = await self._parsing_client.get_recent_telegram_snippets(
                     user_id=ctx.user_id,
                     max_tasks=3,
